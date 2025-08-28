@@ -1,0 +1,10 @@
+User-agent: *
+Crawl-delay: 1
+Disallow: /wiki/Special:
+Disallow: /wiki/User:
+Disallow: /wiki/User_talk:
+Disallow: /wiki/File:
+Disallow: /wiki/Category:
+Allow: /wiki/
+
+Sitemap: https://example.fandom.com/sitemap.xml

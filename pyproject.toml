@@ -1,0 +1,184 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wikia-analyzer"
+version = "0.1.0"
+description = "Modular wikia character relationship analysis tool"
+readme = "README.md"
+authors = [
+    {name = "Wikia Analyzer Team", email = "contact@example.com"}
+]
+license = {text = "MIT"}
+requires-python = ">=3.10"
+keywords = ["wikia", "fandom", "character-analysis", "relationships", "web-scraping", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Researchers",
+    "Intended Audience :: Developers", 
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Text Processing :: Markup :: HTML",
+]
+
+# Core dependencies for Phase 1 (Web Crawler)
+dependencies = [
+    # Web crawling and HTTP
+    "aiohttp>=3.8.0",
+    "beautifulsoup4>=4.12.0",
+    "requests>=2.31.0",
+    
+    # Configuration and data handling  
+    "pyyaml>=6.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    
+    # File system and utilities
+    "pathlib-mate>=1.0.0",
+    
+    # Rate limiting and politeness
+    "urllib3>=2.0.0",
+]
+
+[project.optional-dependencies]
+# Development dependencies
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+    "pre-commit>=3.4.0",
+    "isort>=5.12.0",
+]
+
+# Future Phase 2-3: LLM Analysis dependencies
+llm = [
+    "openai>=1.0.0",
+    "anthropic>=0.25.0",
+    "tiktoken>=0.5.0",
+]
+
+# Future Phase 4-5: Visualization dependencies
+viz = [
+    "networkx>=3.1",
+    "plotly>=5.15.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "pandas>=2.0.0",
+]
+
+# Future: Web API dependencies
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+]
+
+# All optional dependencies combined
+all = [
+    "wikia-analyzer[dev,llm,viz,api]",
+]
+
+[project.scripts]
+wikia-analyzer = "src.main:main"
+
+[project.urls]
+Homepage = "https://github.com/your-username/wikia-analyzer"
+Documentation = "https://github.com/your-username/wikia-analyzer#readme"
+Repository = "https://github.com/your-username/wikia-analyzer"
+"Bug Tracker" = "https://github.com/your-username/wikia-analyzer/issues"
+
+# Package discovery
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json"]
+
+# Black code formatting
+[tool.black]
+line-length = 88
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # Directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+# Import sorting
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+known_first_party = ["src"]
+
+# Type checking with mypy
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "aiohttp.*",
+    "bs4.*",
+    "yaml.*",
+]
+ignore_missing_imports = true
+
+# Test configuration
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config", 
+    "--cov=src",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 80
+
+[tool.coverage.html]
+directory = "htmlcov"
