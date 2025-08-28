@@ -271,12 +271,15 @@ class WikiaCrawler:
         if not url or not isinstance(url, str):
             return False
         
+        stripped_url = url.strip()
+        if not stripped_url:
+            return False
+        
         try:
-            parsed = urlparse(url)
+            parsed = urlparse(stripped_url)
             return (
                 parsed.scheme in ('http', 'https') and
-                parsed.netloc and
-                len(url.strip()) > 0
+                bool(parsed.netloc)
             )
         except Exception:
             return False
