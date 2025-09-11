@@ -2,6 +2,11 @@
 """
 Simple test script to manually test the crawler components.
 This allows testing individual components without the full orchestrator.
+
+Updated to test the simplified three-category link discovery approach:
+- Category links (highest priority for bulk discovery)
+- Content links (medium priority, main namespace pages)
+- Non-content links (lowest priority, maintenance/system pages)
 """
 
 import asyncio
@@ -60,10 +65,10 @@ async def test_basic_crawling():
     
     print("All components initialized successfully!")
     
-    # Test URL - using a simple wiki page for testing
+    # Test URL - using a main page for better category discovery testing
     test_url = input("\nEnter a wiki URL to test (or press Enter for example): ").strip()
     if not test_url:
-        test_url = "https://naruto.fandom.com/wiki/Naruto_Uzumaki"
+        test_url = "https://buffy.fandom.com/wiki/Buffy_the_Vampire_Slayer_and_Angel"
     
     print(f"\nTesting with URL: {test_url}")
     
@@ -99,22 +104,64 @@ async def test_basic_crawling():
                     print(f"   Categories: {len(extracted_data.get('categories', []))}")
                     
                     # Test Wikia-specific parsing
-                    print("\nTesting Wikia Parser...")
+                    print("\nTesting Wikia Parser (Simplified Approach)...")
                     from bs4 import BeautifulSoup
                     soup = BeautifulSoup(html_content, 'html.parser')
                     wikia_data = wikia_parser.extract_wikia_content(soup, test_url)
                     print(f"   Namespace: {wikia_data.get('namespace', 'N/A')}")
-                    print(f"   Is character page: {wikia_data.get('is_character_page', False)}")
-                    print(f"   Is location page: {wikia_data.get('is_location_page', False)}")
-                    print(f"   Character links: {len(wikia_data.get('character_links', set()))}")
+                    print(f"   Page type: {wikia_data.get('page_type', 'N/A')}")
+                    print(f"   Categories: {len(wikia_data.get('categories', []))}")
                     print(f"   Infobox data: {len(wikia_data.get('infobox', {}))}")
+                    print(f"   Related articles: {len(wikia_data.get('related_articles', []))}")
                     
-                    # Test link discovery
-                    print("\nTesting Link Discoverer...")
+                    # Test link discovery with simplified three-category approach
+                    print("\nTesting Link Discoverer (Simplified Three-Category System)...")
                     discovered_links = link_discoverer.discover_links(soup, test_url)
+                    
+                    # Test individual category methods
+                    category_links = link_discoverer.find_category_links(soup, test_url)
+                    content_links = link_discoverer.find_content_links(soup, test_url)
+                    non_content_links = link_discoverer.find_non_content_links(soup, test_url)
+                    
+                    print(f"   Category links found: {len(category_links)}")
+                    print(f"   Content links found: {len(content_links)}")
+                    print(f"   Non-content links found: {len(non_content_links)}")
+                    
+                    # Show prioritized results
                     print(f"   High priority links: {len(discovered_links.get('high_priority', set()))}")
                     print(f"   Medium priority links: {len(discovered_links.get('medium_priority', set()))}")
                     print(f"   Low priority links: {len(discovered_links.get('low_priority', set()))}")
+                    
+                    # Show sample links from each category
+                    if category_links:
+                        sample_categories = list(category_links)[:3]
+                        print(f"   Sample categories: {', '.join(sample_categories)}")
+                    
+                    if content_links:
+                        sample_content = list(content_links)[:3]
+                        print(f"   Sample content: {', '.join([link.split('/')[-1] for link in sample_content])}")
+                    
+                    if non_content_links:
+                        sample_non_content = list(non_content_links)[:3]
+                        print(f"   Sample non-content: {', '.join([link.split('/')[-1] for link in sample_non_content])}")
+                    
+                    # Test simplified prioritization
+                    print(f"   Testing simplified prioritization...")
+                    all_found_links = category_links | content_links | non_content_links
+                    if all_found_links:
+                        prioritized_links = link_discoverer.prioritize_links_simplified(all_found_links, test_url)
+                        print(f"   Total links prioritized: {len(prioritized_links)}")
+                        
+                        # Show top priority links
+                        top_links = prioritized_links[:5]
+                        for i, link in enumerate(top_links, 1):
+                            link_type = "Category" if "/Category:" in link else \
+                                      "Non-content" if any(ns in link.lower() for ns in link_discoverer.non_content_namespaces) else \
+                                      "Content"
+                            short_link = link.split('/')[-1]
+                            print(f"     {i}. [{link_type}] {short_link}")
+                    else:
+                        print(f"   No links found for prioritization testing")
                     
                     # Test content filtering
                     print("\nTesting Content Filter...")

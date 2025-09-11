@@ -60,7 +60,7 @@ class WikiaParser:
         return True
     
     def extract_wikia_content(self, soup: BeautifulSoup, url: str) -> Dict:
-        """Extract Wikia-specific structured content."""
+        """Extract Wikia-specific structured content with simplified approach."""
         if not soup:
             return {}
         
@@ -71,11 +71,9 @@ class WikiaParser:
             'url': url,
             'namespace': self.get_page_namespace(url),
             'infobox': self.extract_portable_infobox(cleaned_soup),
-            'character_links': self.extract_character_links(cleaned_soup, url),
             'related_articles': self.extract_related_articles(cleaned_soup),
             'categories': self._extract_page_categories(cleaned_soup),
-            'is_character_page': self.is_character_page(cleaned_soup, url),
-            'is_location_page': self.is_location_page(cleaned_soup, url)
+            'page_type': self.get_page_type(cleaned_soup, url)
         }
         
         return result
@@ -97,7 +95,7 @@ class WikiaParser:
             path_part = url.split('/wiki/')[-1]
             if ':' in path_part:
                 potential_namespace = path_part.split(':')[0]
-                if potential_namespace in ['Character', 'Location', 'Event', 'Organization']:
+                if potential_namespace in ['Character', 'Location', 'Event', 'Organization', 'Category', 'Template', 'User', 'Help', 'Special', 'File']:
                     return potential_namespace
         
         # Default to Main for wiki pages without explicit namespace
@@ -106,53 +104,6 @@ class WikiaParser:
         
         return None
     
-    def extract_character_links(self, soup: BeautifulSoup, base_url: str) -> Set[str]:
-        """Find links that likely point to character pages within the same wikia."""
-        if not soup or not base_url:
-            return set()
-        
-        character_links = set()
-        
-        for link_tag in soup.find_all('a', href=True):
-            href = link_tag['href']
-            link_text = link_tag.get_text(strip=True)
-            
-            # Skip if not same domain
-            if not self._is_same_wikia_domain(href, base_url):
-                continue
-            
-            # Additional check to exclude Fandom meta-domains that might slip through
-            from urllib.parse import urlparse
-            try:
-                href_domain = urlparse(href).netloc.lower() if href.startswith('http') else ''
-                fandom_meta_domains = [
-                    'community.fandom.com',
-                    'fandom.zendesk.com', 
-                    'about.fandom.com',
-                    'auth.fandom.com'
-                ]
-                if href_domain in fandom_meta_domains:
-                    continue
-            except:
-                pass
-            
-            # Skip common non-character pages
-            if self._is_excluded_page(href):
-                continue
-                
-            # More precise character detection
-            is_character_link = (
-                self._has_character_namespace(href) or
-                self._has_character_indicators(link_text, href) or
-                self._is_likely_character_name(link_text, link_tag)
-            )
-            
-            if is_character_link:
-                # Normalize URL to absolute form
-                normalized_href = self._normalize_url(href, base_url)
-                character_links.add(normalized_href)
-        
-        return character_links
     
     def extract_related_articles(self, soup: BeautifulSoup) -> List[str]:
         """Extract related articles section links."""
@@ -187,50 +138,35 @@ class WikiaParser:
         
         return related_links[:20]  # Limit to avoid too many
     
-    def is_character_page(self, soup: BeautifulSoup, url: str) -> bool:
-        """Determine if page is about a character."""
+    def get_page_type(self, soup: BeautifulSoup, url: str) -> str:
+        """Get simplified page type based on namespace and basic indicators."""
         if not soup or not url:
-            return False
+            return 'unknown'
         
-        # Check URL for character namespace
-        if '/Character:' in url or '/Characters:' in url:
-            return True
+        url_lower = url.lower()
         
-        # Check page content for character indicators
-        page_text = soup.get_text().lower()
-        character_indicators = [
-            'character', 'person', 'individual', 'protagonist', 'antagonist',
-            'born', 'died', 'age', 'occupation', 'affiliation', 'status',
-            'family', 'relatives', 'abilities', 'personality'
-        ]
-        
-        indicator_count = sum(1 for indicator in character_indicators if indicator in page_text)
-        
-        # If multiple character indicators are present, likely a character page
-        return indicator_count >= 3
-    
-    def is_location_page(self, soup: BeautifulSoup, url: str) -> bool:
-        """Determine if page is about a location."""
-        if not soup or not url:
-            return False
-        
-        # Check URL for location namespace
-        if '/Location:' in url or '/Locations:' in url or '/Places:' in url:
-            return True
-        
-        # Check page content for location indicators
-        page_text = soup.get_text().lower()
-        location_indicators = [
-            'location', 'place', 'area', 'region', 'territory', 'zone',
-            'city', 'town', 'village', 'country', 'continent', 'planet',
-            'located', 'situated', 'geography', 'inhabitants', 'population',
-            'climate', 'government', 'notable features'
-        ]
-        
-        indicator_count = sum(1 for indicator in location_indicators if indicator in page_text)
-        
-        # If multiple location indicators are present, likely a location page
-        return indicator_count >= 3
+        # Check namespace first
+        if '/category:' in url_lower:
+            return 'category'
+        elif any(ns in url_lower for ns in ['template:', 'user:', 'help:', 'special:', 'file:']):
+            return 'maintenance'
+        elif '/wiki/' in url_lower:
+            # Main namespace - simple content classification
+            page_text = soup.get_text().lower()
+            
+            # Basic content indicators (without being too specific)
+            if any(term in page_text for term in ['character', 'person', 'individual']):
+                return 'character'
+            elif any(term in page_text for term in ['location', 'place', 'area']):
+                return 'location'  
+            elif any(term in page_text for term in ['episode', 'season', 'chapter']):
+                return 'episode'
+            elif any(term in page_text for term in ['event', 'battle', 'war']):
+                return 'event'
+            else:
+                return 'content'  # Generic content page
+        else:
+            return 'other'
     
     def extract_portable_infobox(self, soup: BeautifulSoup) -> Dict:
         """Extract data from Wikia's portable infobox format."""
@@ -275,24 +211,6 @@ class WikiaParser:
         
         return infobox_data
     
-    def _is_excluded_page(self, url: str) -> bool:
-        """Check if page matches exclusion patterns."""
-        if not url:
-            return True
-        
-        # Check against exclusion patterns
-        for pattern in self.exclude_patterns:
-            if pattern in url:
-                return True
-        
-        # Also exclude common non-content pages
-        exclude_keywords = [
-            'Special:', 'File:', 'Image:', 'Media:', 'Template:',
-            'User:', 'User_talk:', 'Talk:', 'Category_talk:',
-            'action=edit', 'action=history', 'printable=yes'
-        ]
-        
-        return any(keyword in url for keyword in exclude_keywords)
     
     def _clean_wikia_navigation(self, soup: BeautifulSoup) -> BeautifulSoup:
         """Remove Wikia navigation elements."""
@@ -387,92 +305,6 @@ class WikiaParser:
         except Exception:
             return False
     
-    def _has_character_namespace(self, href: str) -> bool:
-        """Check if URL has explicit character namespace."""
-        character_namespaces = ['/Character:', '/Characters:', '/character:', '/characters:']
-        return any(ns in href for ns in character_namespaces)
-    
-    def _has_character_indicators(self, link_text: str, href: str) -> bool:
-        """Check if link has character-related indicators in text or URL."""
-        if not link_text:
-            return False
-        
-        text_lower = link_text.lower()
-        href_lower = href.lower()
-        
-        # Skip obvious non-character terms
-        non_character_terms = {
-            'sitemap', 'community', 'help', 'policy', 'wiki', 'central', 
-            'contents', 'editing', 'purge', 'history', 'action=', 'special:',
-            'category:', 'file:', 'template:', 'user:'
-        }
-        
-        if any(term in text_lower or term in href_lower for term in non_character_terms):
-            return False
-        
-        # Avoid too broad matches - be more specific
-        character_indicators = [
-            'characters/', 'character/', 'cast member', 'played by', 'portrayed by'
-        ]
-        
-        return any(indicator in href_lower or indicator in text_lower 
-                  for indicator in character_indicators)
-    
-    def _is_likely_character_name(self, link_text: str, link_tag) -> bool:
-        """Analyze context to determine if link likely points to a character."""
-        if not link_text or len(link_text.split()) > 3:
-            return False
-        
-        # Skip if it's clearly not a name (contains common non-name words)
-        non_name_words = {
-            'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 
-            'by', 'from', 'about', 'wiki', 'page', 'category', 'file', 'image',
-            'help', 'special', 'user', 'talk', 'template', 'edit', 'history',
-            'sitemap', 'community', 'central', 'contents', 'editing', 'policy'
-        }
-        
-        words = link_text.lower().split()
-        if any(word in non_name_words for word in words):
-            return False
-        
-        # Check for proper name pattern (capitalized words)
-        name_words = link_text.split()
-        if not all(word and word[0].isupper() for word in name_words if len(word) > 1):
-            return False
-        
-        # Check surrounding context for character-related terms
-        parent = link_tag.parent
-        if parent:
-            parent_text = parent.get_text().lower()
-            character_context = ['character', 'played by', 'portrayed', 'actor', 'actress', 'cast']
-            if any(ctx in parent_text for ctx in character_context):
-                return True
-        
-        # Check if in a character-related section
-        section_header = self._find_section_header(link_tag)
-        if section_header:
-            header_text = section_header.get_text().lower()
-            if any(keyword in header_text for keyword in ['character', 'cast', 'people', 'main']):
-                return True
-        
-        # If it looks like a proper name and no negative indicators, consider it likely
-        return len(name_words) <= 3 and len(link_text) > 3
-    
-    def _find_section_header(self, element):
-        """Find the nearest section header (h1-h6) above the element."""
-        current = element.parent
-        while current:
-            # Check if current element is a heading
-            if current.name and current.name.lower() in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-                return current
-            
-            # Look for headings in previous siblings
-            for sibling in reversed(list(current.previous_siblings)):
-                if hasattr(sibling, 'name') and sibling.name and sibling.name.lower() in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-                    return sibling
-            
-            current = current.parent
-        return None
     
     def _normalize_url(self, href: str, base_url: str) -> str:
         """Convert relative URLs to absolute URLs."""

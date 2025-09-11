@@ -1,12 +1,11 @@
 """
-Tests for LinkDiscoverer class.
+Tests for LinkDiscoverer class - clean version with only relevant tests for simplified approach.
 """
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from bs4 import BeautifulSoup
-from typing import List, Set, Dict
-from urllib.parse import urljoin
+from typing import Dict, List, Set
 
 from src.crawler.extraction.link_discoverer import LinkDiscoverer
 
@@ -16,27 +15,140 @@ class TestLinkDiscovererInit:
     
     def test_init_with_default_config(self):
         """Test initialization with default configuration."""
-        pass
+        discoverer = LinkDiscoverer()
+        
+        # Should have default values
+        assert discoverer.base_domain == "fandom.com"
+        assert discoverer.target_namespaces == ["Main", "Category"]
+        assert isinstance(discoverer.non_content_namespaces, list)
+        assert len(discoverer.non_content_namespaces) > 0
     
-    def test_init_with_custom_patterns(self):
-        """Test initialization with custom link patterns."""
-        pass
+    def test_init_with_custom_base_domain(self):
+        """Test initialization with custom base domain."""
+        custom_domain = "example.com"
+        discoverer = LinkDiscoverer(base_domain=custom_domain)
+        
+        assert discoverer.base_domain == custom_domain
+        assert discoverer.target_namespaces == ["Main", "Category"]  # Should use default
     
-    def test_init_with_custom_priorities(self):
-        """Test initialization with custom priority settings."""
-        pass
+    def test_init_with_custom_namespaces(self):
+        """Test initialization with custom target namespaces."""
+        custom_namespaces = ["Main", "Character", "Location"]
+        discoverer = LinkDiscoverer(target_namespaces=custom_namespaces)
+        
+        assert discoverer.base_domain == "fandom.com"  # Should use default
+        assert discoverer.target_namespaces == custom_namespaces
     
-    def test_init_validates_config(self):
-        """Test that invalid configuration raises errors."""
-        pass
+    def test_init_with_both_custom_parameters(self):
+        """Test initialization with both custom domain and namespaces."""
+        custom_domain = "example.wikia.com"
+        custom_namespaces = ["Main", "Test"]
+        
+        discoverer = LinkDiscoverer(base_domain=custom_domain, target_namespaces=custom_namespaces)
+        
+        assert discoverer.base_domain == custom_domain
+        assert discoverer.target_namespaces == custom_namespaces
     
     def test_init_stores_config_correctly(self):
         """Test that configuration is stored correctly."""
-        pass
+        discoverer = LinkDiscoverer()
+        
+        # Check that non-content namespaces are properly initialized
+        expected_non_content = [
+            'template:', 'user:', 'talk:', 'help:', 'special:', 'file:',
+            'mediawiki:', 'user_talk:', 'project:', 'project_talk:',
+            'file_talk:', 'template_talk:', 'category_talk:', 'forum:'
+        ]
+        
+        for namespace in expected_non_content:
+            assert namespace in discoverer.non_content_namespaces
 
 
 class TestLinkDiscovererBasicExtraction:
     """Test LinkDiscoverer basic link extraction."""
+
+    @pytest.fixture
+    def sample_html(self):
+        """Sample HTML for testing."""
+        return '''
+        <html>
+            <body>
+                <a href="/wiki/Test_Character">Test Character</a>
+                <a href="/wiki/Category:Characters">Characters</a>
+                <a href="/wiki/Template:Infobox">Template:Infobox</a>
+                <a href="https://external.com/test">External Link</a>
+            </body>
+        </html>
+        '''
+    
+    def test_extract_all_links(self, sample_html):
+        """Test extracting all links from HTML."""
+        link_discoverer = LinkDiscoverer()
+        soup = BeautifulSoup(sample_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        # Should return correct structure
+        assert isinstance(result, dict)
+        assert 'high_priority' in result
+        assert 'medium_priority' in result
+        assert 'low_priority' in result
+        
+        # Should have found some links
+        total_links = len(result['high_priority']) + len(result['medium_priority']) + len(result['low_priority'])
+        assert total_links > 0
+    
+    def test_extract_internal_links_only(self, sample_html):
+        """Test extracting only internal wiki links."""
+        link_discoverer = LinkDiscoverer()
+        soup = BeautifulSoup(sample_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        # Check that external links are not included
+        all_links = result['high_priority'] | result['medium_priority'] | result['low_priority']
+        external_links = [link for link in all_links if 'external.com' in link]
+        assert len(external_links) == 0
+    
+    def test_extract_absolute_urls(self, sample_html):
+        """Test converting relative URLs to absolute."""
+        link_discoverer = LinkDiscoverer()
+        soup = BeautifulSoup(sample_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        # All URLs should be absolute
+        all_links = result['high_priority'] | result['medium_priority'] | result['low_priority']
+        for link in all_links:
+            assert link.startswith('http') or link.startswith('/')
+    
+    def test_handle_empty_html(self):
+        """Test handling empty HTML content."""
+        link_discoverer = LinkDiscoverer()
+        soup = BeautifulSoup("", 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        assert result == {'high_priority': set(), 'medium_priority': set(), 'low_priority': set()}
+    
+    def test_handle_malformed_html(self):
+        """Test handling malformed HTML content."""
+        link_discoverer = LinkDiscoverer()
+        malformed_html = '<html><body><a href="/test">Test</a><p>Unclosed paragraph'
+        soup = BeautifulSoup(malformed_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        # Should not raise an exception
+        result = link_discoverer.discover_links(soup, base_url)
+        assert isinstance(result, dict)
+
+
+class TestLinkDiscovererSimplifiedApproach:
+    """Test LinkDiscoverer simplified three-category approach."""
     
     @pytest.fixture
     def link_discoverer(self):
@@ -44,331 +156,161 @@ class TestLinkDiscovererBasicExtraction:
         return LinkDiscoverer()
     
     @pytest.fixture
-    def sample_html(self):
-        """Sample HTML with various link types."""
+    def mixed_content_html(self):
+        """HTML with categories, content, and non-content links."""
         return """
         <html>
             <body>
-                <div class="content">
-                    <p>Visit <a href="/wiki/Naruto_Uzumaki">Naruto</a> and 
-                    <a href="/wiki/Sasuke_Uchiha">Sasuke</a>.</p>
-                    <a href="/wiki/Hidden_Leaf_Village">Hidden Leaf</a>
+                <div class="categories">
                     <a href="/wiki/Category:Characters">Characters</a>
-                    <a href="/wiki/Template:CharacterBox">Template</a>
-                    <a href="https://external.com/page">External</a>
+                    <a href="/wiki/Category:Locations">Locations</a>
+                    <a href="/wiki/Category:Episodes">Episodes</a>
+                </div>
+                <div class="content">
+                    <a href="/wiki/Harry_Potter">Harry Potter</a>
+                    <a href="/wiki/Hermione_Granger">Hermione Granger</a>
+                    <a href="/wiki/Hogwarts">Hogwarts</a>
+                    <a href="/wiki/Quidditch">Quidditch</a>
+                </div>
+                <div class="maintenance">
+                    <a href="/wiki/Template:Infobox">Template:Infobox</a>
+                    <a href="/wiki/User:Admin">User:Admin</a>
+                    <a href="/wiki/Help:Editing">Help:Editing</a>
                 </div>
             </body>
         </html>
         """
     
-    def test_extract_all_links(self, link_discoverer, sample_html):
-        """Test extracting all links from HTML."""
-        pass
-    
-    def test_extract_internal_links_only(self, link_discoverer, sample_html):
-        """Test extracting only internal wiki links."""
-        pass
-    
-    def test_extract_absolute_urls(self, link_discoverer, sample_html):
-        """Test converting relative URLs to absolute."""
-        pass
-    
-    def test_handle_empty_html(self, link_discoverer):
-        """Test handling empty HTML content."""
-        pass
-    
-    def test_handle_malformed_html(self, link_discoverer):
-        """Test handling malformed HTML content."""
-        pass
-
-
-class TestLinkDiscovererCharacterLinkDetection:
-    """Test LinkDiscoverer character link detection."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_detect_character_links_by_url_pattern(self, link_discoverer):
-        """Test detecting character links by URL patterns."""
-        pass
-    
-    def test_detect_character_links_by_title(self, link_discoverer):
-        """Test detecting character links by link titles."""
-        pass
-    
-    def test_detect_character_links_by_context(self, link_discoverer):
-        """Test detecting character links by surrounding context."""
-        pass
-    
-    def test_character_link_priority_scoring(self, link_discoverer):
-        """Test priority scoring for character links."""
-        pass
-    
-    def test_filter_character_disambiguation_pages(self, link_discoverer):
-        """Test filtering character disambiguation pages."""
-        pass
-    
-    def test_extract_character_name_from_link(self, link_discoverer):
-        """Test extracting clean character names from links."""
-        pass
-
-
-class TestLinkDiscovererLocationLinkDetection:
-    """Test LinkDiscoverer location link detection."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_detect_location_links_by_pattern(self, link_discoverer):
-        """Test detecting location links by URL patterns."""
-        pass
-    
-    def test_detect_location_links_by_keywords(self, link_discoverer):
-        """Test detecting location links by keywords."""
-        pass
-    
-    def test_location_link_priority_scoring(self, link_discoverer):
-        """Test priority scoring for location links."""
-        pass
-    
-    def test_categorize_location_types(self, link_discoverer):
-        """Test categorizing different types of locations."""
-        pass
-    
-    def test_extract_location_hierarchy(self, link_discoverer):
-        """Test extracting location hierarchy information."""
-        pass
-
-
-class TestLinkDiscovererLinkPrioritization:
-    """Test LinkDiscoverer link prioritization system."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_priority_scoring_algorithm(self, link_discoverer):
-        """Test the priority scoring algorithm."""
-        pass
-    
-    def test_main_character_priority_boost(self, link_discoverer):
-        """Test priority boost for main character links."""
-        pass
-    
-    def test_important_location_priority_boost(self, link_discoverer):
-        """Test priority boost for important location links."""
-        pass
-    
-    def test_relationship_context_priority_boost(self, link_discoverer):
-        """Test priority boost for relationship context."""
-        pass
-    
-    def test_frequency_based_priority_adjustment(self, link_discoverer):
-        """Test priority adjustment based on link frequency."""
-        pass
-    
-    def test_sort_links_by_priority(self, link_discoverer):
-        """Test sorting discovered links by priority."""
-        pass
-
-
-class TestLinkDiscovererFilteringRules:
-    """Test LinkDiscoverer filtering and exclusion rules."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_filter_system_pages(self, link_discoverer):
-        """Test filtering system/admin pages."""
-        pass
-    
-    def test_filter_maintenance_pages(self, link_discoverer):
-        """Test filtering maintenance pages."""
-        pass
-    
-    def test_filter_template_pages(self, link_discoverer):
-        """Test filtering template pages."""
-        pass
-    
-    def test_filter_user_pages(self, link_discoverer):
-        """Test filtering user pages."""
-        pass
-    
-    def test_filter_talk_pages(self, link_discoverer):
-        """Test filtering talk/discussion pages."""
-        pass
-    
-    def test_filter_by_custom_patterns(self, link_discoverer):
-        """Test filtering by custom exclusion patterns."""
-        pass
-    
-    def test_apply_namespace_filters(self, link_discoverer):
-        """Test applying namespace-based filters."""
-        pass
-
-
-class TestLinkDiscovererContextAnalysis:
-    """Test LinkDiscoverer context analysis functionality."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_extract_link_context_text(self, link_discoverer):
-        """Test extracting text context around links."""
-        pass
-    
-    def test_analyze_relationship_context(self, link_discoverer):
-        """Test analyzing relationship context in surrounding text."""
-        pass
-    
-    def test_detect_character_interaction_mentions(self, link_discoverer):
-        """Test detecting character interaction mentions."""
-        pass
-    
-    def test_identify_relationship_keywords(self, link_discoverer):
-        """Test identifying relationship keywords in context."""
-        pass
-    
-    def test_extract_context_sentiment(self, link_discoverer):
-        """Test extracting sentiment from link context."""
-        pass
-    
-    def test_context_based_link_categorization(self, link_discoverer):
-        """Test categorizing links based on context."""
-        pass
-
-
-class TestLinkDiscovererDeduplication:
-    """Test LinkDiscoverer link deduplication functionality."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_deduplicate_identical_urls(self, link_discoverer):
-        """Test deduplicating identical URLs."""
-        pass
-    
-    def test_deduplicate_similar_urls(self, link_discoverer):
-        """Test deduplicating similar URLs (fragments, params)."""
-        pass
-    
-    def test_normalize_url_variations(self, link_discoverer):
-        """Test normalizing URL variations."""
-        pass
-    
-    def test_merge_duplicate_link_metadata(self, link_discoverer):
-        """Test merging metadata from duplicate links."""
-        pass
-    
-    def test_preserve_highest_priority_duplicates(self, link_discoverer):
-        """Test preserving highest priority when deduplicating."""
-        pass
-
-
-class TestLinkDiscovererBatchProcessing:
-    """Test LinkDiscoverer batch processing capabilities."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_discover_links_from_multiple_pages(self, link_discoverer):
-        """Test discovering links from multiple pages."""
-        pass
-    
-    def test_batch_priority_calculation(self, link_discoverer):
-        """Test batch priority calculation across pages."""
-        pass
-    
-    def test_aggregate_link_statistics(self, link_discoverer):
-        """Test aggregating link statistics across batch."""
-        pass
-    
-    def test_batch_deduplication(self, link_discoverer):
-        """Test deduplication across multiple pages."""
-        pass
-    
-    def test_memory_efficient_batch_processing(self, link_discoverer):
-        """Test memory efficiency during batch processing."""
-        pass
-
-
-class TestLinkDiscovererSpecializedDetection:
-    """Test LinkDiscoverer specialized detection patterns."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_detect_family_relationship_links(self, link_discoverer):
-        """Test detecting family relationship links."""
-        pass
-    
-    def test_detect_team_affiliation_links(self, link_discoverer):
-        """Test detecting team/group affiliation links."""
-        pass
-    
-    def test_detect_antagonist_relationship_links(self, link_discoverer):
-        """Test detecting antagonist relationship links."""
-        pass
-    
-    def test_detect_mentor_student_links(self, link_discoverer):
-        """Test detecting mentor-student relationship links."""
-        pass
-    
-    def test_detect_romantic_relationship_links(self, link_discoverer):
-        """Test detecting romantic relationship links."""
-        pass
-    
-    def test_detect_rivalry_links(self, link_discoverer):
-        """Test detecting rivalry relationship links."""
-        pass
-
-
-class TestLinkDiscovererOutputFormat:
-    """Test LinkDiscoverer output format and structure."""
-    
-    @pytest.fixture
-    def link_discoverer(self):
-        """Create LinkDiscoverer instance for testing."""
-        return LinkDiscoverer()
-    
-    def test_discover_links_returns_correct_structure(self, link_discoverer):
-        """Test that discover_links returns correct structure."""
-        pass
-    
-    def test_output_includes_link_metadata(self, link_discoverer):
-        """Test that output includes link metadata."""
-        pass
-    
-    def test_output_includes_priority_scores(self, link_discoverer):
-        """Test that output includes priority scores."""
-        pass
-    
-    def test_output_includes_context_information(self, link_discoverer):
-        """Test that output includes context information."""
-        pass
-    
-    def test_output_field_types(self, link_discoverer):
-        """Test that output fields have correct types."""
-        pass
-    
-    def test_output_consistency_across_pages(self, link_discoverer):
-        """Test output format consistency across different pages."""
-        pass
+    def test_categories_get_highest_priority(self, link_discoverer, mixed_content_html):
+        """Test that category pages get highest priority."""
+        soup = BeautifulSoup(mixed_content_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        # Categories should be in high priority
+        high_priority_links = result['high_priority']
+        category_links = [link for link in high_priority_links if 'Category:' in link]
+        assert len(category_links) > 0
+    
+    def test_find_category_links_identifies_all_categories(self, link_discoverer, mixed_content_html):
+        """Test that find_category_links correctly identifies all category pages."""
+        soup = BeautifulSoup(mixed_content_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        category_links = link_discoverer.find_category_links(soup, base_url)
+        
+        # Should find all categories
+        assert len(category_links) >= 3  # Characters, Locations, Episodes
+    
+    def test_find_content_links_identifies_main_namespace(self, link_discoverer, mixed_content_html):
+        """Test that find_content_links identifies main namespace pages."""
+        soup = BeautifulSoup(mixed_content_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        content_links = link_discoverer.find_content_links(soup, base_url)
+        
+        # Should find content pages but not categories or maintenance
+        assert len(content_links) >= 4  # Harry_Potter, Hermione_Granger, Hogwarts, Quidditch
+        
+        # Should not include categories or maintenance pages
+        for link in content_links:
+            assert 'Category:' not in link
+            assert 'Template:' not in link
+            assert 'User:' not in link
+    
+    def test_find_non_content_links_identifies_maintenance(self, link_discoverer, mixed_content_html):
+        """Test that find_non_content_links identifies maintenance pages."""
+        soup = BeautifulSoup(mixed_content_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        non_content_links = link_discoverer.find_non_content_links(soup, base_url)
+        
+        # Should find maintenance pages
+        template_found = any('Template:' in link for link in non_content_links)
+        user_found = any('User:' in link for link in non_content_links)
+        help_found = any('Help:' in link for link in non_content_links)
+        
+        assert template_found or user_found or help_found
+    
+    def test_simplified_prioritization_scoring(self, link_discoverer):
+        """Test that simplified prioritization gives correct scores."""
+        links = {
+            "https://test.fandom.com/wiki/Category:Characters",
+            "https://test.fandom.com/wiki/Harry_Potter", 
+            "https://test.fandom.com/wiki/Template:Infobox"
+        }
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        prioritized = link_discoverer.prioritize_links_simplified(links, base_url)
+        
+        # Category should be first (highest score)
+        assert "Category:Characters" in prioritized[0]
+        
+        # Template should be last (negative score)
+        assert "Template:" in prioritized[-1]
+        
+        # Content should be in middle
+        content_index = next(i for i, link in enumerate(prioritized) if "Harry_Potter" in link)
+        template_index = next(i for i, link in enumerate(prioritized) if "Template:" in link)
+        assert content_index < template_index
+    
+    def test_is_content_link_classification(self, link_discoverer):
+        """Test content link classification."""
+        # Content links (main namespace)
+        assert link_discoverer.is_content_link("https://test.fandom.com/wiki/Harry_Potter")
+        assert link_discoverer.is_content_link("/wiki/Hermione_Granger")
+        
+        # Not content links
+        assert not link_discoverer.is_content_link("https://test.fandom.com/wiki/Category:Characters")
+        assert not link_discoverer.is_content_link("/wiki/Template:Infobox")
+        assert not link_discoverer.is_content_link("/wiki/User:Admin")
+    
+    def test_is_non_content_link_classification(self, link_discoverer):
+        """Test non-content link classification."""
+        # Non-content links
+        assert link_discoverer.is_non_content_link("https://test.fandom.com/wiki/Template:Infobox")
+        assert link_discoverer.is_non_content_link("/wiki/User:Admin") 
+        assert link_discoverer.is_non_content_link("/wiki/Help:Editing")
+        
+        # Not non-content links
+        assert not link_discoverer.is_non_content_link("https://test.fandom.com/wiki/Harry_Potter")
+        assert not link_discoverer.is_non_content_link("/wiki/Category:Characters")
+    
+    def test_category_first_with_duplicate_handling_simulation(self, link_discoverer):
+        """Test category-first approach handles scenarios where characters appear in multiple categories."""
+        # This simulates the scenario where URLManager would handle deduplication
+        
+        # HTML with character appearing both in categories and individual links
+        html = """
+        <html>
+            <body>
+                <div class="categories">
+                    <a href="/wiki/Category:Characters">Characters</a>
+                    <a href="/wiki/Category:Main_Characters">Main Characters</a>
+                </div>
+                <div class="content">
+                    <p>Read about <a href="/wiki/Harry_Potter">Harry Potter</a></p>
+                    <p>Also see <a href="/wiki/Ron_Weasley">Ron Weasley</a></p>
+                </div>
+            </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        # Should prioritize categories over individual character pages
+        high_priority = result['high_priority']
+        category_links = [link for link in high_priority if 'Category:' in link]
+        
+        # Categories should be found and prioritized
+        assert len(category_links) >= 1
+        
+        # This demonstrates that categories would be crawled first,
+        # and URLManager would handle the deduplication when character URLs 
+        # are discovered from both category pages and individual links
 
 
 class TestLinkDiscovererErrorHandling:
@@ -379,26 +321,48 @@ class TestLinkDiscovererErrorHandling:
         """Create LinkDiscoverer instance for testing."""
         return LinkDiscoverer()
     
-    def test_handle_broken_html_links(self, link_discoverer):
-        """Test handling broken or malformed HTML links."""
-        pass
+    def test_handle_none_inputs(self, link_discoverer):
+        """Test handling None inputs gracefully."""
+        # None soup should return empty result
+        result = link_discoverer.discover_links(None, "http://test.com")
+        assert result == {'high_priority': set(), 'medium_priority': set(), 'low_priority': set()}
+        
+        # None base_url should return empty result
+        soup = BeautifulSoup('<html><body><a href="/test">Test</a></body></html>', 'html.parser')
+        result = link_discoverer.discover_links(soup, None)
+        assert result == {'high_priority': set(), 'medium_priority': set(), 'low_priority': set()}
+        
+        # Both None should return empty result
+        result = link_discoverer.discover_links(None, None)
+        assert result == {'high_priority': set(), 'medium_priority': set(), 'low_priority': set()}
     
-    def test_handle_invalid_urls(self, link_discoverer):
-        """Test handling invalid or malformed URLs."""
-        pass
+    def test_handle_invalid_html_gracefully(self, link_discoverer):
+        """Test handling invalid HTML gracefully."""
+        # Severely malformed HTML
+        malformed_html = '<html><body><a href="/test"<p>Broken</p></body>'
+        soup = BeautifulSoup(malformed_html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        # Should not crash and should return valid structure
+        result = link_discoverer.discover_links(soup, base_url)
+        assert isinstance(result, dict)
+        assert all(key in result for key in ['high_priority', 'medium_priority', 'low_priority'])
     
-    def test_handle_extremely_large_pages(self, link_discoverer):
-        """Test handling pages with extremely large number of links."""
-        pass
+    def test_handle_empty_link_sets(self, link_discoverer):
+        """Test handling when no links are found."""
+        html = '<html><body><p>No links here!</p></body></html>'
+        soup = BeautifulSoup(html, 'html.parser')
+        base_url = "https://test.fandom.com/wiki/Main_Page"
+        
+        result = link_discoverer.discover_links(soup, base_url)
+        
+        # Should return empty sets but valid structure
+        assert result == {'high_priority': set(), 'medium_priority': set(), 'low_priority': set()}
     
-    def test_handle_unusual_link_formats(self, link_discoverer):
-        """Test handling unusual wiki link formats."""
-        pass
-    
-    def test_graceful_degradation_on_errors(self, link_discoverer):
-        """Test graceful degradation when errors occur."""
-        pass
-    
-    def test_timeout_handling_for_large_pages(self, link_discoverer):
-        """Test timeout handling for processing large pages."""
-        pass
+    def test_prioritize_links_handles_empty_input(self, link_discoverer):
+        """Test that prioritize_links handles empty input."""
+        result = link_discoverer.prioritize_links_simplified(set(), "http://test.com")
+        assert result == []
+        
+        result = link_discoverer.prioritize_links_simplified(None, "http://test.com")
+        assert result == []
