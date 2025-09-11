@@ -41,7 +41,7 @@ class ContentSaver:
         directory = self._get_page_directory(page_type)
         
         # Generate filename and create full path
-        filename = self._generate_filename(url, page_type)
+        filename = self._generate_filename(url, page_type, content.get('title'))
         file_path = directory / filename
         
         # Add metadata
@@ -234,16 +234,54 @@ class ContentSaver:
         
         return stats
     
-    def _generate_filename(self, url: str, page_type: str = "page") -> str:
-        """Generate safe filename from URL."""
+    def _generate_filename(self, url: str, page_type: str = "page", title: str = None) -> str:
+        """Generate safe filename from URL and title."""
         if not url:
-            return "unnamed"
+            return "unnamed.json"
         
-        # Create a hash-based filename to avoid filesystem issues
+        # Use title if available, otherwise fallback to URL-based name
+        if title:
+            # Clean title for safe filename
+            clean_title = self._clean_title_for_filename(title)
+            if clean_title:  # Only use if cleaning resulted in valid filename
+                timestamp = datetime.now().strftime("%Y%m%d")
+                return f"{clean_title}_{timestamp}.json"
+        
+        # Fallback to hash-based filename for problematic titles
         url_hash = self._url_to_hash(url)
         timestamp = datetime.now().strftime("%Y%m%d")
         
         return f"{page_type}_{url_hash}_{timestamp}.json"
+    
+    def _clean_title_for_filename(self, title: str) -> str:
+        """Clean title to create safe filename."""
+        if not title:
+            return ""
+        
+        import re
+        
+        # Remove common wiki suffixes
+        title = re.sub(r'\s*\|\s*.*?Wiki.*?$', '', title)  # "Tenzin | Avatar Wiki | Fandom" -> "Tenzin"
+        title = re.sub(r'\s*\|\s*Fandom.*?$', '', title)   # Remove "| Fandom"
+        title = title.strip()
+        
+        # Replace spaces and special characters with underscores
+        title = re.sub(r'[^\w\-_\.]', '_', title)
+        
+        # Remove multiple underscores
+        title = re.sub(r'_+', '_', title)
+        
+        # Remove leading/trailing underscores
+        title = title.strip('_')
+        
+        # Limit length to reasonable filename size
+        title = title[:100]
+        
+        # Ensure it's not empty after cleaning
+        if not title or title in ('', '_'):
+            return ""
+        
+        return title
     
     def _get_page_directory(self, page_type: str) -> Path:
         """Get directory path for page type."""

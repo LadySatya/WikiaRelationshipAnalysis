@@ -155,6 +155,15 @@ python -m pytest tests/ -v
 
 **Remember**: Tests are not just for catching bugs - they define the contract and behavior of your code. Write them as if they are the specification document.
 
+## Windows Compatibility Notes
+
+**CRITICAL**: When writing log messages, status updates, or console output, avoid Unicode symbols and emojis that don't render properly on Windows terminals. Use text-based indicators instead:
+
+- ✓ AVOID: "✓ Success", "✗ Error", "🔍 Processing"
+- ✓ USE: "[OK] Success", "[ERROR] Error", "[INFO] Processing"
+
+This ensures compatibility across Windows Command Prompt, PowerShell, and Git Bash environments.
+
 ## Dependency Management
 
 The project uses modern Python packaging with `pyproject.toml`:

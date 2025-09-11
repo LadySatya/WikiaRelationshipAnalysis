@@ -15,6 +15,7 @@ from ..rate_limiting import RateLimiter
 from ..core.session_manager import SessionManager
 from ..core.url_manager import URLManager
 from ..persistence import ContentSaver, CrawlState
+from ..extraction.page_extractor import PageExtractor
 
 
 class WikiaCrawler:
@@ -90,6 +91,7 @@ class WikiaCrawler:
         self.url_manager = URLManager(self.project_path)
         self.content_saver = ContentSaver(self.project_path)
         self.crawl_state = CrawlState(self.project_path)
+        self.page_extractor = PageExtractor()
     
     def _create_project_structure(self) -> None:
         """Create the project directory structure."""
@@ -233,9 +235,41 @@ class WikiaCrawler:
     
     async def _crawl_page(self, url: str) -> Optional[Dict]:
         """Crawl a single page and return extracted data."""
-        # This method will be implemented when we work on the extraction pipeline
-        # For now, return None to indicate no data extracted
-        return None
+        try:
+            # Fetch HTML content using session manager
+            response = await self.session_manager.get(url)
+            
+            if response.status != 200:
+                logging.warning(f"HTTP {response.status} for {url}")
+                return None
+            
+            html = await response.text()
+            response.close()  # Clean up the response
+            
+            if not html:
+                return None
+            
+            # Extract structured content
+            extracted_data = self.page_extractor.extract_content(html, url)
+            
+            # Validate content quality
+            if not extracted_data or not extracted_data.get('main_content'):
+                logging.info(f"No main content found for {url}")
+                return None
+            
+            # Save content to file system
+            try:
+                file_path = self.content_saver.save_page_content(url, extracted_data)
+                extracted_data['saved_to'] = str(file_path)
+                logging.info(f"Saved page content to: {file_path}")
+            except Exception as save_error:
+                logging.error(f"Failed to save content for {url}: {save_error}")
+            
+            return extracted_data
+            
+        except Exception as e:
+            logging.error(f"Error crawling {url}: {e}")
+            return None
     
     def _should_crawl_url(self, url: str) -> bool:
         """Check if URL should be crawled based on filters and robots.txt."""
