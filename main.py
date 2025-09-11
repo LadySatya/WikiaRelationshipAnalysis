@@ -35,38 +35,42 @@ def load_config() -> dict:
 
 
 async def crawl_command(args):
-    """Execute crawl command."""
+    """Execute crawl command with proper session cleanup."""
     print(f"Starting crawl of {args.wikia_url} for project '{args.project_name}'")
     print(f"Max pages: {args.max_pages or 'unlimited'}")
     print(f"[INFO] Loading configuration and initializing crawler...")
     
     config = load_config()
-    crawler = WikiaCrawler(args.project_name, config)
     
-    start_urls = [args.wikia_url]
-    print(f"[INFO] Starting crawl from: {args.wikia_url}")
+    # Use context manager for proper session cleanup
+    async with WikiaCrawler(args.project_name, config) as crawler:
+        start_urls = [args.wikia_url]
+        print(f"[INFO] Starting crawl from: {args.wikia_url}")
+        
+        stats = await crawler.crawl_wikia(start_urls, max_pages=args.max_pages)
+        
+        print(f"\n=== CRAWL COMPLETED ===")
+        print(f"Pages crawled: {stats['pages_crawled']}")
+        print(f"Errors: {stats['errors']}")
+        print(f"Duration: {stats['duration_seconds']:.2f}s")
+        print(f"URLs discovered: {stats['urls_in_queue']}")
+        print(f"Project saved to: {crawler.project_path}")
+        
+        # Show content summary
+        content_files = list((crawler.project_path / "processed").rglob("*.json"))
+        print(f"\nContent files saved: {len(content_files)}")
+        
+        # Show by type
+        by_type = {}
+        for file in content_files:
+            file_type = file.parent.name
+            by_type[file_type] = by_type.get(file_type, 0) + 1
+        
+        for content_type, count in by_type.items():
+            print(f"  - {content_type}: {count}")
     
-    stats = await crawler.crawl_wikia(start_urls, max_pages=args.max_pages)
-    
-    print(f"\n=== CRAWL COMPLETED ===")
-    print(f"Pages crawled: {stats['pages_crawled']}")
-    print(f"Errors: {stats['errors']}")
-    print(f"Duration: {stats['duration_seconds']:.2f}s")
-    print(f"URLs discovered: {stats['urls_in_queue']}")
-    print(f"Project saved to: {crawler.project_path}")
-    
-    # Show content summary
-    content_files = list((crawler.project_path / "processed").rglob("*.json"))
-    print(f"\nContent files saved: {len(content_files)}")
-    
-    # Show by type
-    by_type = {}
-    for file in content_files:
-        file_type = file.parent.name
-        by_type[file_type] = by_type.get(file_type, 0) + 1
-    
-    for content_type, count in by_type.items():
-        print(f"  - {content_type}: {count}")
+    # Sessions are automatically cleaned up when context exits
+    print(f"[INFO] Crawler cleanup completed")
 
 
 def status_command(args):

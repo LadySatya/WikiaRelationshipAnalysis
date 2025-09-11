@@ -44,12 +44,13 @@ async def test_resume():
     
     try:
         config = load_config()
-        crawler = WikiaCrawler("avatar_test", config)  # Use existing project
         
-        print(f"[OK] Attempting to resume crawl for project 'avatar_test'")
-        
-        # Try to resume (this should call the resume_crawl method)
-        stats = await crawler.resume_crawl()
+        # Use context manager for proper session cleanup
+        async with WikiaCrawler("avatar_test", config) as crawler:  # Use existing project
+            print(f"[OK] Attempting to resume crawl for project 'avatar_test'")
+            
+            # Try to resume (this should call the resume_crawl method)
+            stats = await crawler.resume_crawl()
         
         print(f"[OK] Resume completed")
         print(f"Stats: {stats}")

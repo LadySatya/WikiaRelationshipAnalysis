@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script to run the WikiaCrawler for our first live test.
+Integration test script for WikiaCrawler - validates end-to-end functionality.
+
+Use this to test the crawler infrastructure and content extraction before
+using the main CLI. Good for debugging and development validation.
+
+For normal usage, use: python main.py crawl <project> <url> --max-pages <N>
 """
 
 import asyncio
@@ -51,21 +56,21 @@ async def test_phase_1():
         print(f"  - Rate limit: {config['default_delay_seconds']}s delay, {config['max_requests_per_minute']} req/min")
         print(f"  - User agent: {config['user_agent']}")
         
-        # Initialize crawler
-        crawler = WikiaCrawler("avatar_test", config)
-        print(f"[OK] Crawler initialized")
-        print(f"  - Project path: {crawler.project_path}")
-        
-        # Check project structure was created
-        if crawler.project_path.exists():
-            dirs = [d.name for d in crawler.project_path.rglob("*") if d.is_dir()]
-            print(f"[OK] Project structure created ({len(dirs)} directories)")
-        
-        # Start crawl
-        start_urls = ["https://avatar.fandom.com/wiki/Avatar_Wiki"]
-        print(f"[OK] Starting crawl with URLs: {start_urls}")
-        
-        stats = await crawler.crawl_wikia(start_urls, max_pages=5)
+        # Initialize crawler with context manager
+        async with WikiaCrawler("avatar_test", config) as crawler:
+            print(f"[OK] Crawler initialized")
+            print(f"  - Project path: {crawler.project_path}")
+            
+            # Check project structure was created
+            if crawler.project_path.exists():
+                dirs = [d.name for d in crawler.project_path.rglob("*") if d.is_dir()]
+                print(f"[OK] Project structure created ({len(dirs)} directories)")
+            
+            # Start crawl
+            start_urls = ["https://avatar.fandom.com/wiki/Avatar_Wiki"]
+            print(f"[OK] Starting crawl with URLs: {start_urls}")
+            
+            stats = await crawler.crawl_wikia(start_urls, max_pages=5)
         
         print(f"\\n=== CRAWL COMPLETED ===")
         print(f"Pages attempted: {stats['pages_attempted']}")
@@ -89,13 +94,14 @@ async def test_phase_2():
     
     try:
         config = load_config()
-        crawler = WikiaCrawler("avatar_extended", config)
         
-        # Try a category page that should have many links
-        start_urls = ["https://avatar.fandom.com/wiki/Category:Characters"]
-        print(f"Starting extended crawl with URLs: {start_urls}")
-        
-        stats = await crawler.crawl_wikia(start_urls, max_pages=50)
+        # Use context manager for proper session cleanup
+        async with WikiaCrawler("avatar_extended", config) as crawler:
+            # Try a category page that should have many links
+            start_urls = ["https://avatar.fandom.com/wiki/Category:Characters"]
+            print(f"Starting extended crawl with URLs: {start_urls}")
+            
+            stats = await crawler.crawl_wikia(start_urls, max_pages=50)
         
         print(f"\\n=== EXTENDED CRAWL COMPLETED ===")
         print(f"Pages attempted: {stats['pages_attempted']}")

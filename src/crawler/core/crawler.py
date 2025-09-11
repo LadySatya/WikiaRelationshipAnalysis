@@ -233,40 +233,60 @@ class WikiaCrawler:
         """Stop crawling completely and cleanup resources."""
         pass
     
+    async def __aenter__(self):
+        """Context manager entry - ensures proper session setup."""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - ensures session cleanup."""
+        await self.cleanup()
+    
+    async def cleanup(self):
+        """Clean up all resources including sessions."""
+        try:
+            if hasattr(self, 'session_manager'):
+                await self.session_manager.close_session()
+                logging.info("Session cleanup completed")
+        except Exception as e:
+            logging.warning(f"Error during session cleanup: {e}")
+    
     async def _crawl_page(self, url: str) -> Optional[Dict]:
         """Crawl a single page and return extracted data."""
         try:
             # Fetch HTML content using session manager
             response = await self.session_manager.get(url)
             
-            if response.status != 200:
-                logging.warning(f"HTTP {response.status} for {url}")
-                return None
-            
-            html = await response.text()
-            response.close()  # Clean up the response
-            
-            if not html:
-                return None
-            
-            # Extract structured content
-            extracted_data = self.page_extractor.extract_content(html, url)
-            
-            # Validate content quality
-            if not extracted_data or not extracted_data.get('main_content'):
-                logging.info(f"No main content found for {url}")
-                return None
-            
-            # Save content to file system
-            try:
-                file_path = self.content_saver.save_page_content(url, extracted_data)
-                extracted_data['saved_to'] = str(file_path)
-                logging.info(f"Saved page content to: {file_path}")
-            except Exception as save_error:
-                logging.error(f"Failed to save content for {url}: {save_error}")
-            
-            return extracted_data
-            
+            try:  # Ensure response is always cleaned up
+                if response.status != 200:
+                    logging.warning(f"HTTP {response.status} for {url}")
+                    return None
+                
+                html = await response.text()
+                
+                if not html:
+                    return None
+                
+                # Extract structured content
+                extracted_data = self.page_extractor.extract_content(html, url)
+                
+                # Validate content quality
+                if not extracted_data or not extracted_data.get('main_content'):
+                    logging.info(f"No main content found for {url}")
+                    return None
+                
+                # Save content to file system
+                try:
+                    file_path = self.content_saver.save_page_content(url, extracted_data)
+                    extracted_data['saved_to'] = str(file_path)
+                    logging.info(f"Saved page content to: {file_path}")
+                except Exception as save_error:
+                    logging.error(f"Failed to save content for {url}: {save_error}")
+                
+                return extracted_data
+                
+            finally:
+                response.close()  # Ensure response cleanup in all cases
+                
         except Exception as e:
             logging.error(f"Error crawling {url}: {e}")
             return None
