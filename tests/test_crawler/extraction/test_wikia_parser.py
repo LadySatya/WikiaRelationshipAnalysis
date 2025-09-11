@@ -171,33 +171,172 @@ class TestWikiaParserLinkProcessing:
         """Create WikiaParser instance for testing."""
         return WikiaParser()
     
-    def test_categorize_character_links(self, wikia_parser):
-        """Test categorizing character page links."""
-        pass
+    def test_extract_character_links_filters_external_domains(self, wikia_parser):
+        """Test that character links extraction filters out external wikia domains."""
+        from bs4 import BeautifulSoup
+        
+        html = '''
+        <html>
+        <body>
+            <a href="https://buffy.fandom.com/wiki/Buffy_Summers">Buffy Summers</a>
+            <a href="https://naruto.fandom.com/wiki/Naruto_Uzumaki">Naruto Uzumaki</a>
+            <a href="https://witcher.fandom.com/wiki/Geralt">Geralt</a>
+            <a href="/wiki/Angel">Angel</a>
+        </body>
+        </html>
+        '''
+        soup = BeautifulSoup(html, 'html.parser')
+        base_url = "https://buffy.fandom.com/wiki/Main_Page"
+        
+        character_links = wikia_parser.extract_character_links(soup, base_url)
+        
+        # Should only include buffy.fandom.com links
+        buffy_links = [link for link in character_links if 'buffy.fandom.com' in link]
+        external_links = [link for link in character_links if 'naruto.fandom.com' in link or 'witcher.fandom.com' in link]
+        
+        assert len(buffy_links) > 0
+        assert len(external_links) == 0
     
-    def test_categorize_location_links(self, wikia_parser):
-        """Test categorizing location page links."""
-        pass
+    def test_extract_character_links_filters_community_fandom(self, wikia_parser):
+        """Test that character links extraction filters out community.fandom.com links."""
+        from bs4 import BeautifulSoup
+        
+        html = '''
+        <html>
+        <body>
+            <a href="https://buffy.fandom.com/wiki/Spike">Spike</a>
+            <a href="https://community.fandom.com/wiki/Community_Central">Community Central</a>
+            <a href="https://community.fandom.com/Sitemap">Sitemap</a>
+            <a href="https://about.fandom.com/careers">Careers</a>
+        </body>
+        </html>
+        '''
+        soup = BeautifulSoup(html, 'html.parser')
+        base_url = "https://buffy.fandom.com/wiki/Main_Page"
+        
+        character_links = wikia_parser.extract_character_links(soup, base_url)
+        
+        # Should not include any community.fandom.com or about.fandom.com links
+        meta_links = [link for link in character_links if 
+                     'community.fandom.com' in link or 'about.fandom.com' in link]
+        
+        assert len(meta_links) == 0
+        assert any('buffy.fandom.com' in link for link in character_links)
     
-    def test_categorize_event_links(self, wikia_parser):
-        """Test categorizing event page links."""
-        pass
+    def test_extract_character_links_filters_non_character_terms(self, wikia_parser):
+        """Test that character links filters out obvious non-character terms."""
+        from bs4 import BeautifulSoup
+        
+        html = '''
+        <html>
+        <body>
+            <a href="/wiki/Buffy_Summers">Buffy Summers</a>
+            <a href="/wiki/Special:AllPages">Special:AllPages</a>
+            <a href="/wiki/Category:Characters">Category:Characters</a>
+            <a href="/wiki/Help:Editing">Help:Editing</a>
+            <a href="/wiki/Template:Infobox">Template:Infobox</a>
+            <a href="?action=edit">Edit</a>
+        </body>
+        </html>
+        '''
+        soup = BeautifulSoup(html, 'html.parser')
+        base_url = "https://buffy.fandom.com/wiki/Main_Page"
+        
+        character_links = wikia_parser.extract_character_links(soup, base_url)
+        
+        # Should not include system/maintenance links
+        system_terms = ['special:', 'category:', 'help:', 'template:', 'action=']
+        system_links = [link for link in character_links if 
+                       any(term in link.lower() for term in system_terms)]
+        
+        assert len(system_links) == 0
+        assert any('Buffy_Summers' in link for link in character_links)
     
-    def test_filter_system_links(self, wikia_parser):
-        """Test filtering out system/maintenance links."""
-        pass
+    def test_extract_character_links_requires_base_url(self, wikia_parser):
+        """Test that extract_character_links requires base_url parameter."""
+        from bs4 import BeautifulSoup
+        
+        html = '<html><body><a href="/wiki/Test">Test</a></body></html>'
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Should return empty set when base_url is None or empty
+        assert wikia_parser.extract_character_links(soup, None) == set()
+        assert wikia_parser.extract_character_links(soup, "") == set()
+        assert wikia_parser.extract_character_links(None, "http://example.com") == set()
     
-    def test_resolve_wiki_links(self, wikia_parser):
-        """Test resolving wiki-style [[links]]."""
-        pass
+    def test_is_same_wikia_domain_exact_match(self, wikia_parser):
+        """Test domain matching for exact domain matches."""
+        base_url = "https://buffy.fandom.com/wiki/Main_Page"
+        
+        # Exact domain matches
+        assert wikia_parser._is_same_wikia_domain("https://buffy.fandom.com/wiki/Angel", base_url)
+        assert wikia_parser._is_same_wikia_domain("/wiki/Spike", base_url)  # Relative URL
+        assert wikia_parser._is_same_wikia_domain("#characters", base_url)  # Fragment
+        
+        # Different wikia domains
+        assert not wikia_parser._is_same_wikia_domain("https://naruto.fandom.com/wiki/Naruto", base_url)
+        assert not wikia_parser._is_same_wikia_domain("https://witcher.fandom.com/wiki/Geralt", base_url)
     
-    def test_extract_link_context(self, wikia_parser):
-        """Test extracting context around links."""
-        pass
+    def test_is_same_wikia_domain_excludes_fandom_meta(self, wikia_parser):
+        """Test that Fandom meta-domains are excluded."""
+        base_url = "https://buffy.fandom.com/wiki/Main_Page"
+        
+        # Fandom meta-domains should be excluded
+        assert not wikia_parser._is_same_wikia_domain("https://community.fandom.com/wiki/Central", base_url)
+        assert not wikia_parser._is_same_wikia_domain("https://about.fandom.com/careers", base_url)
+        assert not wikia_parser._is_same_wikia_domain("https://auth.fandom.com/signin", base_url)
+        assert not wikia_parser._is_same_wikia_domain("https://fandom.zendesk.com/help", base_url)
     
-    def test_normalize_link_titles(self, wikia_parser):
-        """Test normalizing link titles and anchors."""
-        pass
+    def test_has_character_indicators_filters_non_character_terms(self, wikia_parser):
+        """Test that character indicators method filters non-character terms."""
+        # These should return False due to non-character terms
+        assert not wikia_parser._has_character_indicators("Sitemap", "https://example.com/Sitemap")
+        assert not wikia_parser._has_character_indicators("Community Central", "https://community.fandom.com/wiki/Community_Central")
+        assert not wikia_parser._has_character_indicators("Help Contents", "https://example.com/wiki/Help:Contents")
+        assert not wikia_parser._has_character_indicators("Edit", "https://example.com?action=edit")
+        
+        # These should return True for legitimate character indicators
+        assert wikia_parser._has_character_indicators("Character Page", "https://example.com/characters/test")
+        assert wikia_parser._has_character_indicators("Test", "https://example.com/character/test")  # URL has 'character/'
+    
+    def test_is_likely_character_name_filters_non_names(self, wikia_parser):
+        """Test that character name detection filters out non-names."""
+        from bs4 import BeautifulSoup
+        
+        # Create mock link tags
+        html_template = '<a href="/wiki/{}">{}</a>'
+        
+        # These should return False
+        non_names = ["Sitemap", "Community Central", "Help Contents", "Special Pages", "Edit Page"]
+        for name in non_names:
+            html = html_template.format(name.replace(" ", "_"), name)
+            soup = BeautifulSoup(html, 'html.parser')
+            link_tag = soup.find('a')
+            assert not wikia_parser._is_likely_character_name(name, link_tag)
+        
+        # These should return True (proper names)
+        proper_names = ["John Smith", "Alice", "Bob Jones"]
+        for name in proper_names:
+            html = html_template.format(name.replace(" ", "_"), name)
+            soup = BeautifulSoup(html, 'html.parser')
+            link_tag = soup.find('a')
+            assert wikia_parser._is_likely_character_name(name, link_tag)
+    
+    def test_normalize_url_handles_different_formats(self, wikia_parser):
+        """Test URL normalization for different URL formats."""
+        base_url = "https://buffy.fandom.com/wiki/Main_Page"
+        
+        # Relative URLs
+        assert wikia_parser._normalize_url("/wiki/Angel", base_url) == "https://buffy.fandom.com/wiki/Angel"
+        
+        # Already absolute URLs
+        absolute = "https://buffy.fandom.com/wiki/Spike"
+        assert wikia_parser._normalize_url(absolute, base_url) == absolute
+        
+        # Protocol-relative URLs
+        protocol_relative = "//buffy.fandom.com/wiki/Willow"
+        expected = "https://buffy.fandom.com/wiki/Willow"
+        assert wikia_parser._normalize_url(protocol_relative, base_url) == expected
 
 
 class TestWikiaParserCharacterDetection:

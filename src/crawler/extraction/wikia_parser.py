@@ -71,7 +71,7 @@ class WikiaParser:
             'url': url,
             'namespace': self.get_page_namespace(url),
             'infobox': self.extract_portable_infobox(cleaned_soup),
-            'character_links': self.extract_character_links(cleaned_soup),
+            'character_links': self.extract_character_links(cleaned_soup, url),
             'related_articles': self.extract_related_articles(cleaned_soup),
             'categories': self._extract_page_categories(cleaned_soup),
             'is_character_page': self.is_character_page(cleaned_soup, url),
@@ -106,9 +106,9 @@ class WikiaParser:
         
         return None
     
-    def extract_character_links(self, soup: BeautifulSoup) -> Set[str]:
-        """Find links that likely point to character pages."""
-        if not soup:
+    def extract_character_links(self, soup: BeautifulSoup, base_url: str) -> Set[str]:
+        """Find links that likely point to character pages within the same wikia."""
+        if not soup or not base_url:
             return set()
         
         character_links = set()
@@ -117,16 +117,40 @@ class WikiaParser:
             href = link_tag['href']
             link_text = link_tag.get_text(strip=True)
             
-            # Check if link points to character namespace or has character indicators
-            if ('/Character:' in href or '/Characters:' in href or 
-                'character' in href.lower() or 'character' in link_text.lower()):
-                character_links.add(href)
+            # Skip if not same domain
+            if not self._is_same_wikia_domain(href, base_url):
+                continue
             
-            # Check for capitalized names (likely characters)
-            elif link_text and len(link_text.split()) <= 3:
-                words = link_text.split()
-                if all(word[0].isupper() for word in words if word and len(word) > 1):
-                    character_links.add(href)
+            # Additional check to exclude Fandom meta-domains that might slip through
+            from urllib.parse import urlparse
+            try:
+                href_domain = urlparse(href).netloc.lower() if href.startswith('http') else ''
+                fandom_meta_domains = [
+                    'community.fandom.com',
+                    'fandom.zendesk.com', 
+                    'about.fandom.com',
+                    'auth.fandom.com'
+                ]
+                if href_domain in fandom_meta_domains:
+                    continue
+            except:
+                pass
+            
+            # Skip common non-character pages
+            if self._is_excluded_page(href):
+                continue
+                
+            # More precise character detection
+            is_character_link = (
+                self._has_character_namespace(href) or
+                self._has_character_indicators(link_text, href) or
+                self._is_likely_character_name(link_text, link_tag)
+            )
+            
+            if is_character_link:
+                # Normalize URL to absolute form
+                normalized_href = self._normalize_url(href, base_url)
+                character_links.add(normalized_href)
         
         return character_links
     
@@ -317,3 +341,156 @@ class WikiaParser:
                         categories.append(text)
         
         return list(set(categories))  # Remove duplicates
+    
+    def _is_same_wikia_domain(self, href: str, base_url: str) -> bool:
+        """Check if href belongs to the same wikia domain as base_url."""
+        from urllib.parse import urlparse
+        
+        # Handle relative URLs - they're always same domain
+        if href.startswith('/'):
+            return True
+        
+        # Handle fragment-only URLs (#section)
+        if href.startswith('#'):
+            return True
+        
+        # Handle protocol-relative URLs
+        if href.startswith('//'):
+            href = 'https:' + href
+        
+        try:
+            base_domain = urlparse(base_url).netloc.lower()
+            href_domain = urlparse(href).netloc.lower()
+            
+            # Exclude Fandom platform meta-domains
+            fandom_meta_domains = [
+                'community.fandom.com',
+                'fandom.zendesk.com', 
+                'about.fandom.com',
+                'auth.fandom.com'
+            ]
+            
+            if href_domain in fandom_meta_domains:
+                return False
+            
+            # Exact domain match
+            if base_domain == href_domain:
+                return True
+            
+            # Check if both are wikia/fandom domains
+            if self._is_wikia_domain(base_domain) and self._is_wikia_domain(href_domain):
+                base_wikia = self._extract_wikia_name(base_domain)
+                href_wikia = self._extract_wikia_name(href_domain)
+                return base_wikia == href_wikia
+            
+            return False
+        except Exception:
+            return False
+    
+    def _has_character_namespace(self, href: str) -> bool:
+        """Check if URL has explicit character namespace."""
+        character_namespaces = ['/Character:', '/Characters:', '/character:', '/characters:']
+        return any(ns in href for ns in character_namespaces)
+    
+    def _has_character_indicators(self, link_text: str, href: str) -> bool:
+        """Check if link has character-related indicators in text or URL."""
+        if not link_text:
+            return False
+        
+        text_lower = link_text.lower()
+        href_lower = href.lower()
+        
+        # Skip obvious non-character terms
+        non_character_terms = {
+            'sitemap', 'community', 'help', 'policy', 'wiki', 'central', 
+            'contents', 'editing', 'purge', 'history', 'action=', 'special:',
+            'category:', 'file:', 'template:', 'user:'
+        }
+        
+        if any(term in text_lower or term in href_lower for term in non_character_terms):
+            return False
+        
+        # Avoid too broad matches - be more specific
+        character_indicators = [
+            'characters/', 'character/', 'cast member', 'played by', 'portrayed by'
+        ]
+        
+        return any(indicator in href_lower or indicator in text_lower 
+                  for indicator in character_indicators)
+    
+    def _is_likely_character_name(self, link_text: str, link_tag) -> bool:
+        """Analyze context to determine if link likely points to a character."""
+        if not link_text or len(link_text.split()) > 3:
+            return False
+        
+        # Skip if it's clearly not a name (contains common non-name words)
+        non_name_words = {
+            'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 
+            'by', 'from', 'about', 'wiki', 'page', 'category', 'file', 'image',
+            'help', 'special', 'user', 'talk', 'template', 'edit', 'history',
+            'sitemap', 'community', 'central', 'contents', 'editing', 'policy'
+        }
+        
+        words = link_text.lower().split()
+        if any(word in non_name_words for word in words):
+            return False
+        
+        # Check for proper name pattern (capitalized words)
+        name_words = link_text.split()
+        if not all(word and word[0].isupper() for word in name_words if len(word) > 1):
+            return False
+        
+        # Check surrounding context for character-related terms
+        parent = link_tag.parent
+        if parent:
+            parent_text = parent.get_text().lower()
+            character_context = ['character', 'played by', 'portrayed', 'actor', 'actress', 'cast']
+            if any(ctx in parent_text for ctx in character_context):
+                return True
+        
+        # Check if in a character-related section
+        section_header = self._find_section_header(link_tag)
+        if section_header:
+            header_text = section_header.get_text().lower()
+            if any(keyword in header_text for keyword in ['character', 'cast', 'people', 'main']):
+                return True
+        
+        # If it looks like a proper name and no negative indicators, consider it likely
+        return len(name_words) <= 3 and len(link_text) > 3
+    
+    def _find_section_header(self, element):
+        """Find the nearest section header (h1-h6) above the element."""
+        current = element.parent
+        while current:
+            # Check if current element is a heading
+            if current.name and current.name.lower() in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                return current
+            
+            # Look for headings in previous siblings
+            for sibling in reversed(list(current.previous_siblings)):
+                if hasattr(sibling, 'name') and sibling.name and sibling.name.lower() in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                    return sibling
+            
+            current = current.parent
+        return None
+    
+    def _normalize_url(self, href: str, base_url: str) -> str:
+        """Convert relative URLs to absolute URLs."""
+        from urllib.parse import urljoin, urlparse
+        
+        # Already absolute
+        if href.startswith(('http://', 'https://')):
+            return href
+        
+        # Protocol-relative URL
+        if href.startswith('//'):
+            parsed_base = urlparse(base_url)
+            return parsed_base.scheme + ':' + href
+        
+        # Relative URL
+        if href.startswith('/'):
+            parsed_base = urlparse(base_url)
+            return f"{parsed_base.scheme}://{parsed_base.netloc}{href}"
+        
+        # Use urljoin for other cases
+        return urljoin(base_url, href)
