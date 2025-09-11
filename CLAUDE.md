@@ -96,6 +96,65 @@ Each module will be independently testable and configurable.
 - BeautifulSoup + requests/aiohttp for web scraping
 - Test fixtures and sample data use Naruto universe characters
 
+## Test-Driven Development (TDD) Requirements
+
+**CRITICAL**: This project follows strict Test-Driven Development practices. All new code MUST be developed using TDD methodology.
+
+### TDD Workflow (MANDATORY)
+1. **Write Tests First**: Before implementing any functionality, write comprehensive unit tests that define the expected behavior
+2. **Red Phase**: Run tests to confirm they fail (since implementation doesn't exist yet)
+3. **Green Phase**: Write minimal implementation to make tests pass
+4. **Refactor Phase**: Improve code quality while keeping tests green
+5. **Repeat**: Continue this cycle for all new features
+
+### Test Organization Standards
+- **Mirror Source Structure**: Test directories must mirror `src/` structure exactly
+- **Logical Test Classes**: Group related tests into classes (e.g., `TestComponentInit`, `TestComponentValidation`)
+- **Descriptive Names**: Test methods must clearly indicate what they test
+- **Comprehensive Coverage**: Include happy path, edge cases, error conditions, and boundary testing
+- **Fixture Usage**: Use pytest fixtures for setup/teardown and test data
+
+### Test Quality Requirements
+- **Readable**: Tests serve as executable documentation - they must be easily understood
+- **Independent**: Each test must run independently without dependencies on other tests
+- **Fast**: Unit tests should execute quickly (< 100ms each typically)
+- **Deterministic**: Tests must produce consistent results across runs
+- **Focused**: Each test should verify one specific behavior or condition
+
+### Current Test Coverage Status
+✅ **Completed Components** (with working implementations):
+- `src/crawler/rate_limiting/rate_limiter.py` - Full TDD cycle complete
+- `src/crawler/rate_limiting/robots_parser.py` - Test structure complete 
+- `src/crawler/utils/url_utils.py` - Test structure complete
+
+🔄 **Implementation Pattern Established**:
+- Comprehensive test suites with 5-8 test classes per component
+- Error handling and validation tests
+- Async/await testing patterns for I/O operations
+- Mock usage for external dependencies
+- Parameterized tests for multiple scenarios
+
+### TDD Enforcement
+- **Before Any Coding**: Always write tests first, even for small changes
+- **No Untested Code**: Implementation without corresponding tests is prohibited
+- **Test Maintenance**: Update tests when requirements change, before updating implementation
+- **Code Reviews**: All PRs must include tests and demonstrate TDD was followed
+
+### Testing Commands (Required Before Commits)
+```bash
+# Run specific component tests
+python -m pytest tests/test_crawler/rate_limiting/ -v
+python -m pytest tests/test_crawler/core/ -v
+
+# Run with coverage reporting
+python -m pytest --cov=src --cov-report=html --cov-fail-under=80
+
+# Run all tests before any commit
+python -m pytest tests/ -v
+```
+
+**Remember**: Tests are not just for catching bugs - they define the contract and behavior of your code. Write them as if they are the specification document.
+
 ## Dependency Management
 
 The project uses modern Python packaging with `pyproject.toml`:

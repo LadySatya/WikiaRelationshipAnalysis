@@ -24,15 +24,32 @@ class TestRobotsParserInit:
     
     def test_init_with_valid_parameters(self, temp_cache_dir):
         """Test initialization with valid parameters."""
-        pass
+        user_agent = "TestBot/1.0"
+        cache_ttl = 12
+        
+        robots_parser = RobotsParser(user_agent, temp_cache_dir, cache_ttl)
+        
+        assert robots_parser.user_agent == user_agent
+        assert robots_parser.cache_dir == temp_cache_dir
+        assert robots_parser.cache_ttl_hours == cache_ttl
+        assert hasattr(robots_parser, '_robots_cache')
+        assert isinstance(robots_parser._robots_cache, dict)
     
     def test_init_with_custom_ttl(self, temp_cache_dir):
         """Test initialization with custom TTL."""
-        pass
+        robots_parser = RobotsParser("TestBot/1.0", temp_cache_dir, cache_ttl_hours=48)
+        
+        assert robots_parser.cache_ttl_hours == 48
     
     def test_init_with_invalid_user_agent(self, temp_cache_dir):
         """Test initialization with invalid user agent."""
-        pass
+        # Should raise ValueError for empty user agent
+        with pytest.raises(ValueError, match="User agent cannot be empty"):
+            RobotsParser("", temp_cache_dir)
+        
+        # Should raise ValueError for None user agent
+        with pytest.raises(ValueError, match="User agent cannot be None"):
+            RobotsParser(None, temp_cache_dir)
     
     def test_init_creates_cache_directory(self, temp_cache_dir):
         """Test initialization creates cache directory if it doesn't exist."""
@@ -61,17 +78,44 @@ class TestRobotsParserCanFetch:
     @pytest.mark.asyncio
     async def test_can_fetch_allowed_url(self, robots_parser):
         """Test can_fetch returns True for allowed URLs."""
-        pass
+        # Mock robots.txt that allows all
+        sample_robots = """
+        User-agent: *
+        Allow: /
+        """
+        
+        with patch.object(robots_parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = sample_robots
+            
+            result = await robots_parser.can_fetch("https://example.com/allowed-page")
+            assert result is True
     
     @pytest.mark.asyncio
     async def test_can_fetch_disallowed_url(self, robots_parser):
         """Test can_fetch returns False for disallowed URLs."""
-        pass
+        # Mock robots.txt that disallows /admin
+        sample_robots = """
+        User-agent: *
+        Disallow: /admin/
+        Allow: /
+        """
+        
+        with patch.object(robots_parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = sample_robots
+            
+            result = await robots_parser.can_fetch("https://example.com/admin/secret")
+            assert result is False
     
     @pytest.mark.asyncio
     async def test_can_fetch_no_robots_txt(self, robots_parser):
         """Test can_fetch when robots.txt doesn't exist."""
-        pass
+        # Mock 404 response for robots.txt
+        with patch.object(robots_parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+            mock_fetch.return_value = None  # No robots.txt found
+            
+            # Should allow fetching when no robots.txt exists
+            result = await robots_parser.can_fetch("https://example.com/any-page")
+            assert result is True
     
     @pytest.mark.asyncio
     async def test_can_fetch_user_agent_specific_rules(self, robots_parser):

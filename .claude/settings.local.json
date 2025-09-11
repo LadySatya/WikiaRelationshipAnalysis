@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_crawler/utils/test_url_utils.py::TestURLUtilsValidation::test_validate_malformed_url -v)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

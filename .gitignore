@@ -23,6 +23,7 @@ venv/
 # Project data
 /data/projects/*/
 /backups/
+/test_data/
 
 # Logs
 *.log

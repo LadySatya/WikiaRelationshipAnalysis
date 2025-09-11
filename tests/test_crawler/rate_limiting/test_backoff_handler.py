@@ -15,27 +15,62 @@ class TestBackoffHandlerInit:
     
     def test_init_with_default_parameters(self):
         """Test initialization with default parameters."""
-        pass
+        backoff_handler = BackoffHandler()
+        
+        assert backoff_handler.base_delay == 1.0
+        assert backoff_handler.max_delay == 300.0
+        assert backoff_handler.max_retries == 3
+        assert hasattr(backoff_handler, '_domain_failures')
+        assert isinstance(backoff_handler._domain_failures, dict)
     
     def test_init_with_custom_parameters(self):
         """Test initialization with custom parameters."""
-        pass
+        backoff_handler = BackoffHandler(base_delay=2.5, max_delay=120.0, max_retries=5)
+        
+        assert backoff_handler.base_delay == 2.5
+        assert backoff_handler.max_delay == 120.0
+        assert backoff_handler.max_retries == 5
     
     def test_init_with_invalid_base_delay(self):
         """Test initialization with invalid base delay."""
-        pass
+        # Should raise ValueError for negative base delay
+        with pytest.raises(ValueError, match="base_delay must be positive"):
+            BackoffHandler(base_delay=-1.0)
+        
+        # Should raise ValueError for zero base delay
+        with pytest.raises(ValueError, match="base_delay must be positive"):
+            BackoffHandler(base_delay=0.0)
     
     def test_init_with_invalid_max_delay(self):
         """Test initialization with invalid max delay."""
-        pass
+        # Should raise ValueError for negative max delay
+        with pytest.raises(ValueError, match="max_delay must be positive"):
+            BackoffHandler(max_delay=-1.0)
+        
+        # Should raise ValueError for zero max delay
+        with pytest.raises(ValueError, match="max_delay must be positive"):
+            BackoffHandler(max_delay=0.0)
     
     def test_init_with_invalid_max_retries(self):
         """Test initialization with invalid max retries."""
-        pass
+        # Should raise ValueError for negative max retries
+        with pytest.raises(ValueError, match="max_retries must be non-negative"):
+            BackoffHandler(max_retries=-1)
+        
+        # Zero retries should be allowed (no retries)
+        backoff_handler = BackoffHandler(max_retries=0)
+        assert backoff_handler.max_retries == 0
     
     def test_init_validates_delay_relationship(self):
         """Test initialization validates max_delay >= base_delay."""
-        pass
+        # Should raise ValueError when max_delay < base_delay
+        with pytest.raises(ValueError, match="max_delay must be >= base_delay"):
+            BackoffHandler(base_delay=10.0, max_delay=5.0)
+        
+        # Should allow max_delay == base_delay
+        backoff_handler = BackoffHandler(base_delay=5.0, max_delay=5.0)
+        assert backoff_handler.base_delay == 5.0
+        assert backoff_handler.max_delay == 5.0
 
 
 class TestBackoffHandlerWaitWithBackoff:
@@ -87,15 +122,34 @@ class TestBackoffHandlerShouldRetry:
     
     def test_should_retry_retriable_status_code(self, backoff_handler):
         """Test should_retry returns True for retriable status codes."""
-        pass
+        url = "https://example.com/page"
+        retriable_codes = [429, 500, 502, 503, 504, 520, 521, 522, 523, 524]
+        
+        for status_code in retriable_codes:
+            result = backoff_handler.should_retry(url, status_code, attempt=1)
+            assert result is True, f"Should retry for status code {status_code}"
     
     def test_should_retry_non_retriable_status_code(self, backoff_handler):
         """Test should_retry returns False for non-retriable status codes."""
-        pass
+        url = "https://example.com/page"
+        non_retriable_codes = [200, 201, 400, 401, 403, 404, 405, 410, 451]
+        
+        for status_code in non_retriable_codes:
+            result = backoff_handler.should_retry(url, status_code, attempt=1)
+            assert result is False, f"Should not retry for status code {status_code}"
     
     def test_should_retry_max_attempts_reached(self, backoff_handler):
         """Test should_retry returns False when max attempts reached."""
-        pass
+        url = "https://example.com/page"
+        status_code = 500  # retriable status
+        
+        # Should not retry when attempt number exceeds max_retries
+        result = backoff_handler.should_retry(url, status_code, attempt=4)  # max_retries = 3
+        assert result is False
+        
+        # Should not retry when attempt equals max_retries + 1
+        result = backoff_handler.should_retry(url, status_code, attempt=backoff_handler.max_retries + 1)
+        assert result is False
     
     def test_should_retry_within_attempt_limit(self, backoff_handler):
         """Test should_retry returns True when within attempt limit."""
