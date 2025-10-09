@@ -3,8 +3,10 @@ Exponential backoff and retry logic for failed requests.
 """
 
 from typing import Dict, Optional
+from urllib.parse import urlparse
 import time
 import random
+import asyncio
 
 
 class BackoffHandler:
@@ -30,8 +32,6 @@ class BackoffHandler:
     
     async def wait_with_backoff(self, url: str, attempt: int) -> None:
         """Wait with exponential backoff based on attempt number."""
-        import asyncio
-        
         if attempt <= 0:
             return  # No wait for first attempt or invalid attempts
         
@@ -67,8 +67,6 @@ class BackoffHandler:
     
     def _get_domain(self, url: str) -> str:
         """Extract domain from URL."""
-        from urllib.parse import urlparse
-        
         try:
             parsed = urlparse(url)
             return parsed.netloc.lower() or url

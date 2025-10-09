@@ -11,6 +11,9 @@ from urllib.robotparser import RobotFileParser
 
 from src.crawler.rate_limiting.robots_parser import RobotsParser
 
+# Mark all tests in this module as unit tests (all use mocks, no real I/O)
+pytestmark = pytest.mark.unit
+
 
 class TestRobotsParserInit:
     """Test RobotsParser initialization."""

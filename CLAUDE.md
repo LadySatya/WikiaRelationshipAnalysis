@@ -153,6 +153,48 @@ python -m pytest --cov=src --cov-report=html --cov-fail-under=80
 python -m pytest tests/ -v
 ```
 
+### Test Separation Strategy: Unit vs Integration Tests
+
+**Test Categories**:
+- **Unit Tests**: Fast tests with mocked dependencies (<100ms each, ~140 tests)
+- **Integration Tests**: Tests with real I/O or timing operations (2-3 mins total, ~20 tests)
+
+**Pytest Markers** (configured in `pyproject.toml`):
+- `@pytest.mark.unit` - Fast unit tests with mocked dependencies (run always)
+- `@pytest.mark.integration` - Integration tests with real I/O or timing (run on PR/nightly)
+- `@pytest.mark.slow` - Tests that take >1 second (run less frequently)
+- `@pytest.mark.timing` - Tests that verify actual timing behavior
+- `@pytest.mark.network` - Tests that require network access (skip in offline mode)
+
+**Running Tests by Category**:
+```bash
+# Fast unit tests only (development workflow - ~5 seconds)
+python -m pytest -m unit -v
+
+# Integration tests only (pre-commit verification - ~2-3 minutes)
+python -m pytest -m integration -v
+
+# All unit tests except slow/integration (quick verification)
+python -m pytest -m "not integration and not slow" -v
+
+# All tests including integration (full test suite - CI/CD)
+python -m pytest tests/ -v
+
+# Skip network-dependent tests (offline development)
+python -m pytest -m "not network" -v
+```
+
+**Test Marking Guidelines**:
+- All tests in `test_robots_parser.py` are marked `@pytest.mark.unit` (use mocks, no real I/O)
+- Integration tests with real timing: `test_subsequent_request_waits`, `test_requests_per_minute_enforcement`, `test_full_retry_cycle`, `test_multiple_domains_concurrent`, `test_actual_wait_integration`
+- Use `pytestmark = pytest.mark.unit` at module level to mark all tests in a file
+
+**Development Workflow**:
+1. During active development: `pytest -m unit -v` (fast feedback loop)
+2. Before committing: `pytest -m "not slow" -v` (quick verification)
+3. Before pushing: `pytest tests/ -v` (full test suite)
+4. CI/CD pipeline: `pytest tests/ --cov=src` (full suite + coverage)
+
 **Remember**: Tests are not just for catching bugs - they define the contract and behavior of your code. Write them as if they are the specification document.
 
 ## Windows Compatibility Notes

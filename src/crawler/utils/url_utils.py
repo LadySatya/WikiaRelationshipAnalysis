@@ -3,7 +3,7 @@ URL manipulation and validation utilities.
 """
 
 from typing import Optional, Set
-from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse, parse_qsl, urlencode
 import re
 
 
@@ -28,7 +28,6 @@ class URLUtils:
             
             # Sort query parameters alphabetically
             if parsed.query:
-                from urllib.parse import parse_qsl, urlencode
                 sorted_params = sorted(parse_qsl(parsed.query))
                 query = urlencode(sorted_params)
             else:
@@ -124,7 +123,6 @@ class URLUtils:
             
             # Add query parameters
             if parsed.query:
-                from urllib.parse import parse_qsl
                 query_parts = parse_qsl(parsed.query)
                 for key, value in query_parts:
                     parts.extend([key, value])
@@ -152,10 +150,81 @@ class URLUtils:
             return 'invalid_url'
     
     @staticmethod
-    def extract_page_title_from_url(url: str) -> Optional[str]:
-        """Extract likely page title from URL path."""
-        pass
-    
+    def is_same_wikia_domain(url1: str, url2: str) -> bool:
+        """Check if two URLs belong to the same wikia/fandom domain.
+
+        Args:
+            url1: First URL to compare
+            url2: Second URL to compare (often the base/target URL)
+
+        Returns:
+            True if both URLs are from the same wikia, False otherwise
+        """
+        if not url1 or not url2:
+            return False
+
+        # Handle relative URLs - they're always same domain
+        if url1.startswith('/') or url1.startswith('#'):
+            return True
+
+        # Handle protocol-relative URLs
+        if url1.startswith('//'):
+            url1 = 'https:' + url1
+
+        try:
+            domain1 = urlparse(url1).netloc.lower()
+            domain2 = urlparse(url2).netloc.lower()
+
+            if not domain1 or not domain2:
+                return False
+
+            # Exclude Fandom platform meta-domains
+            fandom_meta_domains = {
+                'community.fandom.com',
+                'fandom.zendesk.com',
+                'about.fandom.com',
+                'auth.fandom.com'
+            }
+
+            if domain1 in fandom_meta_domains or domain2 in fandom_meta_domains:
+                return False
+
+            # Exact domain match
+            if domain1 == domain2:
+                return True
+
+            # Check if both are wikia/fandom domains
+            if URLUtils._is_wikia_domain_helper(domain1) and URLUtils._is_wikia_domain_helper(domain2):
+                wikia1 = URLUtils._extract_wikia_subdomain_helper(domain1)
+                wikia2 = URLUtils._extract_wikia_subdomain_helper(domain2)
+                return wikia1 == wikia2
+
+            return False
+        except Exception:
+            return False
+
+    @staticmethod
+    def _is_wikia_domain_helper(domain: str) -> bool:
+        """Helper: Check if domain is a wikia/fandom domain."""
+        wikia_patterns = ['.fandom.com', '.wikia.org', '.wikia.com']
+        return any(pattern in domain.lower() for pattern in wikia_patterns)
+
+    @staticmethod
+    def _extract_wikia_subdomain_helper(domain: str) -> Optional[str]:
+        """Helper: Extract wikia subdomain from domain."""
+        domain = domain.lower()
+
+        # Handle fandom.com domains
+        if '.fandom.com' in domain:
+            return domain.split('.fandom.com')[0]
+
+        # Handle wikia.org/wikia.com domains
+        for pattern in ['.wikia.org', '.wikia.com']:
+            if pattern in domain:
+                return domain.split(pattern)[0]
+
+        return None
+
     @staticmethod
     def is_wikia_url(url: str) -> bool:
         """Check if URL is from a Wikia/Fandom domain."""
@@ -197,7 +266,3 @@ class URLUtils:
         
         return None
     
-    @staticmethod
-    def remove_url_parameters(url: str, keep_params: Optional[Set[str]] = None) -> str:
-        """Remove URL parameters except those in keep_params."""
-        pass

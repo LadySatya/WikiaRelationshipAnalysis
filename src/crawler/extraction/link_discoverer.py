@@ -6,6 +6,8 @@ from typing import Set, List, Dict, Optional
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
+from ..utils.url_utils import URLUtils
+
 
 class LinkDiscoverer:
     """Discovers and prioritizes relevant links for crawling."""
@@ -214,17 +216,15 @@ class LinkDiscoverer:
         """Normalize and resolve relative URLs."""
         if not url:
             return ""
-        
+
         url = url.strip()
-        
+
         # Handle relative URLs
         if url.startswith('/'):
-            from urllib.parse import urljoin
             return urljoin(base_url, url)
         elif not url.startswith(('http:', 'https:')):
-            from urllib.parse import urljoin
             return urljoin(base_url, url)
-        
+
         return url
     
     def _get_link_context(self, link_tag, soup: BeautifulSoup) -> str:
@@ -275,61 +275,5 @@ class LinkDiscoverer:
     
     def _is_same_wikia_domain(self, href: str, base_url: str) -> bool:
         """Check if href belongs to the same wikia domain as base_url."""
-        from urllib.parse import urlparse
-        
-        # Handle relative URLs - they're always same domain
-        if href.startswith('/'):
-            return True
-        
-        # Handle fragment-only URLs (#section)
-        if href.startswith('#'):
-            return True
-        
-        # Handle protocol-relative URLs
-        if href.startswith('//'):
-            href = 'https:' + href
-        
-        try:
-            base_domain = urlparse(base_url).netloc.lower()
-            href_domain = urlparse(href).netloc.lower()
-            
-            # Exclude Fandom platform meta-domains
-            fandom_meta_domains = [
-                'community.fandom.com',
-                'fandom.zendesk.com', 
-                'about.fandom.com',
-                'auth.fandom.com'
-            ]
-            
-            if href_domain in fandom_meta_domains:
-                return False
-            
-            # Exact domain match
-            if base_domain == href_domain:
-                return True
-            
-            # Check if both are wikia/fandom domains
-            if self._is_wikia_domain(base_domain) and self._is_wikia_domain(href_domain):
-                base_wikia = self._extract_wikia_name(base_domain)
-                href_wikia = self._extract_wikia_name(href_domain)
-                return base_wikia == href_wikia
-            
-            return False
-        except Exception:
-            return False
-    
-    def _is_wikia_domain(self, domain: str) -> bool:
-        """Check if domain is a wikia/fandom domain."""
-        wikia_domains = ['fandom.com', 'wikia.org', 'wikia.com']
-        return any(wikia_domain in domain for wikia_domain in wikia_domains)
-    
-    def _extract_wikia_name(self, domain: str) -> str:
-        """Extract wikia name from domain."""
-        # Handle different domain formats
-        if '.fandom.com' in domain:
-            return domain.split('.fandom.com')[0]
-        elif '.wikia.org' in domain:
-            return domain.split('.wikia.org')[0]
-        elif '.wikia.com' in domain:
-            return domain.split('.wikia.com')[0]
-        return domain
+        # Use centralized domain validation from URLUtils
+        return URLUtils.is_same_wikia_domain(href, base_url)

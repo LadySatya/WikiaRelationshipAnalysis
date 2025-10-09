@@ -52,8 +52,12 @@ class SessionManager:
     
     async def close_session(self) -> None:
         """Close the current session and cleanup connections."""
+        import asyncio
+
         if self._session and not self._session.closed:
             await self._session.close()
+            # Give the connector time to close properly to avoid warnings
+            await asyncio.sleep(0.25)
             self._session = None
     
     async def get(self, url: str, **kwargs) -> aiohttp.ClientResponse:
@@ -81,24 +85,6 @@ class SessionManager:
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
         }
-    
-    def _should_retry_response(self, response: aiohttp.ClientResponse) -> bool:
-        """Check if response indicates we should retry."""
-        # Server errors and rate limiting that are typically temporary
-        retriable_codes = {
-            429,  # Too Many Requests
-            500,  # Internal Server Error
-            502,  # Bad Gateway
-            503,  # Service Unavailable
-            504,  # Gateway Timeout
-            520,  # Cloudflare: Unknown Error
-            521,  # Cloudflare: Web Server Is Down
-            522,  # Cloudflare: Connection Timed Out
-            523,  # Cloudflare: Origin Is Unreachable
-            524,  # Cloudflare: A Timeout Occurred
-        }
-        
-        return response.status in retriable_codes
     
     async def _handle_rate_limit_response(self, response: aiohttp.ClientResponse) -> None:
         """Handle rate limit responses (429, 503) with appropriate delays."""

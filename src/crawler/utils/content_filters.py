@@ -38,36 +38,32 @@ class ContentFilter:
             self.text_filters.extend(custom_filters)
     
     def remove_navigation_elements(self, soup: BeautifulSoup) -> BeautifulSoup:
-        """Remove navigation, menu, and sidebar elements."""
-        soup_copy = BeautifulSoup(str(soup), 'html.parser')
-        
+        """Remove navigation, menu, and sidebar elements. WARNING: Modifies soup in-place."""
         # Remove navigation elements
         for selector in self.removal_selectors.get('navigation', []):
-            for element in soup_copy.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-                
-        return soup_copy
+
+        return soup
     
     def remove_wikia_chrome(self, soup: BeautifulSoup) -> BeautifulSoup:
-        """Remove Wikia-specific UI elements (ads, rails, etc.)."""
-        soup_copy = BeautifulSoup(str(soup), 'html.parser')
-        
+        """Remove Wikia-specific UI elements (ads, rails, etc.). WARNING: Modifies soup in-place."""
         # Remove wikia chrome elements
         for selector in self.removal_selectors.get('wikia_chrome', []):
-            for element in soup_copy.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-                
+
         # Remove ads
         for selector in self.removal_selectors.get('ads', []):
-            for element in soup_copy.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-                
+
         # Remove sidebar/rails
         for selector in self.removal_selectors.get('sidebar', []):
-            for element in soup_copy.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-                
-        return soup_copy
+
+        return soup
     
     def extract_main_content_area(self, soup: BeautifulSoup) -> Optional[BeautifulSoup]:
         """Extract the main content area from page."""
@@ -172,16 +168,14 @@ class ContentFilter:
         return text is not None and len(text.strip()) >= 100
     
     def extract_meaningful_text(self, soup: BeautifulSoup, min_length: int = 100) -> Optional[str]:
-        """Extract meaningful text content above minimum length."""
+        """Extract meaningful text content above minimum length. WARNING: Modifies soup in-place."""
         # Remove scripts, styles, and other non-content elements
-        soup_copy = BeautifulSoup(str(soup), 'html.parser')
-        
         for selector in self.removal_selectors.get('scripts', []):
-            for element in soup_copy.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-        
+
         # Get text content
-        text = soup_copy.get_text(separator=' ')
+        text = soup.get_text(separator=' ')
         
         # Clean the text
         cleaned_text = self.clean_text_content(text)

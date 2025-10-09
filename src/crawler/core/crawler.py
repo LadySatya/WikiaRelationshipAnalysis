@@ -11,11 +11,12 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 import logging
 
-from ..rate_limiting import RateLimiter
+from ..rate_limiting import RateLimiter, RobotsParser
 from ..core.session_manager import SessionManager
 from ..core.url_manager import URLManager
 from ..persistence import ContentSaver, CrawlState
 from ..extraction.page_extractor import PageExtractor
+from ..utils.url_utils import URLUtils
 
 
 class WikiaCrawler:
@@ -82,12 +83,24 @@ class WikiaCrawler:
             default_delay=config['default_delay_seconds'],
             requests_per_minute=config['max_requests_per_minute']
         )
-        
+
+        # Initialize robots.txt parser if respect_robots_txt is enabled
+        self.respect_robots_txt = config['respect_robots_txt']
+        if self.respect_robots_txt:
+            cache_dir = self.project_path / "cache" / "robots"
+            self.robots_parser = RobotsParser(
+                user_agent=config['user_agent'],
+                cache_dir=cache_dir,
+                cache_ttl_hours=24
+            )
+        else:
+            self.robots_parser = None
+
         self.session_manager = SessionManager(
             user_agent=config['user_agent'],
             timeout_seconds=self.timeout_seconds
         )
-        
+
         self.url_manager = URLManager(self.project_path)
         self.content_saver = ContentSaver(self.project_path)
         self.crawl_state = CrawlState(self.project_path)
@@ -253,6 +266,19 @@ class WikiaCrawler:
     async def _crawl_page(self, url: str) -> Optional[Dict]:
         """Crawl a single page and return extracted data."""
         try:
+            # Check robots.txt compliance if enabled
+            if self.respect_robots_txt and self.robots_parser:
+                can_fetch = await self.robots_parser.can_fetch(url)
+                if not can_fetch:
+                    logging.info(f"Robots.txt disallows fetching: {url}")
+                    return None
+
+                # Apply crawl delay from robots.txt if specified
+                crawl_delay = await self.robots_parser.get_crawl_delay(url)
+                if crawl_delay is not None and crawl_delay > 0:
+                    logging.debug(f"Applying robots.txt crawl delay of {crawl_delay}s for {url}")
+                    await asyncio.sleep(crawl_delay)
+
             # Fetch HTML content using session manager
             response = await self.session_manager.get(url)
             
@@ -291,34 +317,47 @@ class WikiaCrawler:
             logging.error(f"Error crawling {url}: {e}")
             return None
     
-    def _should_crawl_url(self, url: str) -> bool:
-        """Check if URL should be crawled based on filters and robots.txt."""
+    async def _should_crawl_url_async(self, url: str) -> bool:
+        """Check if URL should be crawled based on filters and robots.txt (async version)."""
         if not self._is_valid_url(url):
             return False
-            
+
         # Ensure we stay on the same wikia domain
         if not self._is_same_wikia_domain(url):
             return False
-            
+
         # Check against exclude patterns
         exclude_patterns = self.config.get('exclude_patterns', [])
         for pattern in exclude_patterns:
             if pattern in url:
                 return False
-        
+
+        # Check robots.txt if enabled (async check)
+        if self.respect_robots_txt and self.robots_parser:
+            can_fetch = await self.robots_parser.can_fetch(url)
+            if not can_fetch:
+                return False
+
+        return True
+
+    def _should_crawl_url(self, url: str) -> bool:
+        """Check if URL should be crawled based on filters (synchronous checks only)."""
+        if not self._is_valid_url(url):
+            return False
+
+        # Ensure we stay on the same wikia domain
+        if not self._is_same_wikia_domain(url):
+            return False
+
+        # Check against exclude patterns
+        exclude_patterns = self.config.get('exclude_patterns', [])
+        for pattern in exclude_patterns:
+            if pattern in url:
+                return False
+
+        # Note: robots.txt check happens in _crawl_page for async compatibility
         return True
     
-    def _extract_links_from_page(self, page_content: str, base_url: str) -> Set[str]:
-        """Extract relevant links from page content."""
-        pass
-    
-    def _save_crawl_statistics(self, stats: Dict) -> None:
-        """Save final crawl statistics to file."""
-        pass
-    
-    def get_crawl_status(self) -> Dict:
-        """Get current crawl progress and statistics."""
-        pass
     
     def _is_valid_url(self, url: str) -> bool:
         """Validate that URL is well-formed and uses http/https."""
@@ -340,63 +379,20 @@ class WikiaCrawler:
     
     def _is_same_wikia_domain(self, url: str) -> bool:
         """Check if URL belongs to the same wikia domain we're crawling."""
-        if not hasattr(self, '_target_domain'):
-            # Extract domain from first start URL during initialization
-            return True  # Allow all URLs if target domain not set yet
-        
-        try:
-            parsed = urlparse(url)
-            current_domain = parsed.netloc.lower()
-            
-            # Check exact domain match
-            if current_domain == self._target_domain:
-                return True
-            
-            # Check if both are wikia/fandom domains
-            if self._is_wikia_domain(current_domain) and self._is_wikia_domain(self._target_domain):
-                # Extract wikia name (e.g., 'naruto' from 'naruto.fandom.com')
-                current_wikia = self._extract_wikia_name(current_domain)
-                target_wikia = self._extract_wikia_name(self._target_domain)
-                return current_wikia == target_wikia
-            
-            return False
-            
-        except Exception:
-            return False
-    
-    def _is_wikia_domain(self, domain: str) -> bool:
-        """Check if domain is a wikia/fandom domain."""
-        wikia_patterns = [
-            '.fandom.com',
-            '.wikia.org',
-            '.wikia.com'
-        ]
-        return any(pattern in domain.lower() for pattern in wikia_patterns)
-    
-    def _extract_wikia_name(self, domain: str) -> Optional[str]:
-        """Extract wikia name from domain (e.g., 'naruto' from 'naruto.fandom.com')."""
-        domain = domain.lower()
-        
-        # Handle fandom.com domains
-        if '.fandom.com' in domain:
-            return domain.split('.fandom.com')[0]
-        
-        # Handle wikia.org/wikia.com domains  
-        for pattern in ['.wikia.org', '.wikia.com']:
-            if pattern in domain:
-                return domain.split(pattern)[0]
-        
-        return None
+        if not hasattr(self, '_target_domain_url'):
+            # No target domain set yet
+            return True
+
+        # Use centralized domain validation from URLUtils
+        return URLUtils.is_same_wikia_domain(url, self._target_domain_url)
     
     def _set_target_domain(self, start_urls: List[str]) -> None:
         """Set the target domain based on start URLs."""
         if start_urls:
             try:
-                first_url = start_urls[0]
-                parsed = urlparse(first_url)
-                self._target_domain = parsed.netloc.lower()
+                self._target_domain_url = start_urls[0]
             except Exception:
-                self._target_domain = None
+                self._target_domain_url = None
     
     async def _save_crawl_state(self, stats: Dict) -> None:
         """Save current crawl state."""
@@ -404,7 +400,7 @@ class WikiaCrawler:
             state_data = {
                 'statistics': stats,
                 'timestamp': datetime.now(timezone.utc).isoformat(),
-                'target_domain': getattr(self, '_target_domain', None)
+                'target_domain_url': getattr(self, '_target_domain_url', None)
             }
             self.crawl_state.save_state(state_data)
         except Exception as e:

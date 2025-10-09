@@ -3,7 +3,11 @@ Wikia/Fandom-specific content parsing and filtering.
 """
 
 from typing import Dict, List, Optional, Set
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+import re
+
+from ..utils.url_utils import URLUtils
 
 
 class WikiaParser:
@@ -82,8 +86,6 @@ class WikiaParser:
         """Extract namespace from Wikia URL."""
         if not url:
             return None
-        
-        import re
         
         # Check each namespace pattern
         for namespace, pattern in self.namespace_patterns.items():
@@ -213,30 +215,27 @@ class WikiaParser:
     
     
     def _clean_wikia_navigation(self, soup: BeautifulSoup) -> BeautifulSoup:
-        """Remove Wikia navigation elements."""
+        """Remove Wikia navigation elements. WARNING: Modifies soup in-place."""
         if not soup:
             return soup
         
-        # Create a copy to avoid modifying original
-        cleaned_soup = BeautifulSoup(str(soup), 'html.parser')
-        
         # Remove wikia-specific navigation elements
         for selector in self.wikia_selectors['navigation_elements']:
-            for element in cleaned_soup.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-        
+
         # Remove other common navigation/chrome elements
         chrome_selectors = [
             '.global-navigation', '.fandom-sticky-header', '.page-header__top',
             '.rail', '.right-rail', '.sidebar', '.notifications',
             '.fandom-community-header', '.wikia-bar', '.ads', '.advertisement'
         ]
-        
+
         for selector in chrome_selectors:
-            for element in cleaned_soup.select(selector):
+            for element in soup.select(selector):
                 element.decompose()
-        
-        return cleaned_soup
+
+        return soup
     
     def _extract_page_categories(self, soup: BeautifulSoup) -> List[str]:
         """Extract Wikia page categories."""
@@ -262,67 +261,25 @@ class WikiaParser:
     
     def _is_same_wikia_domain(self, href: str, base_url: str) -> bool:
         """Check if href belongs to the same wikia domain as base_url."""
-        from urllib.parse import urlparse
-        
-        # Handle relative URLs - they're always same domain
-        if href.startswith('/'):
-            return True
-        
-        # Handle fragment-only URLs (#section)
-        if href.startswith('#'):
-            return True
-        
-        # Handle protocol-relative URLs
-        if href.startswith('//'):
-            href = 'https:' + href
-        
-        try:
-            base_domain = urlparse(base_url).netloc.lower()
-            href_domain = urlparse(href).netloc.lower()
-            
-            # Exclude Fandom platform meta-domains
-            fandom_meta_domains = [
-                'community.fandom.com',
-                'fandom.zendesk.com', 
-                'about.fandom.com',
-                'auth.fandom.com'
-            ]
-            
-            if href_domain in fandom_meta_domains:
-                return False
-            
-            # Exact domain match
-            if base_domain == href_domain:
-                return True
-            
-            # Check if both are wikia/fandom domains
-            if self._is_wikia_domain(base_domain) and self._is_wikia_domain(href_domain):
-                base_wikia = self._extract_wikia_name(base_domain)
-                href_wikia = self._extract_wikia_name(href_domain)
-                return base_wikia == href_wikia
-            
-            return False
-        except Exception:
-            return False
+        # Use centralized domain validation from URLUtils
+        return URLUtils.is_same_wikia_domain(href, base_url)
     
     
     def _normalize_url(self, href: str, base_url: str) -> str:
         """Convert relative URLs to absolute URLs."""
-        from urllib.parse import urljoin, urlparse
-        
         # Already absolute
         if href.startswith(('http://', 'https://')):
             return href
-        
+
         # Protocol-relative URL
         if href.startswith('//'):
             parsed_base = urlparse(base_url)
             return parsed_base.scheme + ':' + href
-        
+
         # Relative URL
         if href.startswith('/'):
             parsed_base = urlparse(base_url)
             return f"{parsed_base.scheme}://{parsed_base.netloc}{href}"
-        
+
         # Use urljoin for other cases
         return urljoin(base_url, href)

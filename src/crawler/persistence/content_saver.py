@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 import json
 import hashlib
+import re
 from datetime import datetime
 
 
@@ -257,8 +258,6 @@ class ContentSaver:
         """Clean title to create safe filename."""
         if not title:
             return ""
-        
-        import re
         
         # Remove common wiki suffixes
         title = re.sub(r'\s*\|\s*.*?Wiki.*?$', '', title)  # "Tenzin | Avatar Wiki | Fandom" -> "Tenzin"
