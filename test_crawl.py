@@ -34,7 +34,6 @@ def load_config() -> dict:
         'respect_robots_txt': crawler_config.get('respect_robots_txt', True),
         'user_agent': crawler_config.get('user_agent', 'WikiaAnalyzer/0.1.0'),
         'default_delay_seconds': crawler_config.get('default_delay_seconds', 1.0),
-        'max_requests_per_minute': crawler_config.get('max_requests_per_minute', 60),
         'target_namespaces': crawler_config.get('target_namespaces', ['Main']),
         'timeout_seconds': crawler_config.get('timeout_seconds', 30),
         'max_retries': crawler_config.get('max_retries', 3),
@@ -53,7 +52,7 @@ async def test_phase_1():
         # Load configuration
         config = load_config()
         print(f"[OK] Configuration loaded")
-        print(f"  - Rate limit: {config['default_delay_seconds']}s delay, {config['max_requests_per_minute']} req/min")
+        print(f"  - Rate limit: {config['default_delay_seconds']}s delay")
         print(f"  - User agent: {config['user_agent']}")
         
         # Initialize crawler with context manager
