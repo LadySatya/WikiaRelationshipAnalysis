@@ -385,5 +385,8 @@ class WikiaCrawler:
                 'target_domain_url': getattr(self, '_target_domain_url', None)
             }
             self.crawl_state.save_state(state_data)
+
+            # Save URL manager state (queue, visited, failed URLs)
+            self.url_manager.save_state()
         except Exception as e:
             logging.error(f"Failed to save crawl state: {e}")
