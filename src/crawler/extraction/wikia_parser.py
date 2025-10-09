@@ -17,8 +17,8 @@ class WikiaParser:
         """Initialize with namespace and exclusion filters."""
         self.target_namespaces = target_namespaces or ['Main', 'Character', 'Location', 'Event', 'Organization']
         self.exclude_patterns = exclude_patterns or [
-            'Template:', 'User:', 'File:', 'Category:', 'Help:', 'Special:', 'MediaWiki:',
-            'User_talk:', 'Template_talk:', 'File_talk:', 'Help_talk:', 'MediaWiki_talk:'
+            'Template:', 'User:', 'File:', 'Category:', 'Help:', 'Special:', 'MediaWiki:', 'Talk:',
+            'User_talk:', 'Template_talk:', 'File_talk:', 'Help_talk:', 'MediaWiki_talk:', 'Category_talk:'
         ]
         
         # Wikia-specific selectors

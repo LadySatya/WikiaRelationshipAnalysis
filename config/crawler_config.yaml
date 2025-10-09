@@ -27,12 +27,17 @@ crawler:
   exclude_patterns:
     - "User:"
     - "User_talk:"
+    - "Talk:"
     - "File:"
+    - "File_talk:"
     - "Category:"
+    - "Category_talk:"
     - "Template:"
+    - "Template_talk:"
     - "Special:"
     - "/wiki/Special:"
     - "/wiki/Category:"
+    - "/wiki/Talk:"
   
   # Session persistence
   save_state_every_n_pages: 10
