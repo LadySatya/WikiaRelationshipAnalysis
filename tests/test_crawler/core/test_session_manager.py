@@ -8,6 +8,8 @@ from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from aiohttp import ClientTimeout, ClientSession
 
 from src.crawler.core.session_manager import SessionManager
+# Mark all tests in this module as unit tests (all use mocks, no real I/O)
+pytestmark = pytest.mark.unit
 
 
 class TestSessionManagerInit:

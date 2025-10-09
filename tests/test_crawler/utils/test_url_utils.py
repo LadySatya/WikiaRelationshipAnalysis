@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 from typing import List, Dict, Set, Optional
 
 from src.crawler.utils.url_utils import URLUtils
+# Mark all tests in this module as unit tests (all use mocks, no real I/O)
+pytestmark = pytest.mark.unit
 
 
 class TestURLUtilsNormalization:

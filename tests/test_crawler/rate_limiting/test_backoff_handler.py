@@ -9,6 +9,9 @@ from unittest.mock import Mock, patch
 
 from src.crawler.rate_limiting.backoff_handler import BackoffHandler
 
+# Mark all tests in this module as unit tests
+pytestmark = pytest.mark.unit
+
 
 class TestBackoffHandlerInit:
     """Test BackoffHandler initialization."""
@@ -500,33 +503,6 @@ class TestBackoffHandlerIntegration:
         return BackoffHandler(base_delay=0.1, max_delay=2.0, max_retries=3)
     
     @pytest.mark.asyncio
-    @pytest.mark.integration
-    @pytest.mark.slow
-    @pytest.mark.timing
-    async def test_full_retry_cycle(self, backoff_handler):
-        """Test full retry cycle: failure -> backoff -> retry."""
-        url = "https://example.com/page"
-
-        # Simulate a full retry cycle
-        backoff_handler.record_failure(url, 500)
-        assert backoff_handler.get_failure_count(url) == 1
-        assert backoff_handler.should_retry(url, 500, attempt=1) is True
-
-        # Wait with backoff
-        start_time = time.time()
-        await backoff_handler.wait_with_backoff(url, 2)
-        elapsed = time.time() - start_time
-        assert elapsed > 0  # Should have waited
-
-        # Another failure
-        backoff_handler.record_failure(url, 503)
-        assert backoff_handler.get_failure_count(url) == 2
-
-        # Eventually success
-        backoff_handler.record_success(url)
-        assert backoff_handler.get_failure_count(url) == 0
-    
-    @pytest.mark.asyncio
     async def test_success_after_failures(self, backoff_handler):
         """Test successful request after failures resets backoff."""
         url = "https://example.com/page"
@@ -542,38 +518,7 @@ class TestBackoffHandlerIntegration:
         
         # Future requests should start from clean slate
         assert backoff_handler.should_retry(url, 500, attempt=1) is True
-    
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    @pytest.mark.slow
-    @pytest.mark.timing
-    async def test_multiple_domains_concurrent(self, backoff_handler):
-        """Test concurrent backoff handling for multiple domains."""
-        import asyncio
 
-        urls = ["https://example1.com/page", "https://example2.com/page", "https://example3.com/page"]
-
-        # Record failures for all domains
-        for url in urls:
-            backoff_handler.record_failure(url, 500)
-
-        # Test concurrent backoff waits
-        async def wait_for_domain(url):
-            start_time = time.time()
-            await backoff_handler.wait_with_backoff(url, 2)
-            return time.time() - start_time
-
-        # Run concurrent waits
-        tasks = [wait_for_domain(url) for url in urls]
-        wait_times = await asyncio.gather(*tasks)
-
-        # All should have waited (none should be 0)
-        assert all(t > 0 for t in wait_times)
-
-        # All domains should still have their failure counts
-        for url in urls:
-            assert backoff_handler.get_failure_count(url) == 1
-    
     @pytest.mark.asyncio
     async def test_backoff_timing_realistic(self, backoff_handler):
         """Test backoff timing in realistic failure scenario."""
@@ -814,38 +759,3 @@ class TestBackoffHandlerConfiguration:
         
         # All delays should be positive and reasonable
         assert all(0 <= d <= 10.0 for d in delays)
-
-
-class TestBackoffHandlerRealTiming:
-    """Test BackoffHandler with actual delays (integration test with tiny delays)."""
-    
-    @pytest.mark.asyncio
-    @pytest.mark.integration
-    @pytest.mark.slow
-    @pytest.mark.timing
-    async def test_actual_wait_integration(self):
-        """Test actual wait behavior with tiny delays for integration verification."""
-        # Create handler with very small delays for fast testing
-        handler = BackoffHandler(base_delay=0.01, max_delay=0.05, max_retries=2)
-        url = "https://example.com/page"
-
-        # Test that actual waiting works (without mocking)
-        start_time = time.time()
-        await handler.wait_with_backoff(url, 2)
-        elapsed = time.time() - start_time
-
-        # Should have actually waited some small amount
-        assert elapsed >= 0.005  # At least 5ms
-        assert elapsed <= 0.1    # But not too long
-
-        # Verify exponential behavior with real waits
-        start2 = time.time()
-        await handler.wait_with_backoff(url, 2)
-        time2 = time.time() - start2
-
-        start3 = time.time()
-        await handler.wait_with_backoff(url, 3)
-        time3 = time.time() - start3
-
-        # Even with jitter, attempt 3 should generally take longer
-        assert time3 >= time2 * 0.8  # Allow some jitter variation

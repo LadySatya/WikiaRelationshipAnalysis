@@ -44,8 +44,7 @@ class PageExtractor:
             'links': self.extract_links(soup, url),
             'categories': self.extract_categories(soup),
             'infobox_data': self.extract_infobox_data(soup),
-            'is_disambiguation': self.is_disambiguation_page(soup),
-            'page_type': self.get_page_type(soup, url)
+            'is_disambiguation': self.is_disambiguation_page(soup)
         }
         
         return result
@@ -184,62 +183,7 @@ class PageExtractor:
         ]
         
         return any(indicator in page_text for indicator in disambiguation_indicators)
-    
-    def get_page_type(self, soup: BeautifulSoup, url: str) -> str:
-        """Determine page type (character, location, event, etc.)."""
-        if not soup:
-            return 'unknown'
-        
-        # Check for disambiguation first
-        if self.is_disambiguation_page(soup):
-            return 'disambiguation'
-        
-        # Get page text for analysis
-        page_text = soup.get_text().lower()
-        title = self.extract_title(soup) or ''
-        title_lower = title.lower()
-        
-        # Character indicators
-        character_indicators = [
-            'character', 'person', 'ninja', 'shinobi', 'hokage', 'kage',
-            'clan member', 'born', 'died', 'age', 'occupation', 'affiliation'
-        ]
-        
-        # Location indicators
-        location_indicators = [
-            'village', 'country', 'land', 'city', 'town', 'forest', 'mountain',
-            'located', 'geography', 'inhabitants', 'population'
-        ]
-        
-        # Event indicators
-        event_indicators = [
-            'war', 'battle', 'exam', 'mission', 'arc', 'saga',
-            'happened', 'occurred', 'took place', 'during'
-        ]
-        
-        # Check categories from URL or content
-        if any(indicator in page_text or indicator in title_lower 
-               for indicator in character_indicators):
-            return 'character'
-        
-        if any(indicator in page_text or indicator in title_lower 
-               for indicator in location_indicators):
-            return 'location'
-        
-        if any(indicator in page_text or indicator in title_lower 
-               for indicator in event_indicators):
-            return 'event'
-        
-        # Check URL patterns
-        if '/character/' in url.lower() or '/characters/' in url.lower():
-            return 'character'
-        if '/location/' in url.lower() or '/places/' in url.lower():
-            return 'location'
-        if '/event/' in url.lower() or '/arc/' in url.lower():
-            return 'event'
-        
-        return 'article'
-    
+
     def _clean_text(self, text: str) -> str:
         """Clean and normalize extracted text."""
         if not text:

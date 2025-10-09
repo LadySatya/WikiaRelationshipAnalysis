@@ -76,8 +76,7 @@ class WikiaParser:
             'namespace': self.get_page_namespace(url),
             'infobox': self.extract_portable_infobox(cleaned_soup),
             'related_articles': self.extract_related_articles(cleaned_soup),
-            'categories': self._extract_page_categories(cleaned_soup),
-            'page_type': self.get_page_type(cleaned_soup, url)
+            'categories': self._extract_page_categories(cleaned_soup)
         }
         
         return result
@@ -139,37 +138,7 @@ class WikiaParser:
                 next_sibling = next_sibling.next_sibling
         
         return related_links[:20]  # Limit to avoid too many
-    
-    def get_page_type(self, soup: BeautifulSoup, url: str) -> str:
-        """Get simplified page type based on namespace and basic indicators."""
-        if not soup or not url:
-            return 'unknown'
-        
-        url_lower = url.lower()
-        
-        # Check namespace first
-        if '/category:' in url_lower:
-            return 'category'
-        elif any(ns in url_lower for ns in ['template:', 'user:', 'help:', 'special:', 'file:']):
-            return 'maintenance'
-        elif '/wiki/' in url_lower:
-            # Main namespace - simple content classification
-            page_text = soup.get_text().lower()
-            
-            # Basic content indicators (without being too specific)
-            if any(term in page_text for term in ['character', 'person', 'individual']):
-                return 'character'
-            elif any(term in page_text for term in ['location', 'place', 'area']):
-                return 'location'  
-            elif any(term in page_text for term in ['episode', 'season', 'chapter']):
-                return 'episode'
-            elif any(term in page_text for term in ['event', 'battle', 'war']):
-                return 'event'
-            else:
-                return 'content'  # Generic content page
-        else:
-            return 'other'
-    
+
     def extract_portable_infobox(self, soup: BeautifulSoup) -> Dict:
         """Extract data from Wikia's portable infobox format."""
         if not soup:

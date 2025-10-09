@@ -8,6 +8,8 @@ from bs4 import BeautifulSoup
 from typing import Dict, List, Set
 
 from src.crawler.extraction.link_discoverer import LinkDiscoverer
+# Mark all tests in this module as unit tests (all use mocks, no real I/O)
+pytestmark = pytest.mark.unit
 
 
 class TestLinkDiscovererInit:

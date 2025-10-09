@@ -141,15 +141,26 @@ Each module will be independently testable and configurable.
 - **Code Reviews**: All PRs must include tests and demonstrate TDD was followed
 
 ### Testing Commands (Required Before Commits)
+
+**CRITICAL - DO NOT RUN INTEGRATION TESTS DURING DEVELOPMENT**:
+- ALWAYS use `-m "not integration"` or `-m unit` during development
+- Integration tests include real sleeps/timing and take 2+ minutes
+- Only run full test suite (`pytest tests/`) before commits or in CI/CD
+
 ```bash
-# Run specific component tests
-python -m pytest tests/test_crawler/rate_limiting/ -v
-python -m pytest tests/test_crawler/core/ -v
+# CORRECT: Fast unit tests only (use during development)
+python -m pytest tests/test_crawler/persistence/test_crawl_state.py -m unit -v
+python -m pytest -m unit -v
+python -m pytest -m "not integration" -v
 
-# Run with coverage reporting
-python -m pytest --cov=src --cov-report=html --cov-fail-under=80
+# WRONG: This will timeout with integration tests
+python -m pytest tests/test_crawler/rate_limiting/ -v  # Contains integration tests!
+python -m pytest tests/test_crawler/core/ -v            # May contain slow tests
 
-# Run all tests before any commit
+# Run with coverage reporting (unit tests only for speed)
+python -m pytest -m unit --cov=src --cov-report=html
+
+# Run all tests before any commit (includes integration tests - slow!)
 python -m pytest tests/ -v
 ```
 
@@ -184,16 +195,24 @@ python -m pytest tests/ -v
 python -m pytest -m "not network" -v
 ```
 
-**Test Marking Guidelines**:
-- All tests in `test_robots_parser.py` are marked `@pytest.mark.unit` (use mocks, no real I/O)
-- Integration tests with real timing: `test_subsequent_request_waits`, `test_requests_per_minute_enforcement`, `test_full_retry_cycle`, `test_multiple_domains_concurrent`, `test_actual_wait_integration`
-- Use `pytestmark = pytest.mark.unit` at module level to mark all tests in a file
+**Test File Organization**:
+- **Pure Unit Test Files**: Files with ONLY unit tests use `pytestmark = pytest.mark.unit` at module level
+  - Example: `test_rate_limiter.py`, `test_backoff_handler.py`, `test_crawl_state.py`
+- **Integration Test Files**: Separate `*_integration.py` files use `pytestmark = pytest.mark.integration`
+  - Example: `test_rate_limiter_integration.py`, `test_backoff_handler_integration.py`
+- **Mixed Files** (AVOID): If unavoidable, mark each test individually (no module-level `pytestmark`)
+
+**Why Separate Files?**:
+- Module-level `pytestmark` applies to ALL tests in the file
+- Individual `@pytest.mark.integration` decorators ADD markers (don't override)
+- Tests with BOTH markers (`unit` AND `integration`) match `-m unit` causing timeouts
+- Solution: Separate integration tests into dedicated `*_integration.py` files
 
 **Development Workflow**:
-1. During active development: `pytest -m unit -v` (fast feedback loop)
-2. Before committing: `pytest -m "not slow" -v` (quick verification)
-3. Before pushing: `pytest tests/ -v` (full test suite)
-4. CI/CD pipeline: `pytest tests/ --cov=src` (full suite + coverage)
+1. During active development: `pytest -m unit -v` (fast feedback loop, ~5s)
+2. Before committing: `pytest -m unit --cov=src -v` (unit tests with coverage, ~10s)
+3. Before pushing: `pytest tests/ -v` (full suite including integration, ~2-3 mins)
+4. CI/CD pipeline: `pytest tests/ --cov=src --cov-fail-under=80` (full suite + coverage requirement)
 
 **Remember**: Tests are not just for catching bugs - they define the contract and behavior of your code. Write them as if they are the specification document.
 

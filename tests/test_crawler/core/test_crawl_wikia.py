@@ -10,6 +10,8 @@ import tempfile
 import shutil
 
 from src.crawler.core.crawler import WikiaCrawler
+# Mark all tests in this module as unit tests (all use mocks, no real I/O)
+pytestmark = pytest.mark.unit
 
 
 class TestCrawlWikia:
