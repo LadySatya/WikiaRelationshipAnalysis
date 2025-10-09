@@ -279,35 +279,6 @@ class TestWikiaParserTemplateHandling:
         pass
 
 
-class TestWikiaParserCategoryHandling:
-    """Test WikiaParser category extraction and processing."""
-    
-    @pytest.fixture
-    def wikia_parser(self):
-        """Create WikiaParser instance for testing."""
-        return WikiaParser()
-    
-    def test_extract_page_categories(self, wikia_parser):
-        """Test extracting page categories."""
-        pass
-    
-    def test_categorize_by_character_type(self, wikia_parser):
-        """Test categorizing by character types."""
-        pass
-    
-    def test_categorize_by_location_type(self, wikia_parser):
-        """Test categorizing by location types."""
-        pass
-    
-    def test_extract_category_hierarchy(self, wikia_parser):
-        """Test extracting category hierarchies."""
-        pass
-    
-    def test_filter_maintenance_categories(self, wikia_parser):
-        """Test filtering maintenance categories."""
-        pass
-
-
 class TestWikiaParserContentCleaning:
     """Test WikiaParser content cleaning functionality."""
     

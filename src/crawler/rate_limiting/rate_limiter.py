@@ -10,22 +10,18 @@ from urllib.parse import urlparse
 
 
 class RateLimiter:
-    """Per-domain rate limiting with configurable delays and burst protection."""
-    
-    def __init__(self, default_delay: float = 1.0, requests_per_minute: int = 60):
+    """Per-domain rate limiting with configurable delays."""
+
+    def __init__(self, default_delay: float = 1.0):
         """Initialize rate limiter with default settings."""
         if default_delay <= 0:
             raise ValueError("delay must be positive")
-        if requests_per_minute <= 0:
-            raise ValueError("requests_per_minute must be positive")
-        
+
         self.default_delay = default_delay
-        self.requests_per_minute = requests_per_minute
-        
+
         # Domain-specific tracking
         self._domain_delays = {}
         self._domain_requests = {}  # domain -> list of timestamps
-        self._domain_rate_limits = {}
     
     async def wait_if_needed(self, url: str) -> None:
         """Wait if needed before making request to URL's domain."""
@@ -57,12 +53,6 @@ class RateLimiter:
         if delay_seconds <= 0:
             raise ValueError("delay must be positive")
         self._domain_delays[domain] = delay_seconds
-    
-    def set_domain_rate_limit(self, domain: str, requests_per_minute: int) -> None:
-        """Set requests per minute limit for specific domain."""
-        if requests_per_minute <= 0:
-            raise ValueError("requests_per_minute must be positive")
-        self._domain_rate_limits[domain] = requests_per_minute
     
     def record_request(self, url: str) -> None:
         """Record that a request was made to this domain."""

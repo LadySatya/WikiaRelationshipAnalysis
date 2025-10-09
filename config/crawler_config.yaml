@@ -2,10 +2,9 @@ crawler:
   # Politeness settings
   respect_robots_txt: true
   user_agent: "WikiaAnalyzer/0.1.0 (+https://github.com/your-repo)"
-  
+
   # Rate limiting
   default_delay_seconds: 1.0
-  max_requests_per_minute: 60
   max_concurrent_domains: 3
   
   # Request settings  

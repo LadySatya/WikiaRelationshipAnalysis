@@ -26,7 +26,6 @@ class PageExtractor:
                 'footer', '.footer', 'script', 'style', '.ad', '.advertisement'
             ],
             'infobox_selectors': ['.infobox', '.wikitable', '.character-info'],
-            'category_selectors': ['.categories', '.page-categories', '#catlinks'],
             'min_content_length': 50
         }
     
@@ -42,11 +41,10 @@ class PageExtractor:
             'title': self.extract_title(soup),
             'main_content': self.extract_main_content(soup),
             'links': self.extract_links(soup, url),
-            'categories': self.extract_categories(soup),
             'infobox_data': self.extract_infobox_data(soup),
             'is_disambiguation': self.is_disambiguation_page(soup)
         }
-        
+
         return result
     
     def extract_title(self, soup: BeautifulSoup) -> Optional[str]:
@@ -115,26 +113,7 @@ class PageExtractor:
                     links.append(href)
 
         return list(set(links))  # Remove duplicates
-    
-    def extract_categories(self, soup: BeautifulSoup) -> List[str]:
-        """Extract page categories/tags."""
-        if not soup:
-            return []
-        
-        categories = []
-        
-        # Try category selectors
-        for selector in self.config.get('category_selectors', []):
-            category_elements = soup.select(selector)
-            for element in category_elements:
-                # Look for category links
-                for link in element.find_all('a'):
-                    text = link.get_text(strip=True)
-                    if text and text not in categories:
-                        categories.append(text)
-        
-        return categories
-    
+
     def extract_infobox_data(self, soup: BeautifulSoup) -> Dict:
         """Extract infobox data if present."""
         if not soup:

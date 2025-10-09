@@ -45,22 +45,19 @@ class WikiaCrawler:
         required_keys = [
             'respect_robots_txt',
             'user_agent',
-            'default_delay_seconds', 
-            'max_requests_per_minute',
+            'default_delay_seconds',
             'target_namespaces'
         ]
-        
+
         for key in required_keys:
             if key not in config:
                 raise ValueError(f"Missing required configuration key: {key}")
-        
+
         # Validate configuration types
         if not isinstance(config['respect_robots_txt'], bool):
             raise ValueError("respect_robots_txt must be a boolean")
         if not isinstance(config['default_delay_seconds'], (int, float)):
             raise ValueError("default_delay_seconds must be a number")
-        if not isinstance(config['max_requests_per_minute'], int):
-            raise ValueError("max_requests_per_minute must be an integer")
         if not isinstance(config['target_namespaces'], list):
             raise ValueError("target_namespaces must be a list")
         
@@ -80,8 +77,7 @@ class WikiaCrawler:
         
         # Initialize components
         self.rate_limiter = RateLimiter(
-            default_delay=config['default_delay_seconds'],
-            requests_per_minute=config['max_requests_per_minute']
+            default_delay=config['default_delay_seconds']
         )
 
         # Initialize robots.txt parser if respect_robots_txt is enabled

@@ -24,7 +24,6 @@ class TestCrawlWikia:
             'respect_robots_txt': True,
             'user_agent': 'WikiaAnalyzer/0.1.0',
             'default_delay_seconds': 1.0,
-            'max_requests_per_minute': 60,
             'target_namespaces': ['Main', 'Character'],
             'exclude_patterns': ['User:', 'Template:'],
         }

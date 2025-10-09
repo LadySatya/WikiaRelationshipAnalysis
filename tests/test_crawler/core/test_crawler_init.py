@@ -31,7 +31,6 @@ class TestWikiaCrawlerInit:
             'respect_robots_txt': True,
             'user_agent': 'WikiaAnalyzer/0.1.0',
             'default_delay_seconds': 1.0,
-            'max_requests_per_minute': 60,
             'timeout_seconds': 30,
             'max_retries': 3,
             'target_namespaces': ['Main', 'Character'],
@@ -102,16 +101,15 @@ class TestWikiaCrawlerInit:
         """Test that required configuration keys are validated."""
         required_keys = [
             'respect_robots_txt',
-            'user_agent', 
+            'user_agent',
             'default_delay_seconds',
-            'max_requests_per_minute',
             'target_namespaces'
         ]
-        
+
         for key in required_keys:
             incomplete_config = basic_config.copy()
             del incomplete_config[key]
-            
+
             with pytest.raises(ValueError, match=f"Missing required configuration key: {key}"):
                 WikiaCrawler("test_project", incomplete_config)
                 
@@ -154,7 +152,6 @@ class TestWikiaCrawlerInit:
             'respect_robots_txt': True,
             'user_agent': 'WikiaAnalyzer/0.1.0',
             'default_delay_seconds': 1.0,
-            'max_requests_per_minute': 60,
             'target_namespaces': ['Main']
         }
         

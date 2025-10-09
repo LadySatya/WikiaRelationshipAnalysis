@@ -27,7 +27,6 @@ class WikiaParser:
             'standard_infobox': ['.infobox', '.wikitable.infobox'],
             'navigation_elements': ['.wikia-header', '.fandom-community-header', '.global-navigation'],
             'content_area': ['.page-content', '.mw-content-text', '#content', 'main'],
-            'categories': ['#catlinks', '.page-footer__categories', '.categories'],
             'related_articles': ['.related-articles', '.see-also', '.references']
         }
         
@@ -75,10 +74,9 @@ class WikiaParser:
             'url': url,
             'namespace': self.get_page_namespace(url),
             'infobox': self.extract_portable_infobox(cleaned_soup),
-            'related_articles': self.extract_related_articles(cleaned_soup),
-            'categories': self._extract_page_categories(cleaned_soup)
+            'related_articles': self.extract_related_articles(cleaned_soup)
         }
-        
+
         return result
     
     def get_page_namespace(self, url: str) -> Optional[str]:
@@ -205,29 +203,7 @@ class WikiaParser:
                 element.decompose()
 
         return soup
-    
-    def _extract_page_categories(self, soup: BeautifulSoup) -> List[str]:
-        """Extract Wikia page categories."""
-        if not soup:
-            return []
-        
-        categories = []
-        
-        # Look for categories in various selectors
-        for selector in self.wikia_selectors['categories']:
-            category_container = soup.select_one(selector)
-            if category_container:
-                # Extract category links
-                for link in category_container.find_all('a', href=True):
-                    href = link['href']
-                    text = link.get_text(strip=True)
-                    
-                    # Filter for actual category links
-                    if '/wiki/Category:' in href and text:
-                        categories.append(text)
-        
-        return list(set(categories))  # Remove duplicates
-    
+
     def _is_same_wikia_domain(self, href: str, base_url: str) -> bool:
         """Check if href belongs to the same wikia domain as base_url."""
         # Use centralized domain validation from URLUtils

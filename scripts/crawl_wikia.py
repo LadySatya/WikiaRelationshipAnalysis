@@ -45,8 +45,7 @@ def load_config(config_path: Path) -> dict:
 
         # Validate required fields
         required = ['respect_robots_txt', 'user_agent',
-                   'default_delay_seconds', 'max_requests_per_minute',
-                   'target_namespaces']
+                   'default_delay_seconds', 'target_namespaces']
 
         for field in required:
             if field not in config:

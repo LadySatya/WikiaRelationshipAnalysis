@@ -25,7 +25,6 @@ def load_config() -> dict:
         'respect_robots_txt': full_config['crawler']['respect_robots_txt'],
         'user_agent': full_config['crawler']['user_agent'],
         'default_delay_seconds': full_config['crawler']['default_delay_seconds'],
-        'max_requests_per_minute': full_config['crawler']['max_requests_per_minute'],
         'target_namespaces': full_config['crawler']['target_namespaces'],
         'timeout_seconds': full_config['crawler']['timeout_seconds'],
         'max_retries': full_config['crawler']['max_retries'],
