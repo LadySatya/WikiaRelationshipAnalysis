@@ -81,14 +81,201 @@ flake8 src/                                            # Linting
 - Test fixtures use Naruto and Avatar characters as sample data
 - Output files contain: url, title, main_content, links, infobox_data, namespace, related_articles
 
-## Future Architecture (Phases 2-5)
+## Phase 2: RAG-Based Character Analysis (PLANNED - Next Implementation)
+
+Phase 2 uses a **Retrieval Augmented Generation (RAG)** approach to analyze the large corpus of crawled wiki data and extract character information and relationships.
+
+### RAG Architecture Overview
+
+Instead of processing every page individually, Phase 2:
+1. **Indexes** all crawled content into a vector database (ChromaDB)
+2. **Queries** the RAG system with natural language to discover characters
+3. **Extracts** structured character profiles using LLM + retrieved context
+4. **Builds** character relationship graphs from RAG responses
+
+**Component Structure:** `src/processor/`
+```
+src/processor/
+├── core/
+│   ├── processor.py              # Main orchestrator
+│   └── content_chunker.py        # Split pages into semantic chunks
+├── rag/
+│   ├── embeddings.py             # Generate embeddings (OpenAI/local)
+│   ├── vector_store.py           # Vector database (ChromaDB)
+│   ├── retriever.py              # Semantic search and retrieval
+│   └── query_engine.py           # RAG query interface (retrieval + LLM)
+├── analysis/
+│   ├── character_extractor.py   # Discover characters from corpus
+│   └── profile_builder.py       # Build character profiles using RAG
+└── llm/
+    ├── llm_client.py             # LLM API wrapper (OpenAI/Anthropic)
+    └── prompts.py                # RAG prompt templates
+```
+
+### RAG Workflow
+
+**Phase 2a: Indexing (one-time per project)**
+```
+Raw crawled pages (from Phase 1)
+    ↓
+Split into semantic chunks (paragraphs/sections)
+    ↓
+Generate embeddings using Voyage AI (voyage-3-lite)
+    ↓
+Store in ChromaDB vector database
+    ↓
+Index ready for semantic search
+```
+
+**Phase 2b: Character Discovery & Profile Building**
+```
+1. Query RAG: "What characters are mentioned in this wiki?"
+   ↓ (RAG retrieves relevant chunks)
+2. LLM extracts character names from context
+   ↓
+3. For each character:
+   - Query RAG: "Who is [Character]? What are their relationships?"
+   - Query RAG: "What are [Character]'s abilities and affiliations?"
+   ↓ (RAG retrieves character-specific chunks)
+4. LLM synthesizes structured character profile
+   ↓
+5. Save to data/projects/<name>/characters/
+```
+
+### Key Components
+
+**ContentChunker**: Splits pages into ~500 character chunks with overlap for embedding
+**EmbeddingGenerator**: Generates vector embeddings (Voyage AI or local models recommended)
+**VectorStore**: ChromaDB-based persistent vector database with metadata filtering
+**RAGRetriever**: Semantic search to find relevant chunks for queries
+**QueryEngine**: Combines retrieval + LLM (Claude) to answer questions about the wiki
+**CharacterExtractor**: Discovers all characters using multi-query RAG approach
+**ProfileBuilder**: Builds comprehensive character profiles via targeted RAG queries
+
+### Output Structure
+
+**Character Profile** (`data/projects/<name>/characters/Aang.json`):
+```json
+{
+  "name": "Aang",
+  "discovered_at": "2025-10-09T...",
+  "profile": {
+    "overview": "Aang is the Avatar and last surviving Air Nomad...",
+    "affiliations": ["Air Nomads", "Team Avatar"],
+    "abilities": ["Airbending", "Waterbending", "Earthbending", "Firebending"],
+    "relationships": [
+      {
+        "character": "Katara",
+        "relationship_type": "romantic",
+        "description": "Wife and closest companion",
+        "confidence": 0.95,
+        "source_chunks": ["chunk_id_1", "chunk_id_2"]
+      }
+    ],
+    "key_events": ["Discovered in iceberg", "Defeated Fire Lord Ozai"]
+  },
+  "metadata": {
+    "queries_used": 6,
+    "chunks_analyzed": 45,
+    "confidence": 0.92
+  }
+}
+```
+
+### Configuration (`config/processor_config.yaml`)
+
+```yaml
+processor:
+  rag:
+    chunk_size: 500                    # characters per chunk
+    chunk_overlap: 50                  # overlap between chunks
+    embedding_provider: "voyage"        # voyage|local (Anthropic recommends Voyage AI)
+    embedding_model: "voyage-3-lite"   # Fast and cheap embeddings
+    vector_store_type: "chromadb"
+    default_k: 10                      # chunks to retrieve per query
+    llm_provider: "anthropic"          # Using Claude for RAG queries
+    llm_model: "claude-3-5-haiku-20241022"  # Fast and cheap for RAG
+  character_discovery:
+    min_mentions: 3                    # min chunks mentioning character
+    confidence_threshold: 0.7
+```
+
+### CLI Commands (Planned)
+
+```bash
+# Index project for RAG queries
+python main.py index <project_name>
+
+# Discover all characters in corpus
+python main.py discover-characters <project_name>
+
+# Build specific character profile
+python main.py build-profile <project_name> "Aang"
+
+# Build all character profiles
+python main.py build-all-profiles <project_name>
+
+# Query the RAG system directly
+python main.py query <project_name> "Who is Katara's brother?"
+```
+
+### Cost Estimation
+
+**Using Claude 3.5 Haiku + Voyage AI embeddings:**
+
+**For 100 wiki pages (500 chunks):**
+- Indexing (one-time):
+  - Voyage AI: 500 chunks × 300 tokens = 150K tokens × $0.12/1M = **$0.018**
+- Character discovery (3-5 queries):
+  - Input: 5 queries × 3K tokens = 15K tokens × $1/1M = $0.015
+  - Output: 5 queries × 500 tokens = 2.5K tokens × $5/1M = $0.0125
+  - Total: **$0.028**
+- Profile per character (6 queries):
+  - Input: 6 queries × 3K tokens = 18K tokens × $1/1M = $0.018
+  - Output: 6 queries × 500 tokens = 3K tokens × $5/1M = $0.015
+  - Total per character: **$0.033**
+
+**Total for 100 pages + 50 characters:**
+- Embeddings: $0.018
+- Discovery: $0.028
+- 50 profiles: 50 × $0.033 = $1.65
+- **Grand total: ~$1.70**
+
+Still very affordable, and using Claude gives better reasoning!
+
+### Dependencies
+
+```bash
+pip install -e ".[dev,rag]"  # Installs: anthropic, voyageai, chromadb, tiktoken, sentence-transformers
+```
+
+### Success Criteria for Phase 2
+
+1. ✅ Successfully index 100+ pages into ChromaDB
+2. ✅ RAG retrieval returns semantically relevant chunks
+3. ✅ Discover 20+ characters from corpus
+4. ✅ Build accurate profiles for characters (>90% accuracy)
+5. ✅ Relationship extraction with source tracking
+6. ✅ Total cost < $1 for full project processing
+7. ✅ Ready for Phase 3 (relationship graph visualization)
+
+### Why RAG?
+
+- **Scalability**: Handles thousands of pages efficiently
+- **Cost-Effective**: Only pays for relevant context, not full corpus
+- **Accuracy**: Semantic search finds relevant information across pages
+- **Source Tracking**: Know which chunks support each claim
+- **Flexibility**: Can answer arbitrary questions about the wiki
+- **Incremental**: Can add new pages to existing index
+
+## Future Architecture (Phases 3-5)
 
 The system is designed for 6 modular components:
-1. **Crawler** (Phase 1 - current)
-2. **Processor** (Phase 2 - text cleaning, character detection)
-3. **Analyzer** (Phase 3 - LLM relationship extraction)
-4. **Mapper** (Phase 4 - relationship graph building)
-5. **Visualizer** (Phase 5 - network graphs, exports)
+1. **Crawler** (Phase 1 - ✅ COMPLETE)
+2. **RAG Processor** (Phase 2 - 📋 PLANNED - see above)
+3. **Relationship Graph Builder** (Phase 3 - character network construction)
+4. **Graph Analysis** (Phase 4 - community detection, centrality measures)
+5. **Visualizer** (Phase 5 - interactive network graphs, exports)
 6. **Storage** (implemented as file-based system)
 
 Each module will be independently testable and configurable.

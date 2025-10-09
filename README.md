@@ -41,21 +41,36 @@ The core web crawling infrastructure is now fully implemented and tested:
   - `RateLimiter`: Per-domain request throttling with burst protection
   - `ContentSaver`: File-based storage with URL-to-filename mapping
 
-### 2. **Data Processing Module** (`processor/`) - 🔄 PLANNED
-- **Purpose**: Clean and structure extracted data
+### 2. **RAG Processor Module** (`src/processor/`) - 📋 NEXT (Phase 2)
+- **Purpose**: Index crawled data and extract character information using Retrieval Augmented Generation (RAG)
+- **Approach**: Instead of processing every page individually, build a searchable vector database and query it intelligently
 - **Components**:
-  - `TextCleaner`: Removes wikia markup, navigation elements
-  - `CharacterDetector`: Identifies character mentions in text
-  - `ContentStructurer`: Organizes data into structured format
-  - `DataValidator`: Ensures data quality and completeness
+  - **Indexing Pipeline**:
+    - `ContentChunker`: Splits pages into semantic chunks (~500 chars) for embedding
+    - `EmbeddingGenerator`: Generates vector embeddings (Voyage AI voyage-3-lite)
+    - `VectorStore`: ChromaDB-based persistent vector database
+  - **RAG Query System**:
+    - `RAGRetriever`: Semantic search to find relevant chunks
+    - `QueryEngine`: Combines retrieval + Claude LLM to answer questions
+  - **Character Analysis**:
+    - `CharacterExtractor`: Discovers all characters using RAG queries
+    - `ProfileBuilder`: Builds comprehensive character profiles from retrieved context
 
-### 3. **LLM Analysis Module** (`analyzer/`) - 🔄 PLANNED
-- **Purpose**: Extract relationships using AI analysis
-- **Components**:
-  - `RelationshipExtractor`: Uses LLM to identify character relationships
-  - `ContextAnalyzer`: Determines relationship context and strength
-  - `EntityLinker`: Links mentions to canonical character names
-  - `PromptManager`: Manages and optimizes LLM prompts
+**Why RAG?**
+- **Scalable**: Handles thousands of pages efficiently
+- **Cost-Effective**: Only pays for relevant context (~$1.70 for 100 pages + 50 characters)
+- **Accurate**: Semantic search finds relevant information across entire corpus
+- **Source Tracking**: Know which chunks support each extracted fact
+- **Flexible**: Can answer arbitrary questions about the wiki
+- **Better Reasoning**: Claude 3.5 Haiku provides superior analysis quality
+
+**Planned CLI**:
+```bash
+python main.py index <project_name>                    # Index crawled data
+python main.py discover-characters <project_name>      # Find all characters
+python main.py build-profile <project_name> "Aang"     # Build character profile
+python main.py query <project_name> "Who is Katara?"   # Query the RAG system
+```
 
 ### 4. **Relationship Mapping Module** (`mapper/`) - 🔄 PLANNED
 - **Purpose**: Process and structure relationship data
@@ -88,9 +103,10 @@ The core web crawling infrastructure is now fully implemented and tested:
 - **Web Crawling**: BeautifulSoup4 + aiohttp (async HTTP)
 - **Testing**: pytest with comprehensive coverage (403+ tests)
 - **Data Format**: JSON for structured data, YAML for configuration
-- **Storage**: File-based with project isolation (database planned for Phase 2)
-- **LLM Integration**: OpenAI API, Anthropic Claude API (planned)
-- **Visualization**: NetworkX + Plotly/D3.js (planned)
+- **Storage**: File-based with project isolation
+- **RAG System**: ChromaDB (vector database) + Voyage AI embeddings (Phase 2)
+- **LLM Integration**: Anthropic Claude API (Claude 3.5 Haiku for RAG queries)
+- **Visualization**: NetworkX + Plotly/D3.js (planned for Phase 3)
 - **API**: FastAPI for web interface (planned)
 - **Configuration**: YAML-based config files with hierarchical overrides
 
@@ -105,17 +121,41 @@ The core web crawling infrastructure is now fully implemented and tested:
 6. ✅ Implement comprehensive test suite (403+ tests)
 7. ✅ Create manual testing interface for development
 
-### 🔄 Phase 2: Data Processing (NEXT)
-1. Implement character detection and entity linking
-2. Build text cleaning and content structuring
-3. Create data validation and quality checks
-4. Add content categorization and organization
+### 📋 Phase 2: RAG-Based Character Analysis (NEXT)
+**Goal**: Build a searchable knowledge base from crawled data and extract character profiles using RAG
 
-### 🔄 Phase 3: LLM Analysis & Intelligence (PLANNED)
-1. Integrate LLM API for relationship extraction
-2. Build relationship graph data structure
-3. Develop relationship classification system
-4. Implement confidence scoring algorithms
+#### Phase 2a: Indexing (TDD Implementation)
+1. ✅ Install RAG dependencies (`pip install -e ".[dev,rag]"` - chromadb, anthropic, voyageai)
+2. Implement `ContentChunker` - Split pages into semantic chunks with overlap
+3. Implement `EmbeddingGenerator` - Generate vector embeddings (Voyage AI/local)
+4. Implement `VectorStore` - ChromaDB integration with persistence
+5. Test end-to-end indexing on test_resume project (5 pages)
+
+#### Phase 2b: Character Discovery (Integration Tests)
+6. Implement `RAGRetriever` - Semantic search functionality
+7. Implement `QueryEngine` - RAG query interface (retrieval + Claude)
+8. Implement `CharacterExtractor` - Multi-query character discovery
+9. Implement `ProfileBuilder` - Build character profiles from RAG context
+10. Validate on Avatar wiki data (accuracy > 90%, powered by Claude)
+
+#### Phase 2c: CLI & Documentation
+11. Add CLI commands (index, discover-characters, build-profile, query)
+12. Create `config/processor_config.yaml` with RAG settings
+13. Update documentation with RAG workflow and examples
+14. Cost analysis and optimization (<$1 per project)
+
+**Success Criteria**:
+- Index 100+ pages into ChromaDB successfully
+- Discover 20+ characters from test corpus
+- Build accurate profiles with relationship extraction (Claude-powered)
+- Total processing cost < $2 per project (using Claude 3.5 Haiku)
+- Ready for Phase 3 (relationship graph visualization)
+
+### 🔄 Phase 3: Relationship Graph Building (PLANNED)
+1. Build graph structure from character profiles
+2. Implement relationship classification and scoring
+3. Create graph analysis tools (community detection, centrality)
+4. Export graph data for visualization
 
 ### 🔄 Phase 4: Visualization & Interface (PLANNED)
 1. Implement network graph generation
