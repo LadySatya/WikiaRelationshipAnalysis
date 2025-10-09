@@ -225,19 +225,7 @@ class WikiaCrawler:
                 'error': str(e),
             })
             raise
-    
-    async def resume_crawl(self) -> Dict:
-        """Resume an interrupted crawl from saved state."""
-        pass
-    
-    def pause_crawl(self) -> None:
-        """Pause the current crawl and save state."""
-        pass
-    
-    def stop_crawl(self) -> None:
-        """Stop crawling completely and cleanup resources."""
-        pass
-    
+
     async def __aenter__(self):
         """Context manager entry - ensures proper session setup."""
         return self

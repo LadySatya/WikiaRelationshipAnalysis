@@ -20,9 +20,11 @@ python main.py resume <project_name>
 python main.py status <project_name>
 python main.py list
 
-# Direct crawler scripts (alternative interface)  
+# Direct crawler scripts (alternative interface)
 python scripts/crawl_wikia.py <project_name> <wikia_url> [--max-pages N] [--config path]
-python scripts/resume_crawl.py <project_name> [--status] [--list]
+
+# Resume crawling (implicit - just run crawl_wikia.py again with same project name)
+# The crawler automatically loads previous queue/visited URLs from the project
 
 # Testing and Quality
 python -m pytest tests/test_crawler/                        # Run all crawler tests
@@ -60,9 +62,12 @@ flake8 src/                                            # Linting
 - `ContentSaver`: File-based storage with URL-to-filename mapping
 
 **State Management**
-- `CrawlState`: Session persistence and checkpoint system
+- `CrawlState`: Session persistence and statistics tracking
 - `URLManager`: Queue management with deduplication and priority
-- Auto-resume capability for interrupted crawls
+- **Implicit Resume**: URLManager automatically loads previous queue/visited URLs on init
+  - To resume a crawl, simply run `crawl_wikia.py` again with the same project name
+  - No explicit resume command needed - state is automatically restored
+  - State is saved periodically (configurable) and on completion
 
 ### Configuration System
 - `config/crawler_config.yaml`: Main crawler settings (delays, namespaces, exclusions)
