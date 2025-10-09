@@ -272,8 +272,10 @@ class WikiaCrawler:
                 # Apply crawl delay from robots.txt if specified
                 crawl_delay = await self.robots_parser.get_crawl_delay(url)
                 if crawl_delay is not None and crawl_delay > 0:
-                    logging.debug(f"Applying robots.txt crawl delay of {crawl_delay}s for {url}")
+                    domain = urlparse(url).netloc
+                    logging.info(f"[ROBOTS.TXT] Applying crawl-delay of {crawl_delay:.2f}s for {domain}")
                     await asyncio.sleep(crawl_delay)
+                    logging.debug(f"[ROBOTS.TXT] Crawl-delay wait complete for {domain}")
 
             # Fetch HTML content using session manager
             response = await self.session_manager.get(url)

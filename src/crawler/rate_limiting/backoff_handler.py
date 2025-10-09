@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import time
 import random
 import asyncio
+import logging
 
 
 class BackoffHandler:
@@ -34,9 +35,12 @@ class BackoffHandler:
         """Wait with exponential backoff based on attempt number."""
         if attempt <= 0:
             return  # No wait for first attempt or invalid attempts
-        
+
         delay = self._calculate_delay(attempt)
+        domain = self._get_domain(url)
+        logging.warning(f"[BACKOFF] Retry attempt {attempt} for {domain}: waiting {delay:.2f}s before retrying")
         await asyncio.sleep(delay)
+        logging.debug(f"[BACKOFF] Backoff wait complete for attempt {attempt} ({domain})")
     
     def should_retry(self, url: str, status_code: int, attempt: int) -> bool:
         """Determine if request should be retried based on status and attempts."""
