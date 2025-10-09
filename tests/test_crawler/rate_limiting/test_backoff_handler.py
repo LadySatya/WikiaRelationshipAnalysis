@@ -120,14 +120,15 @@ class TestBackoffHandlerWaitWithBackoff:
             # Test exponential growth pattern
             await backoff_handler.wait_with_backoff(url, 2)
             delay_2 = mock_sleep.call_args[0][0]
-            
+
             mock_sleep.reset_mock()
             await backoff_handler.wait_with_backoff(url, 3)
             delay_3 = mock_sleep.call_args[0][0]
-            
+
             # Attempt 3 should take roughly twice as long as attempt 2
-            # (accounting for jitter, we check it's at least 1.5x longer)
-            assert delay_3 > delay_2 * 1.5
+            # With ±25% jitter, the worst case ratio is: 1.5 / 1.25 = 1.2x
+            # So we check it's at least 1.2x longer to account for jitter variance
+            assert delay_3 > delay_2 * 1.2
     
     @pytest.mark.asyncio
     async def test_wait_with_backoff_max_delay_cap(self, backoff_handler):
@@ -444,8 +445,9 @@ class TestBackoffHandlerPrivateMethods:
         
         # Account for jitter by checking rough ratios
         # delay2 should be roughly 2x delay1, delay3 should be roughly 2x delay2
-        assert delay2 > delay1 * 1.5  # At least 1.5x due to jitter
-        assert delay3 > delay2 * 1.5  # At least 1.5x due to jitter
+        # With ±25% jitter, the worst case ratio is: 1.5 / 1.25 = 1.2x
+        assert delay2 > delay1 * 1.2  # At least 1.2x accounting for jitter
+        assert delay3 > delay2 * 1.2  # At least 1.2x accounting for jitter
     
     def test_calculate_delay_with_jitter(self, backoff_handler):
         """Test delay calculation includes jitter randomization."""
@@ -552,9 +554,10 @@ class TestBackoffHandlerIntegration:
             call_args = mock_sleep.call_args_list
             delay_2 = call_args[0][0][0]
             delay_3 = call_args[1][0][0]
-            
+
             # Second delay should be longer (accounting for jitter variation)
-            assert delay_3 > delay_2 * 1.5
+            # With ±25% jitter, the worst case ratio is: 1.5 / 1.25 = 1.2x
+            assert delay_3 > delay_2 * 1.2
             assert backoff_handler.get_failure_count(url) == 0  # Reset after success
 
 

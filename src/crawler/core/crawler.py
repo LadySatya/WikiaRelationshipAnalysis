@@ -109,18 +109,14 @@ class WikiaCrawler:
     def _create_project_structure(self) -> None:
         """Create the project directory structure."""
         directories = [
-            "raw/pages/characters",
-            "raw/pages/locations", 
-            "raw/pages/events",
-            "raw/metadata",
+            "raw",
             "processed",
-            "relationships", 
-            "cache/llm_responses",
-            "cache/processed_chunks",
+            "relationships",
+            "cache",
             "crawl_state",
-            "exports/visualizations"
+            "exports"
         ]
-        
+
         for directory in directories:
             dir_path = self.project_path / directory
             dir_path.mkdir(parents=True, exist_ok=True)

@@ -33,48 +33,46 @@ class ContentSaver:
         self.crawl_log_file = self.cache_dir / "crawl_log.json"
     
     def save_page_content(self, url: str, content: Dict[str, Any]) -> Path:
-        """Save page content to appropriate file."""
+        """Save page content to processed directory."""
         if not url or not content:
             raise ValueError("URL and content cannot be empty")
-        
-        # Determine page type and directory
-        page_type = content.get('page_type', 'unknown')
-        directory = self._get_page_directory(page_type)
-        
+
+        # All content goes to processed/ directory
+        self._ensure_directory_exists(self.processed_dir)
+
         # Generate filename and create full path
-        filename = self._generate_filename(url, page_type, content.get('title'))
-        file_path = directory / filename
-        
+        filename = self._generate_filename(url, content.get('title'))
+        file_path = self.processed_dir / filename
+
         # Add metadata
         save_data = {
             'url': url,
             'saved_at': datetime.now().isoformat(),
             'content': content
         }
-        
+
         # Save to file
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(save_data, f, indent=2, ensure_ascii=False)
-        
+
         # Update page index
         self.update_page_index({
             'url': url,
             'file_path': str(file_path.relative_to(self.project_path)),
-            'page_type': page_type,
             'saved_at': save_data['saved_at']
         })
-        
+
         return file_path
     
     def save_raw_html(self, url: str, html: str) -> Path:
         """Save raw HTML content."""
         if not url or not html:
             raise ValueError("URL and HTML cannot be empty")
-        
+
         # Save to raw directory
-        directory = self._get_page_directory('raw')
-        filename = self._generate_filename(url, 'raw').replace('.json', '.html')
-        file_path = directory / filename
+        self._ensure_directory_exists(self.raw_dir)
+        filename = self._generate_filename(url).replace('.json', '.html')
+        file_path = self.raw_dir / filename
         
         # Save HTML with metadata
         save_data = {
@@ -196,23 +194,17 @@ class ContentSaver:
         """Get statistics about saved content."""
         stats = {
             'total_pages': 0,
-            'by_type': {},
             'total_files': 0
         }
-        
+
         # Count from page index
         if self.page_index_file.exists():
             try:
                 with open(self.page_index_file, 'r', encoding='utf-8') as f:
                     index = json.load(f)
-                
+
                 stats['total_pages'] = len(index)
-                
-                # Count by page type
-                for page_info in index.values():
-                    page_type = page_info.get('page_type', 'unknown')
-                    stats['by_type'][page_type] = stats['by_type'].get(page_type, 0) + 1
-            
+
             except (json.JSONDecodeError, FileNotFoundError):
                 pass
         
@@ -235,11 +227,11 @@ class ContentSaver:
         
         return stats
     
-    def _generate_filename(self, url: str, page_type: str = "page", title: str = None) -> str:
+    def _generate_filename(self, url: str, title: str = None) -> str:
         """Generate safe filename from URL and title."""
         if not url:
             return "unnamed.json"
-        
+
         # Use title if available, otherwise fallback to URL-based name
         if title:
             # Clean title for safe filename
@@ -247,12 +239,12 @@ class ContentSaver:
             if clean_title:  # Only use if cleaning resulted in valid filename
                 timestamp = datetime.now().strftime("%Y%m%d")
                 return f"{clean_title}_{timestamp}.json"
-        
+
         # Fallback to hash-based filename for problematic titles
         url_hash = self._url_to_hash(url)
         timestamp = datetime.now().strftime("%Y%m%d")
-        
-        return f"{page_type}_{url_hash}_{timestamp}.json"
+
+        return f"page_{url_hash}_{timestamp}.json"
     
     def _clean_title_for_filename(self, title: str) -> str:
         """Clean title to create safe filename."""
@@ -282,21 +274,6 @@ class ContentSaver:
         
         return title
     
-    def _get_page_directory(self, page_type: str) -> Path:
-        """Get directory path for page type."""
-        page_type_dirs = {
-            'character': self.processed_dir / 'characters',
-            'location': self.processed_dir / 'locations',
-            'event': self.processed_dir / 'events',
-            'article': self.processed_dir / 'articles',
-            'disambiguation': self.processed_dir / 'disambiguation',
-            'raw': self.raw_dir,
-            'unknown': self.processed_dir / 'unknown'
-        }
-        
-        directory = page_type_dirs.get(page_type, self.processed_dir / 'unknown')
-        self._ensure_directory_exists(directory)
-        return directory
     
     def _url_to_hash(self, url: str) -> str:
         """Convert URL to consistent hash for filename."""

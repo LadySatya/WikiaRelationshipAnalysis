@@ -92,10 +92,12 @@ class PageExtractor:
         return None
     
     def extract_links(self, soup: BeautifulSoup, base_url: str) -> List[str]:
-        """Extract all links from page."""
+        """Extract links from same wikia domain only."""
         if not soup:
             return []
-        
+
+        from ..utils.url_utils import URLUtils
+
         links = []
         for a_tag in soup.find_all('a', href=True):
             href = a_tag['href']
@@ -107,9 +109,11 @@ class PageExtractor:
                 elif not href.startswith(('http:', 'https:')):
                     from urllib.parse import urljoin
                     href = urljoin(base_url, href)
-                
-                links.append(href)
-        
+
+                # Only keep links from same wikia domain
+                if URLUtils.is_same_wikia_domain(href, base_url):
+                    links.append(href)
+
         return list(set(links))  # Remove duplicates
     
     def extract_categories(self, soup: BeautifulSoup) -> List[str]:
