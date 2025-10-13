@@ -5,9 +5,10 @@ These tests perform actual timing operations with real delays.
 They are separated from unit tests to keep unit test suite fast.
 """
 
-import pytest
 import asyncio
 import time
+
+import pytest
 
 from src.crawler.rate_limiting.backoff_handler import BackoffHandler
 
@@ -54,7 +55,11 @@ class TestBackoffHandlerTimingIntegration:
     @pytest.mark.timing
     async def test_multiple_domains_concurrent(self, backoff_handler):
         """Test concurrent backoff handling for multiple domains."""
-        urls = ["https://example1.com/page", "https://example2.com/page", "https://example3.com/page"]
+        urls = [
+            "https://example1.com/page",
+            "https://example2.com/page",
+            "https://example3.com/page",
+        ]
 
         # Record failures for all domains
         for url in urls:
@@ -93,7 +98,7 @@ class TestBackoffHandlerTimingIntegration:
 
         # Should have actually waited some small amount
         assert elapsed >= 0.005  # At least 5ms
-        assert elapsed <= 0.1    # But not too long
+        assert elapsed <= 0.1  # But not too long
 
         # Verify exponential behavior with real waits
         start2 = time.time()

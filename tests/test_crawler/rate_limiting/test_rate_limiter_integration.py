@@ -5,9 +5,10 @@ These tests perform actual timing operations with real delays.
 They are separated from unit tests to keep unit test suite fast.
 """
 
-import pytest
 import asyncio
 import time
+
+import pytest
 
 from src.crawler.rate_limiting.rate_limiter import RateLimiter
 

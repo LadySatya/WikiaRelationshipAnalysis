@@ -2,21 +2,25 @@
 Robots.txt parsing and compliance checking.
 """
 
-from typing import Optional, Dict
-from urllib.robotparser import RobotFileParser
-from urllib.parse import urlparse, urljoin
-from pathlib import Path
-import time
 import hashlib
-import aiohttp
 import logging
+import time
+from pathlib import Path
+from typing import Dict, Optional
+from urllib.parse import urlparse
+from urllib.robotparser import RobotFileParser
+
+import aiohttp
 
 
 class RobotsParser:
     """Handles robots.txt parsing, caching, and compliance checking."""
 
-    def __init__(self, user_agent: str, cache_dir: Path, cache_ttl_hours: int = 24):
-        """Initialize robots parser with user agent and cache settings."""
+    def __init__(
+            self, user_agent: str, cache_dir: Path, cache_ttl_hours: int = 24
+    ):
+        """Initialize robots parser with user agent and cache
+        settings."""
         if user_agent is None:
             raise ValueError("User agent cannot be None")
         if not user_agent or not user_agent.strip():
@@ -147,7 +151,7 @@ class RobotsParser:
     def _get_cache_path(self, domain: str) -> Path:
         """Get file path for cached robots.txt."""
         # Use MD5 hash of domain for safe filename
-        domain_hash = hashlib.md5(domain.encode('utf-8')).hexdigest()
+        domain_hash = hashlib.md5(domain.encode("utf-8")).hexdigest()
         return self.cache_dir / f"robots_{domain_hash}.txt"
 
     def _is_cache_valid(self, cache_path: Path) -> bool:
@@ -183,11 +187,16 @@ class RobotsParser:
                         logging.info(f"No robots.txt found for {domain} (404)")
                         return None
                     else:
-                        logging.warning(f"Unexpected status {response.status} for robots.txt at {domain}")
+                        logging.warning(
+                            f"Unexpected status {response.status} for "
+                            f"robots.txt at {domain}"
+                        )
                         return None
 
         except aiohttp.ClientError as e:
-            logging.warning(f"Network error fetching robots.txt from {domain}: {e}")
+            logging.warning(
+                f"Network error fetching robots.txt from {domain}: {e}"
+            )
             return None
         except Exception as e:
             logging.error(f"Error fetching robots.txt from {domain}: {e}")
@@ -200,23 +209,27 @@ class RobotsParser:
 
         try:
             cache_path = self._get_cache_path(domain)
-            with open(cache_path, 'w', encoding='utf-8') as f:
+            with open(cache_path, "w", encoding="utf-8") as f:
                 f.write(content)
             logging.debug(f"Saved robots.txt for {domain} to cache")
         except Exception as e:
-            logging.error(f"Error saving robots.txt to cache for {domain}: {e}")
+            logging.error(
+                f"Error saving robots.txt to cache for {domain}: {e}"
+            )
 
     def _load_from_cache(self, domain: str) -> Optional[str]:
         """Load robots.txt content from cache."""
         try:
             cache_path = self._get_cache_path(domain)
             if cache_path.exists():
-                with open(cache_path, 'r', encoding='utf-8') as f:
+                with open(cache_path, "r", encoding="utf-8") as f:
                     content = f.read()
                 logging.debug(f"Loaded robots.txt for {domain} from cache")
                 return content
         except Exception as e:
-            logging.error(f"Error loading robots.txt from cache for {domain}: {e}")
+            logging.error(
+                f"Error loading robots.txt from cache for {domain}: {e}"
+            )
 
         return None
 
@@ -233,7 +246,9 @@ class RobotsParser:
                         cache_file.unlink()
                         logging.debug(f"Deleted cache file: {cache_file}")
                     except Exception as e:
-                        logging.error(f"Error deleting cache file {cache_file}: {e}")
+                        logging.error(
+                            f"Error deleting cache file {cache_file}: {e}"
+                        )
 
             logging.info("Cleared all robots.txt cache")
         except Exception as e:

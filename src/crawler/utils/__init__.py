@@ -2,7 +2,7 @@
 Utility functions for crawler module.
 """
 
-from .url_utils import URLUtils
 from .content_filters import ContentFilter
+from .url_utils import URLUtils
 
-__all__ = ['URLUtils', 'ContentFilter']
+__all__ = ["URLUtils", "ContentFilter"]

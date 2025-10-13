@@ -2,10 +2,10 @@
 Crawl state persistence for resuming interrupted crawls.
 """
 
-from typing import Dict, Any, Optional, List
-from pathlib import Path
 import json
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 class CrawlState:
@@ -31,11 +31,11 @@ class CrawlState:
             state = {}
 
         # Add timestamp if not present
-        if 'timestamp' not in state:
-            state['timestamp'] = datetime.now().isoformat()
+        if "timestamp" not in state:
+            state["timestamp"] = datetime.now().isoformat()
 
         # Write to file
-        with open(self.state_file, 'w', encoding='utf-8') as f:
+        with open(self.state_file, "w", encoding="utf-8") as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
 
     def load_state(self) -> Optional[Dict[str, Any]]:
@@ -44,7 +44,7 @@ class CrawlState:
             return None
 
         try:
-            with open(self.state_file, 'r', encoding='utf-8') as f:
+            with open(self.state_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
             return None
@@ -68,12 +68,12 @@ class CrawlState:
 
         # Add checkpoint metadata
         checkpoint_data = state.copy()
-        checkpoint_data['checkpoint_id'] = checkpoint_id
-        checkpoint_data['checkpoint_timestamp'] = datetime.now().isoformat()
+        checkpoint_data["checkpoint_id"] = checkpoint_id
+        checkpoint_data["checkpoint_timestamp"] = datetime.now().isoformat()
 
         # Save checkpoint file
         checkpoint_file = self._get_checkpoint_path(checkpoint_id)
-        with open(checkpoint_file, 'w', encoding='utf-8') as f:
+        with open(checkpoint_file, "w", encoding="utf-8") as f:
             json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
 
         return checkpoint_id
@@ -86,28 +86,32 @@ class CrawlState:
         checkpoints = []
 
         # Find all checkpoint files
-        for checkpoint_file in self.checkpoint_dir.glob('checkpoint_*.json'):
+        for checkpoint_file in self.checkpoint_dir.glob("checkpoint_*.json"):
             try:
-                with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                with open(checkpoint_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
 
                 # Extract metadata
                 checkpoint_info = {
-                    'checkpoint_id': data.get('checkpoint_id', checkpoint_file.stem),
-                    'timestamp': data.get('checkpoint_timestamp', ''),
-                    'pages_crawled': data.get('pages_crawled', 0),
-                    'file_path': str(checkpoint_file)
+                    "checkpoint_id": data.get(
+                        "checkpoint_id", checkpoint_file.stem
+                    ),
+                    "timestamp": data.get("checkpoint_timestamp", ""),
+                    "pages_crawled": data.get("pages_crawled", 0),
+                    "file_path": str(checkpoint_file),
                 }
                 checkpoints.append(checkpoint_info)
             except (json.JSONDecodeError, FileNotFoundError):
                 continue
 
         # Sort by timestamp (most recent first)
-        checkpoints.sort(key=lambda x: x['timestamp'], reverse=True)
+        checkpoints.sort(key=lambda x: x["timestamp"], reverse=True)
 
         return checkpoints
 
-    def restore_from_checkpoint(self, checkpoint_id: str) -> Optional[Dict[str, Any]]:
+    def restore_from_checkpoint(
+            self, checkpoint_id: str
+    ) -> Optional[Dict[str, Any]]:
         """Restore state from specific checkpoint."""
         if not checkpoint_id:
             return None
@@ -118,7 +122,7 @@ class CrawlState:
             return None
 
         try:
-            with open(checkpoint_file, 'r', encoding='utf-8') as f:
+            with open(checkpoint_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
             return None

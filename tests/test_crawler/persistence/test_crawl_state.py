@@ -2,12 +2,13 @@
 Tests for CrawlState class.
 """
 
-import pytest
-from pathlib import Path
-import tempfile
-import shutil
 import json
+import shutil
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
+
+import pytest
 
 from src.crawler.persistence.crawl_state import CrawlState
 
@@ -30,8 +31,8 @@ class TestCrawlStateInit:
         crawl_state = CrawlState(temp_project_dir)
 
         assert crawl_state.project_path == temp_project_dir
-        assert hasattr(crawl_state, 'state_file')
-        assert hasattr(crawl_state, 'checkpoint_dir')
+        assert hasattr(crawl_state, "state_file")
+        assert hasattr(crawl_state, "checkpoint_dir")
 
     def test_init_creates_state_directory(self, temp_project_dir):
         """Test that initialization creates crawl_state directory."""
@@ -69,15 +70,12 @@ class TestCrawlStateSaving:
     def sample_state_data(self):
         """Sample crawl state data for testing."""
         return {
-            'session_id': 'test_session_123',
-            'start_time': datetime.now(timezone.utc).isoformat(),
-            'pages_crawled': 45,
-            'pages_attempted': 50,
-            'errors': 3,
-            'statistics': {
-                'characters_found': 25,
-                'total_links_discovered': 342
-            }
+            "session_id": "test_session_123",
+            "start_time": datetime.now(timezone.utc).isoformat(),
+            "pages_crawled": 45,
+            "pages_attempted": 50,
+            "errors": 3,
+            "statistics": {"characters_found": 25, "total_links_discovered": 342},
         }
 
     def test_save_state_creates_file(self, crawl_state, sample_state_data):
@@ -91,26 +89,26 @@ class TestCrawlStateSaving:
         crawl_state.save_state(sample_state_data)
 
         # Read the file directly
-        with open(crawl_state.state_file, 'r', encoding='utf-8') as f:
+        with open(crawl_state.state_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
 
-        assert saved_data['session_id'] == sample_state_data['session_id']
-        assert saved_data['pages_crawled'] == sample_state_data['pages_crawled']
-        assert saved_data['statistics']['characters_found'] == 25
+        assert saved_data["session_id"] == sample_state_data["session_id"]
+        assert saved_data["pages_crawled"] == sample_state_data["pages_crawled"]
+        assert saved_data["statistics"]["characters_found"] == 25
 
     def test_save_state_adds_timestamp(self, crawl_state, sample_state_data):
         """Test that saving adds timestamp if not present."""
         # Don't include timestamp in input data
         state_without_timestamp = sample_state_data.copy()
-        state_without_timestamp.pop('timestamp', None)
+        state_without_timestamp.pop("timestamp", None)
 
         crawl_state.save_state(state_without_timestamp)
 
         # Load and verify timestamp was added
-        with open(crawl_state.state_file, 'r', encoding='utf-8') as f:
+        with open(crawl_state.state_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
 
-        assert 'timestamp' in saved_data
+        assert "timestamp" in saved_data
 
     def test_save_state_overwrites_previous(self, crawl_state, sample_state_data):
         """Test that saving state overwrites previous state."""
@@ -119,14 +117,14 @@ class TestCrawlStateSaving:
 
         # Save updated state
         updated_state = sample_state_data.copy()
-        updated_state['pages_crawled'] = 100
+        updated_state["pages_crawled"] = 100
         crawl_state.save_state(updated_state)
 
         # Load and verify it's the updated version
-        with open(crawl_state.state_file, 'r', encoding='utf-8') as f:
+        with open(crawl_state.state_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
 
-        assert saved_data['pages_crawled'] == 100
+        assert saved_data["pages_crawled"] == 100
 
     def test_save_empty_state(self, crawl_state):
         """Test saving empty state dictionary."""
@@ -134,11 +132,11 @@ class TestCrawlStateSaving:
 
         assert crawl_state.state_file.exists()
 
-        with open(crawl_state.state_file, 'r', encoding='utf-8') as f:
+        with open(crawl_state.state_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
 
         # Should at least have timestamp
-        assert 'timestamp' in saved_data
+        assert "timestamp" in saved_data
 
 
 class TestCrawlStateLoading:
@@ -159,15 +157,15 @@ class TestCrawlStateLoading:
     def test_load_existing_state(self, crawl_state):
         """Test loading existing crawl state."""
         # Save a state first
-        test_state = {'session_id': 'test123', 'pages_crawled': 50}
+        test_state = {"session_id": "test123", "pages_crawled": 50}
         crawl_state.save_state(test_state)
 
         # Load it back
         loaded_state = crawl_state.load_state()
 
         assert loaded_state is not None
-        assert loaded_state['session_id'] == 'test123'
-        assert loaded_state['pages_crawled'] == 50
+        assert loaded_state["session_id"] == "test123"
+        assert loaded_state["pages_crawled"] == 50
 
     def test_load_state_no_file_exists(self, crawl_state):
         """Test loading when no state file exists."""
@@ -179,7 +177,7 @@ class TestCrawlStateLoading:
         """Test handling corrupted state file."""
         # Create corrupted file
         crawl_state.state_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(crawl_state.state_file, 'w', encoding='utf-8') as f:
+        with open(crawl_state.state_file, "w", encoding="utf-8") as f:
             f.write("{ invalid json content }")
 
         loaded_state = crawl_state.load_state()
@@ -189,7 +187,7 @@ class TestCrawlStateLoading:
 
     def test_has_saved_state_true(self, crawl_state):
         """Test has_saved_state returns True when state exists."""
-        crawl_state.save_state({'test': 'data'})
+        crawl_state.save_state({"test": "data"})
 
         assert crawl_state.has_saved_state() is True
 
@@ -215,7 +213,7 @@ class TestCrawlStateCheckpointing:
 
     def test_create_checkpoint(self, crawl_state):
         """Test creating state checkpoint."""
-        test_state = {'pages_crawled': 100, 'session_id': 'test'}
+        test_state = {"pages_crawled": 100, "session_id": "test"}
 
         checkpoint_id = crawl_state.create_checkpoint(test_state)
 
@@ -225,12 +223,12 @@ class TestCrawlStateCheckpointing:
 
     def test_checkpoint_creates_file(self, crawl_state):
         """Test that checkpoint creates a file."""
-        test_state = {'pages_crawled': 100}
+        test_state = {"pages_crawled": 100}
 
         checkpoint_id = crawl_state.create_checkpoint(test_state)
 
         # Verify checkpoint file exists
-        checkpoint_files = list(crawl_state.checkpoint_dir.glob('*.json'))
+        checkpoint_files = list(crawl_state.checkpoint_dir.glob("*.json"))
         assert len(checkpoint_files) > 0
 
     def test_list_checkpoints_empty(self, crawl_state):
@@ -243,21 +241,21 @@ class TestCrawlStateCheckpointing:
     def test_list_checkpoints_with_data(self, crawl_state):
         """Test listing checkpoints after creating some."""
         # Create multiple checkpoints
-        crawl_state.create_checkpoint({'pages': 10})
-        crawl_state.create_checkpoint({'pages': 20})
-        crawl_state.create_checkpoint({'pages': 30})
+        crawl_state.create_checkpoint({"pages": 10})
+        crawl_state.create_checkpoint({"pages": 20})
+        crawl_state.create_checkpoint({"pages": 30})
 
         checkpoints = crawl_state.list_checkpoints()
 
         assert len(checkpoints) == 3
         # Should be sorted by timestamp (most recent first)
         assert isinstance(checkpoints[0], dict)
-        assert 'checkpoint_id' in checkpoints[0]
-        assert 'timestamp' in checkpoints[0]
+        assert "checkpoint_id" in checkpoints[0]
+        assert "timestamp" in checkpoints[0]
 
     def test_restore_from_checkpoint(self, crawl_state):
         """Test restoring state from checkpoint."""
-        test_state = {'pages_crawled': 75, 'session_id': 'checkpoint_test'}
+        test_state = {"pages_crawled": 75, "session_id": "checkpoint_test"}
 
         checkpoint_id = crawl_state.create_checkpoint(test_state)
 
@@ -265,12 +263,12 @@ class TestCrawlStateCheckpointing:
         restored_state = crawl_state.restore_from_checkpoint(checkpoint_id)
 
         assert restored_state is not None
-        assert restored_state['pages_crawled'] == 75
-        assert restored_state['session_id'] == 'checkpoint_test'
+        assert restored_state["pages_crawled"] == 75
+        assert restored_state["session_id"] == "checkpoint_test"
 
     def test_restore_from_nonexistent_checkpoint(self, crawl_state):
         """Test restoring from checkpoint that doesn't exist."""
-        restored_state = crawl_state.restore_from_checkpoint('nonexistent_id')
+        restored_state = crawl_state.restore_from_checkpoint("nonexistent_id")
 
         assert restored_state is None
 
@@ -294,39 +292,36 @@ class TestCrawlStateStatistics:
         """Test updating crawl statistics."""
         # Save initial state
         initial_state = {
-            'session_id': 'stats_test',
-            'pages_crawled': 10,
-            'statistics': {'characters_found': 5}
+            "session_id": "stats_test",
+            "pages_crawled": 10,
+            "statistics": {"characters_found": 5},
         }
         crawl_state.save_state(initial_state)
 
         # Update statistics
-        new_stats = {
-            'pages_crawled': 20,
-            'statistics': {'characters_found': 15}
-        }
+        new_stats = {"pages_crawled": 20, "statistics": {"characters_found": 15}}
         crawl_state.update_statistics(new_stats)
 
         # Load and verify update
         loaded_state = crawl_state.load_state()
-        assert loaded_state['pages_crawled'] == 20
-        assert loaded_state['statistics']['characters_found'] == 15
+        assert loaded_state["pages_crawled"] == 20
+        assert loaded_state["statistics"]["characters_found"] == 15
 
     def test_get_crawl_session_info(self, crawl_state):
         """Test getting crawl session metadata."""
         # Save state with session info
         state = {
-            'session_id': 'session123',
-            'start_time': '2024-01-15T10:00:00Z',
-            'pages_crawled': 50
+            "session_id": "session123",
+            "start_time": "2024-01-15T10:00:00Z",
+            "pages_crawled": 50,
         }
         crawl_state.save_state(state)
 
         session_info = crawl_state.get_crawl_session_info()
 
         assert session_info is not None
-        assert 'session_id' in session_info
-        assert session_info['session_id'] == 'session123'
+        assert "session_id" in session_info
+        assert session_info["session_id"] == "session123"
 
     def test_get_crawl_session_info_no_state(self, crawl_state):
         """Test getting session info when no state exists."""
@@ -354,7 +349,7 @@ class TestCrawlStateCleanup:
     def test_clear_state(self, crawl_state):
         """Test clearing saved state."""
         # Save a state
-        crawl_state.save_state({'test': 'data'})
+        crawl_state.save_state({"test": "data"})
         assert crawl_state.has_saved_state() is True
 
         # Clear it
@@ -372,7 +367,7 @@ class TestCrawlStateCleanup:
 
     def test_clear_state_removes_file(self, crawl_state):
         """Test that clear_state removes the state file."""
-        crawl_state.save_state({'test': 'data'})
+        crawl_state.save_state({"test": "data"})
         assert crawl_state.state_file.exists()
 
         crawl_state.clear_state()

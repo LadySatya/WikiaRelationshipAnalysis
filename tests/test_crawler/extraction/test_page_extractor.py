@@ -2,9 +2,10 @@
 Tests for PageExtractor class - focused on link extraction filtering.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
 from bs4 import BeautifulSoup
-from unittest.mock import Mock, patch
 
 from src.crawler.extraction.page_extractor import PageExtractor
 
@@ -22,7 +23,7 @@ class TestPageExtractorLinkFiltering:
 
     def test_extract_links_filters_same_wikia_domain_only(self, page_extractor):
         """Test that extract_links only returns links from same wikia domain."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="/wiki/Character_A">Character A</a>
@@ -32,30 +33,30 @@ class TestPageExtractorLinkFiltering:
             <a href="https://community.fandom.com/wiki/Help">Fandom Help</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://avatar.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
 
         # Should only include avatar.fandom.com links
-        assert all('avatar.fandom.com' in link for link in links)
+        assert all("avatar.fandom.com" in link for link in links)
 
         # Should have 2 links (relative and absolute from same wiki)
         assert len(links) == 2
 
         # Should NOT include other wikis
-        assert not any('naruto.fandom.com' in link for link in links)
+        assert not any("naruto.fandom.com" in link for link in links)
 
         # Should NOT include external sites
-        assert not any('twitter.com' in link for link in links)
+        assert not any("twitter.com" in link for link in links)
 
         # Should NOT include meta-platform domains
-        assert not any('community.fandom.com' in link for link in links)
+        assert not any("community.fandom.com" in link for link in links)
 
     def test_extract_links_includes_relative_urls(self, page_extractor):
         """Test that relative URLs are converted to absolute and included."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="/wiki/Page1">Page 1</a>
@@ -63,24 +64,24 @@ class TestPageExtractorLinkFiltering:
             <a href="/wiki/Category:Characters">Characters Category</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://buffy.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
 
         # All links should be absolute
-        assert all(link.startswith('https://') for link in links)
+        assert all(link.startswith("https://") for link in links)
 
         # All should be from buffy.fandom.com
-        assert all('buffy.fandom.com' in link for link in links)
+        assert all("buffy.fandom.com" in link for link in links)
 
         # Should have 3 links
         assert len(links) == 3
 
     def test_extract_links_excludes_fragments(self, page_extractor):
         """Test that fragment-only links are excluded."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="#section1">Section 1</a>
@@ -88,19 +89,19 @@ class TestPageExtractorLinkFiltering:
             <a href="/wiki/RealPage">Real Page</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://avatar.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
 
         # Should only have 1 link (the real page, not fragments)
         assert len(links) == 1
-        assert '/wiki/RealPage' in links[0]
+        assert "/wiki/RealPage" in links[0]
 
     def test_extract_links_excludes_external_wikis(self, page_extractor):
         """Test that links to different wikis are excluded."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="https://buffy.fandom.com/wiki/Buffy">Buffy (same wiki)</a>
@@ -108,19 +109,19 @@ class TestPageExtractorLinkFiltering:
             <a href="https://harrypotter.fandom.com/wiki/Harry">Harry (different wiki)</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://buffy.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
 
         # Should only have 1 link from buffy wiki
         assert len(links) == 1
-        assert 'buffy.fandom.com' in links[0]
+        assert "buffy.fandom.com" in links[0]
 
     def test_extract_links_excludes_fandom_meta_domains(self, page_extractor):
         """Test that Fandom meta-platform domains are excluded."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="https://avatar.fandom.com/wiki/Aang">Aang</a>
@@ -130,24 +131,29 @@ class TestPageExtractorLinkFiltering:
             <a href="https://fandom.zendesk.com/help">Help</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://avatar.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
 
         # Should only have 1 link (the avatar wiki link)
         assert len(links) == 1
-        assert 'avatar.fandom.com' in links[0]
+        assert "avatar.fandom.com" in links[0]
 
         # Should NOT include any meta domains
-        meta_domains = ['community.fandom.com', 'about.fandom.com', 'auth.fandom.com', 'fandom.zendesk.com']
+        meta_domains = [
+            "community.fandom.com",
+            "about.fandom.com",
+            "auth.fandom.com",
+            "fandom.zendesk.com",
+        ]
         for link in links:
             assert not any(meta in link for meta in meta_domains)
 
     def test_extract_links_removes_duplicates(self, page_extractor):
         """Test that duplicate links are removed."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="/wiki/Aang">Aang 1</a>
@@ -156,8 +162,8 @@ class TestPageExtractorLinkFiltering:
             <a href="/wiki/Katara">Katara</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://avatar.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
@@ -166,7 +172,7 @@ class TestPageExtractorLinkFiltering:
         assert len(links) == 2
 
         # Should have one link with Aang
-        aang_links = [link for link in links if 'Aang' in link]
+        aang_links = [link for link in links if "Aang" in link]
         assert len(aang_links) == 1
 
     def test_extract_links_handles_empty_soup(self, page_extractor):
@@ -179,14 +185,14 @@ class TestPageExtractorLinkFiltering:
 
     def test_extract_links_handles_no_links(self, page_extractor):
         """Test page with no links returns empty list."""
-        html = '''
+        html = """
         <html>
         <body>
             <p>This page has no links.</p>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://avatar.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
@@ -195,7 +201,7 @@ class TestPageExtractorLinkFiltering:
 
     def test_extract_links_handles_mixed_link_formats(self, page_extractor):
         """Test extraction with various URL formats."""
-        html = '''
+        html = """
         <html>
         <body>
             <a href="/wiki/Page1">Relative path</a>
@@ -203,8 +209,8 @@ class TestPageExtractorLinkFiltering:
             <a href="//avatar.fandom.com/wiki/Page3">Protocol-relative</a>
         </body>
         </html>
-        '''
-        soup = BeautifulSoup(html, 'html.parser')
+        """
+        soup = BeautifulSoup(html, "html.parser")
         base_url = "https://avatar.fandom.com/wiki/Main_Page"
 
         links = page_extractor.extract_links(soup, base_url)
@@ -213,7 +219,7 @@ class TestPageExtractorLinkFiltering:
         assert len(links) == 3
 
         # All should be absolute URLs
-        assert all(link.startswith('https://') for link in links)
+        assert all(link.startswith("https://") for link in links)
 
 
 class TestPageExtractorInit:
@@ -224,19 +230,19 @@ class TestPageExtractorInit:
         extractor = PageExtractor()
 
         assert extractor.config is not None
-        assert 'title_selectors' in extractor.config
-        assert 'content_selectors' in extractor.config
-        assert 'ignore_selectors' in extractor.config
+        assert "title_selectors" in extractor.config
+        assert "content_selectors" in extractor.config
+        assert "ignore_selectors" in extractor.config
 
     def test_init_with_custom_config(self):
         """Test initialization with custom configuration."""
         custom_config = {
-            'title_selectors': ['.custom-title'],
-            'min_content_length': 100
+            "title_selectors": [".custom-title"],
+            "min_content_length": 100,
         }
 
         extractor = PageExtractor(config=custom_config)
 
         assert extractor.config == custom_config
-        assert extractor.config['title_selectors'] == ['.custom-title']
-        assert extractor.config['min_content_length'] == 100
+        assert extractor.config["title_selectors"] == [".custom-title"]
+        assert extractor.config["min_content_length"] == 100
