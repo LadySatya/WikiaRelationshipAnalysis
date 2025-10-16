@@ -60,7 +60,24 @@ dev = [
     "isort>=5.12.0",
 ]
 
-# Future Phase 2-3: LLM Analysis dependencies
+# Phase 2: RAG (Retrieval Augmented Generation) dependencies
+rag = [
+    # Vector database for semantic search (required)
+    "chromadb>=0.4.0",
+
+    # Embedding generation - Using local models for prototyping
+    # NOTE: Interface-based design to swap in Voyage AI later for production
+    # (voyageai>=0.2.0 recommended for production - better quality, ~$0.02 per 100 pages)
+    "sentence-transformers>=2.2.0",
+
+    # LLM API client
+    "anthropic>=0.25.0",
+
+    # Token counting for cost tracking
+    "tiktoken>=0.5.0",
+]
+
+# Future Phase 2-3: LLM Analysis dependencies (legacy - merged into rag group)
 llm = [
     "openai>=1.0.0",
     "anthropic>=0.25.0",
@@ -84,7 +101,7 @@ api = [
 
 # All optional dependencies combined
 all = [
-    "wikia-analyzer[dev,llm,viz,api]",
+    "wikia-analyzer[dev,rag,llm,viz,api]",
 ]
 
 [project.scripts]

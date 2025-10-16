@@ -144,13 +144,19 @@ Index ready for semantic search
 
 ### Key Components
 
-**ContentChunker**: Splits pages into ~500 character chunks with overlap for embedding
-**EmbeddingGenerator**: Generates vector embeddings (Voyage AI or local models recommended)
-**VectorStore**: ChromaDB-based persistent vector database with metadata filtering
-**RAGRetriever**: Semantic search to find relevant chunks for queries
-**QueryEngine**: Combines retrieval + LLM (Claude) to answer questions about the wiki
-**CharacterExtractor**: Discovers all characters using multi-query RAG approach
-**ProfileBuilder**: Builds comprehensive character profiles via targeted RAG queries
+**ContentChunker** ✅: Splits pages into ~500 character chunks with overlap for embedding
+**ProcessorConfig** ✅: Centralized YAML config loader (singleton pattern) for all processor components
+**EmbeddingGenerator** ✅: Generates vector embeddings using local models (sentence-transformers) or Voyage AI
+  - Supports both local (all-MiniLM-L6-v2) and cloud (voyage-3-lite) models
+  - Lazy loading for efficiency
+  - Dynamic dimension detection (no hardcoded magic numbers)
+  - Batch processing for performance
+  - Configurable via `config/processor_config.yaml`
+**VectorStore** 📋: ChromaDB-based persistent vector database with metadata filtering (NEXT)
+**RAGRetriever** 📋: Semantic search to find relevant chunks for queries
+**QueryEngine** 📋: Combines retrieval + LLM (Claude) to answer questions about the wiki
+**CharacterExtractor** 📋: Discovers all characters using multi-query RAG approach
+**ProfileBuilder** 📋: Builds comprehensive character profiles via targeted RAG queries
 
 ### Output Structure
 
@@ -324,18 +330,81 @@ Each module will be independently testable and configurable.
 - `src/crawler/utils/` - URL utils, content filters (73% coverage)
 - **End-to-end tested**: Successfully crawls real wikia sites with rate limiting
 
+🔄 **Phase 2 - RAG Processor (IN PROGRESS)**:
+- ✅ `src/processor/core/content_chunker.py` - Splits pages into chunks (COMPLETE)
+- ✅ `src/processor/config.py` - Centralized config management (COMPLETE)
+- ✅ `src/processor/rag/embeddings.py` - Generate embeddings from text (COMPLETE, 20 tests, 91% coverage)
+- 📋 `src/processor/rag/vector_store.py` - ChromaDB integration (NEXT)
+- 📋 `src/processor/rag/retriever.py` - Semantic search (TODO)
+- 📋 `src/processor/rag/query_engine.py` - RAG query interface (TODO)
+- 📋 `src/processor/llm/llm_client.py` - LLM API wrapper (TODO)
+
 🔄 **Implementation Pattern Established**:
 - Comprehensive test suites with 5-8 test classes per component
 - Error handling and validation tests
 - Async/await testing patterns for I/O operations
-- Mock usage for external dependencies
+- Mock usage for external dependencies (no real model downloads or API calls)
 - Parameterized tests for multiple scenarios
+- Centralized config management via `src/processor/config.py`
 
 ### TDD Enforcement
 - **Before Any Coding**: Always write tests first, even for small changes
 - **No Untested Code**: Implementation without corresponding tests is prohibited
 - **Test Maintenance**: Update tests when requirements change, before updating implementation
 - **Code Reviews**: All PRs must include tests and demonstrate TDD was followed
+
+### Test Failure Investigation Protocol (CRITICAL)
+
+**NEVER work around test failures without understanding the root cause. Test failures are signals of bugs.**
+
+When encountering test failures (timeouts, assertion errors, exceptions):
+
+1. **STOP and INVESTIGATE FIRST**:
+   - Read the full error message and stack trace carefully
+   - Identify the exact line and condition that failed
+   - Check if the failure is in test code or production code
+   - Look for patterns (e.g., does it fail consistently? only certain tests?)
+
+2. **DIAGNOSE before FIXING**:
+   - If timeout: Check if it's an infinite loop, missing await, or actual performance issue
+   - If assertion error: Verify the test expectation is correct AND the implementation logic
+   - If exception: Trace back to the root cause, not just the symptom
+   - Run the specific failing test in isolation to rule out test interdependencies
+
+3. **PROHIBITED Shortcuts**:
+   - ❌ Increasing timeout values without understanding why tests are slow
+   - ❌ Commenting out failing tests "temporarily"
+   - ❌ Adding try/except blocks to hide exceptions
+   - ❌ Changing test assertions to match broken behavior
+   - ❌ Assuming "it's just the test environment" without verification
+
+4. **REQUIRED Actions**:
+   - ✅ Reproduce the failure reliably
+   - ✅ Understand the exact cause (infinite loop, wrong logic, bad test, etc.)
+   - ✅ Fix the root cause in production code OR fix incorrect test expectations
+   - ✅ Verify the fix resolves the issue without breaking other tests
+   - ✅ Add regression tests if the bug wasn't caught by existing tests
+
+5. **Example - Test Timeout Investigation**:
+   ```bash
+   # Test times out after 10 seconds
+   # BAD: Increase timeout to 60 seconds
+   # GOOD: Investigate why it takes >10 seconds
+
+   # Add debug output to find where it hangs
+   # Check for infinite loops (while conditions that never become false)
+   # Check for missing progress in loops (start position not advancing)
+   # Verify async operations are properly awaited
+   # Profile the code to find the bottleneck
+   ```
+
+6. **When Tests Reveal Bugs**:
+   - Tests timing out often indicate **infinite loops or missing termination conditions**
+   - Tests failing intermittently often indicate **race conditions or state pollution**
+   - Tests always failing indicate **incorrect implementation or incorrect test expectations**
+   - **The test is usually right** - investigate implementation first
+
+**Remember**: A test failure is a gift. It found a bug before production did. Respect it by investigating thoroughly.
 
 ### Testing Commands (Required Before Commits)
 

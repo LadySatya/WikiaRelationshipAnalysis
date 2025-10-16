@@ -1,0 +1,33 @@
+# Phase 2 RAG Processor Configuration
+
+processor:
+  rag:
+    # Chunking settings
+    chunk_size: 500              # characters per chunk
+    chunk_overlap: 50            # overlap between chunks for context
+
+    # Embedding settings
+    embedding_provider: "local"  # "local" (sentence-transformers) or "voyage" (Voyage AI)
+    local_model: "all-MiniLM-L6-v2"  # Fast, 384 dimensions, good for prototyping
+    voyage_model: "voyage-3-lite"  # Fast and cheap embeddings (requires VOYAGE_API_KEY)
+
+    # Vector store settings
+    vector_store_type: "chromadb"
+    vector_store_path: "data/vector_stores"
+
+    # Retrieval settings
+    default_k: 10                # number of chunks to retrieve per query
+
+    # LLM settings
+    llm_provider: "anthropic"
+    llm_model: "claude-3-5-haiku-20241022"  # Fast and cheap for RAG
+
+  # Character discovery settings
+  character_discovery:
+    min_mentions: 3              # minimum chunks mentioning character to be discovered
+    confidence_threshold: 0.7    # minimum confidence for character extraction
+
+  # Cost tracking
+  cost_tracking:
+    enabled: true
+    warn_threshold_usd: 5.0      # warn if costs exceed this amount
