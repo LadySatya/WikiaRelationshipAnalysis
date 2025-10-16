@@ -338,7 +338,7 @@ class TestVectorStoreSimilaritySearch:
 
             # Filter to only character pages
             filter_dict = {"namespace": "Character"}
-            results = store.similarity_search(query_embedding, k=5, filter=filter_dict)
+            results = store.similarity_search(query_embedding, k=5, metadata_filter=filter_dict)
 
             # Should pass filter to ChromaDB
             call_kwargs = mock_collection.query.call_args[1]
@@ -430,8 +430,8 @@ class TestVectorStoreCollectionManagement:
             # Should delete and recreate collection
             mock_client.delete_collection.assert_called_once()
 
-    def test_collection_exists_true(self):
-        """VectorStore should detect if collection exists and has documents."""
+    def test_has_documents_true(self):
+        """VectorStore should detect if collection has documents."""
         from src.processor.rag.vector_store import VectorStore
 
         with patch("chromadb.PersistentClient") as mock_client_class:
@@ -443,9 +443,9 @@ class TestVectorStoreCollectionManagement:
 
             store = VectorStore(project_name="test_wiki")
 
-            assert store.collection_exists() is True
+            assert store.has_documents() is True
 
-    def test_collection_exists_false_empty(self):
+    def test_has_documents_false_empty(self):
         """VectorStore should return False for empty collections."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -458,7 +458,7 @@ class TestVectorStoreCollectionManagement:
 
             store = VectorStore(project_name="test_wiki")
 
-            assert store.collection_exists() is False
+            assert store.has_documents() is False
 
 
 class TestVectorStoreEdgeCases:
@@ -552,3 +552,299 @@ class TestVectorStoreEdgeCases:
 
             with pytest.raises(Exception, match="Failed to initialize ChromaDB"):
                 VectorStore(project_name="test_wiki")
+
+
+class TestVectorStoreSecurityValidation:
+    """Test security vulnerabilities and input validation (path traversal, injection attacks)."""
+
+    def test_path_traversal_attack_parent_directory(self):
+        """VectorStore should reject path traversal attempts with ../"""
+        from src.processor.rag.vector_store import VectorStore
+
+        malicious_names = [
+            "../etc/passwd",
+            "../../sensitive",
+            "../../../system",
+            "normal/../../../etc",
+        ]
+
+        for name in malicious_names:
+            with pytest.raises(ValueError, match="Invalid project_name.*Only alphanumeric"):
+                VectorStore(project_name=name)
+
+    def test_path_traversal_attack_absolute_paths(self):
+        """VectorStore should reject absolute path attempts."""
+        from src.processor.rag.vector_store import VectorStore
+
+        malicious_names = [
+            "/etc/passwd",
+            "C:\\Windows\\System32",
+            "\\\\network\\share",
+        ]
+
+        for name in malicious_names:
+            with pytest.raises(ValueError, match="Invalid project_name.*Only alphanumeric"):
+                VectorStore(project_name=name)
+
+    def test_special_characters_in_project_name(self):
+        """VectorStore should reject special characters in project names."""
+        from src.processor.rag.vector_store import VectorStore
+
+        invalid_names = [
+            "test/wiki",  # forward slash
+            "test\\wiki",  # backslash
+            "test..",  # consecutive periods
+            "test@wiki",  # at symbol
+            "test wiki",  # space
+            "test;rm -rf",  # semicolon (command injection attempt)
+            "test$(whoami)",  # command substitution
+            "test`whoami`",  # backticks
+        ]
+
+        for name in invalid_names:
+            with pytest.raises(ValueError, match="Invalid project_name.*Only alphanumeric"):
+                VectorStore(project_name=name)
+
+    def test_project_name_too_short(self):
+        """VectorStore should reject project names shorter than 3 characters."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with pytest.raises(ValueError, match="must be at least 3 characters"):
+            VectorStore(project_name="ab")
+
+        with pytest.raises(ValueError, match="must be at least 3 characters"):
+            VectorStore(project_name="x")
+
+    def test_project_name_too_long(self):
+        """VectorStore should reject project names longer than 255 characters."""
+        from src.processor.rag.vector_store import VectorStore
+
+        long_name = "a" * 256
+
+        with pytest.raises(ValueError, match="too long.*max 255"):
+            VectorStore(project_name=long_name)
+
+    def test_invalid_embedding_type_string(self):
+        """VectorStore should reject non-array embeddings (string)."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": "not an array!",  # Invalid type
+                    "metadata": {}
+                }
+            ]
+
+            with pytest.raises(ValueError, match="embedding must be numpy array or list"):
+                store.add_documents(chunks)
+
+    def test_invalid_embedding_type_dict(self):
+        """VectorStore should reject non-array embeddings (dict)."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": {"dim1": 0.1, "dim2": 0.2},  # Dict instead of array
+                    "metadata": {}
+                }
+            ]
+
+            with pytest.raises(ValueError, match="embedding must be numpy array or list"):
+                store.add_documents(chunks)
+
+    def test_embedding_with_nan_values(self):
+        """VectorStore should reject embeddings containing NaN."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": np.array([0.1, 0.2, float('nan')]),  # Contains NaN
+                    "metadata": {}
+                }
+            ]
+
+            with pytest.raises(ValueError, match="contains NaN or Inf"):
+                store.add_documents(chunks)
+
+    def test_embedding_with_inf_values(self):
+        """VectorStore should reject embeddings containing Inf."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": np.array([0.1, float('inf'), 0.3]),  # Contains Inf
+                    "metadata": {}
+                }
+            ]
+
+            with pytest.raises(ValueError, match="contains NaN or Inf"):
+                store.add_documents(chunks)
+
+    def test_embedding_dimension_mismatch(self):
+        """VectorStore should reject embeddings with inconsistent dimensions."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "First doc",
+                    "embedding": np.array([0.1, 0.2, 0.3]),  # 3 dimensions
+                    "metadata": {}
+                },
+                {
+                    "text": "Second doc",
+                    "embedding": np.array([0.1, 0.2, 0.3, 0.4]),  # 4 dimensions - mismatch!
+                    "metadata": {}
+                }
+            ]
+
+            with pytest.raises(ValueError, match="dimension mismatch.*Expected 3, got 4"):
+                store.add_documents(chunks)
+
+    def test_empty_embedding_array(self):
+        """VectorStore should reject empty embeddings."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": np.array([]),  # Empty array
+                    "metadata": {}
+                }
+            ]
+
+            with pytest.raises(ValueError, match="embedding cannot be empty"):
+                store.add_documents(chunks)
+
+    def test_invalid_metadata_type_numpy_array(self):
+        """VectorStore should reject numpy arrays in metadata."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": np.array([0.1, 0.2, 0.3]),
+                    "metadata": {
+                        "array_field": np.array([1, 2, 3])  # Not allowed!
+                    }
+                }
+            ]
+
+            with pytest.raises(ValueError, match="invalid type.*ndarray.*Only str, int, float, bool"):
+                store.add_documents(chunks)
+
+    def test_invalid_metadata_type_datetime(self):
+        """VectorStore should reject datetime objects in metadata."""
+        from src.processor.rag.vector_store import VectorStore
+        from datetime import datetime
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": np.array([0.1, 0.2, 0.3]),
+                    "metadata": {
+                        "timestamp": datetime.now()  # Not allowed!
+                    }
+                }
+            ]
+
+            with pytest.raises(ValueError, match="invalid type.*datetime.*Only str, int, float, bool"):
+                store.add_documents(chunks)
+
+    def test_valid_primitive_metadata_types(self):
+        """VectorStore should accept valid primitive types in metadata."""
+        from src.processor.rag.vector_store import VectorStore
+
+        with patch("chromadb.PersistentClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_collection = MagicMock()
+            mock_client.get_or_create_collection.return_value = mock_collection
+            mock_client_class.return_value = mock_client
+
+            store = VectorStore(project_name="test_wiki")
+
+            # All primitive types should work
+            chunks = [
+                {
+                    "text": "test",
+                    "embedding": np.array([0.1, 0.2, 0.3]),
+                    "metadata": {
+                        "string_field": "value",
+                        "int_field": 42,
+                        "float_field": 3.14,
+                        "bool_field": True,
+                        "none_field": None
+                    }
+                }
+            ]
+
+            # Should not raise
+            doc_ids = store.add_documents(chunks)
+            assert len(doc_ids) == 1

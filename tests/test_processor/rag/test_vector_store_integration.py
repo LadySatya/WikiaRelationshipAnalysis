@@ -138,7 +138,7 @@ class TestVectorStoreIntegrationBasic:
         results = store.similarity_search(
             query_embedding,
             k=10,
-            filter={"namespace": "Character"}
+            metadata_filter={"namespace": "Character"}
         )
 
         # Should only return Character pages
@@ -163,12 +163,12 @@ class TestVectorStoreIntegrationBasic:
         ]
 
         store.add_documents(chunks)
-        assert store.collection_exists() is True
+        assert store.has_documents() is True
         assert store.get_collection_stats()["count"] == 5
 
         # Clear collection
         store.clear()
-        assert store.collection_exists() is False
+        assert store.has_documents() is False
         assert store.get_collection_stats()["count"] == 0
 
 
@@ -335,4 +335,4 @@ class TestVectorStoreIntegrationEdgeCases:
         )
 
         assert results == []
-        assert store.collection_exists() is False
+        assert store.has_documents() is False

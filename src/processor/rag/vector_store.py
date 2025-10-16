@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 from pathlib import Path
 import uuid
+import re
 
 import chromadb
 from chromadb.config import Settings
@@ -57,11 +58,28 @@ class VectorStore:
             project_name: Name of the wikia project
             persist_directory: Custom persistence directory (default: from config)
         """
-        # Validate project name
+        # Validate and sanitize project name
         if not project_name or not project_name.strip():
             raise ValueError("project_name cannot be empty")
 
-        self.project_name = project_name.strip()
+        project_name = project_name.strip()
+
+        # SECURITY: Prevent path traversal attacks
+        # Only allow alphanumeric, underscore, and hyphen characters
+        if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+            raise ValueError(
+                f"Invalid project_name '{project_name}'. "
+                "Only alphanumeric characters, underscores, and hyphens are allowed."
+            )
+
+        # Validate length (ChromaDB collection names: 3-512 chars)
+        if len(project_name) < 3:
+            raise ValueError("project_name must be at least 3 characters long")
+
+        if len(project_name) > 255:
+            raise ValueError("project_name too long (max 255 characters)")
+
+        self.project_name = project_name
 
         # Load config for default settings
         config = get_config()
@@ -89,6 +107,85 @@ class VectorStore:
             metadata={"project": self.project_name}
         )
 
+    def _validate_embedding(
+        self, embedding: Any, index: int, expected_dim: Optional[int] = None
+    ) -> int:
+        """
+        Validate embedding is correct type and dimension.
+
+        Args:
+            embedding: Embedding to validate
+            index: Chunk index (for error messages)
+            expected_dim: Expected dimension (for consistency check)
+
+        Returns:
+            Dimension of the embedding
+
+        Raises:
+            ValueError: If embedding is invalid
+        """
+        # Convert to numpy if it's a list
+        if isinstance(embedding, list):
+            embedding = np.array(embedding)
+
+        # Validate type
+        if not isinstance(embedding, np.ndarray):
+            raise ValueError(
+                f"Chunk at index {index}: embedding must be numpy array or list, "
+                f"got {type(embedding).__name__}"
+            )
+
+        # Validate not empty
+        if embedding.size == 0:
+            raise ValueError(f"Chunk at index {index}: embedding cannot be empty")
+
+        # Validate 1D array
+        if len(embedding.shape) != 1:
+            raise ValueError(
+                f"Chunk at index {index}: embedding must be 1-dimensional, "
+                f"got shape {embedding.shape}"
+            )
+
+        # Validate no NaN or Inf
+        if not np.isfinite(embedding).all():
+            raise ValueError(
+                f"Chunk at index {index}: embedding contains NaN or Inf values"
+            )
+
+        # Get dimension
+        dim = embedding.shape[0]
+
+        # Validate dimension consistency
+        if expected_dim is not None and dim != expected_dim:
+            raise ValueError(
+                f"Chunk at index {index}: embedding dimension mismatch. "
+                f"Expected {expected_dim}, got {dim}"
+            )
+
+        return dim
+
+    def _validate_metadata(self, metadata: Dict[str, Any], index: int) -> None:
+        """
+        Validate metadata contains only ChromaDB-compatible types.
+
+        ChromaDB only supports primitive types: str, int, float, bool, None
+
+        Args:
+            metadata: Metadata dictionary to validate
+            index: Chunk index (for error messages)
+
+        Raises:
+            ValueError: If metadata contains invalid types
+        """
+        allowed_types = (str, int, float, bool, type(None))
+
+        for key, value in metadata.items():
+            if not isinstance(value, allowed_types):
+                raise ValueError(
+                    f"Chunk at index {index}: metadata field '{key}' has invalid type "
+                    f"{type(value).__name__}. Only str, int, float, bool, and None are allowed."
+                )
+
     def add_documents(self, chunks: List[Dict[str, Any]]) -> List[str]:
         """
         Add documents with embeddings to the vector store.
@@ -111,33 +208,53 @@ class VectorStore:
         if not chunks:
             return []
 
-        # Validate all chunks have embeddings
+        # Validate all chunks and extract components
+        expected_dim = None
+        validated_embeddings = []
+        texts = []
+        metadatas = []
+
         for i, chunk in enumerate(chunks):
+            # Validate chunk has embedding
             if "embedding" not in chunk:
                 raise ValueError(
                     f"Chunk at index {i} missing 'embedding' field"
                 )
 
+            # Validate and get embedding dimension
+            dim = self._validate_embedding(chunk["embedding"], i, expected_dim)
+            if expected_dim is None:
+                expected_dim = dim  # First chunk sets expected dimension
+
+            # Convert embedding to list for ChromaDB
+            embedding = chunk["embedding"]
+            if isinstance(embedding, np.ndarray):
+                embedding = embedding.tolist()
+            validated_embeddings.append(embedding)
+
+            # Extract text
+            texts.append(chunk.get("text", ""))
+
+            # Validate and extract metadata
+            metadata = chunk.get("metadata", {})
+            self._validate_metadata(metadata, i)
+            metadatas.append(metadata)
+
         # Generate unique IDs for each document
         doc_ids = [str(uuid.uuid4()) for _ in chunks]
 
-        # Extract components for ChromaDB
-        texts = [chunk.get("text", "") for chunk in chunks]
-        embeddings = [
-            chunk["embedding"].tolist()
-            if isinstance(chunk["embedding"], np.ndarray)
-            else chunk["embedding"]
-            for chunk in chunks
-        ]
-        metadatas = [chunk.get("metadata", {}) for chunk in chunks]
-
-        # Add to ChromaDB collection
-        self._collection.add(
-            ids=doc_ids,
-            documents=texts,
-            embeddings=embeddings,
-            metadatas=metadatas
-        )
+        # Add to ChromaDB collection with exception handling
+        try:
+            self._collection.add(
+                ids=doc_ids,
+                documents=texts,
+                embeddings=validated_embeddings,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            raise Exception(
+                f"Failed to add documents to ChromaDB collection '{self._collection.name}': {str(e)}"
+            ) from e
 
         return doc_ids
 
@@ -145,7 +262,7 @@ class VectorStore:
         self,
         query_embedding: np.ndarray,
         k: int = 10,
-        filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Search for documents similar to the query embedding.
@@ -153,7 +270,7 @@ class VectorStore:
         Args:
             query_embedding: Query vector to search for
             k: Number of results to return (default: 10)
-            filter: Optional metadata filter dictionary (e.g., {"namespace": "Character"})
+            metadata_filter: Optional metadata filter dictionary (e.g., {"namespace": "Character"})
 
         Returns:
             List of result dictionaries with structure:
@@ -182,11 +299,16 @@ class VectorStore:
         }
 
         # Add metadata filter if provided
-        if filter is not None:
-            query_params["where"] = filter
+        if metadata_filter is not None:
+            query_params["where"] = metadata_filter
 
-        # Query ChromaDB
-        results = self._collection.query(**query_params)
+        # Query ChromaDB with exception handling
+        try:
+            results = self._collection.query(**query_params)
+        except Exception as e:
+            raise Exception(
+                f"Failed to query ChromaDB collection '{self._collection.name}': {str(e)}"
+            ) from e
 
         # Format results into list of dictionaries
         formatted_results = []
@@ -197,6 +319,14 @@ class VectorStore:
         documents = results["documents"][0] if results["documents"] else []
         metadatas = results["metadatas"][0] if results["metadatas"] else []
         distances = results["distances"][0] if results["distances"] else []
+
+        # Validate result arrays have same length
+        if not (len(ids) == len(documents) == len(metadatas) == len(distances)):
+            raise Exception(
+                f"ChromaDB returned mismatched result array lengths: "
+                f"ids={len(ids)}, documents={len(documents)}, "
+                f"metadatas={len(metadatas)}, distances={len(distances)}"
+            )
 
         for doc_id, text, metadata, distance in zip(ids, documents, metadatas, distances):
             formatted_results.append({
@@ -231,22 +361,30 @@ class VectorStore:
         Clear all documents from the collection.
 
         This deletes and recreates the collection, removing all documents.
+
+        Raises:
+            Exception: If ChromaDB operations fail
         """
         collection_name = self._collection.name
         collection_metadata = self._collection.metadata
 
-        # Delete the collection
-        self._client.delete_collection(name=collection_name)
+        try:
+            # Delete the collection
+            self._client.delete_collection(name=collection_name)
 
-        # Recreate empty collection
-        self._collection = self._client.get_or_create_collection(
-            name=collection_name,
-            metadata=collection_metadata
-        )
+            # Recreate empty collection
+            self._collection = self._client.get_or_create_collection(
+                name=collection_name,
+                metadata=collection_metadata
+            )
+        except Exception as e:
+            raise Exception(
+                f"Failed to clear ChromaDB collection '{collection_name}': {str(e)}"
+            ) from e
 
-    def collection_exists(self) -> bool:
+    def has_documents(self) -> bool:
         """
-        Check if the collection exists and has documents.
+        Check if the collection has any documents.
 
         Returns:
             True if collection has at least one document, False otherwise
