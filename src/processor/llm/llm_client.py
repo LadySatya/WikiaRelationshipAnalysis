@@ -4,10 +4,14 @@ LLMClient - Anthropic Claude API wrapper for RAG queries.
 This module provides a simple interface to Claude for text generation in RAG
 workflows. Supports token counting, cost estimation, and conversation context.
 """
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING, cast
 import os
 
 from ..config import get_config
+
+if TYPE_CHECKING:
+    from anthropic import Anthropic
+    from anthropic.types import MessageParam, TextBlock
 
 
 class LLMClient:
@@ -94,7 +98,7 @@ class LLMClient:
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
 
         # Lazy loading - client initialized on first use
-        self._client = None
+        self._client: Optional["Anthropic"] = None
 
         # Token tracking
         self.total_input_tokens = 0
@@ -143,37 +147,46 @@ class LLMClient:
 
         # Initialize client if needed
         self._init_client()
+        assert self._client is not None, "Client should be initialized"
 
-        # Build messages list
-        messages = []
+        # Build messages list with proper typing
+        messages: List["MessageParam"] = []
 
         # Add context if provided
         if context:
-            messages.extend(context)
+            messages.extend(cast(List["MessageParam"], context))
 
         # Add current prompt
-        messages.append({"role": "user", "content": prompt.strip()})
+        messages.append(cast("MessageParam", {"role": "user", "content": prompt.strip()}))
 
-        # Build API call parameters
-        api_params = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-
-        # Add system prompt if provided
-        if system_prompt:
-            api_params["system"] = system_prompt
-
-        # Call Claude API
+        # Call Claude API with explicit parameters (not **kwargs unpacking)
+        # The Anthropic SDK requires explicit named parameters for type safety
         try:
-            response = self._client.messages.create(**api_params)
+            if system_prompt:
+                response = self._client.messages.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    system=system_prompt
+                )
+            else:
+                response = self._client.messages.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
         except Exception as e:
             raise Exception(f"Claude API call failed: {str(e)}") from e
 
         # Extract text from response
-        text = response.content[0].text
+        # We expect TextBlock since we're not using tools/thinking
+        content_block = response.content[0]
+        if hasattr(content_block, "text"):
+            text: str = cast("TextBlock", content_block).text
+        else:
+            raise Exception(f"Unexpected content block type: {type(content_block).__name__}")
 
         # Track token usage
         self.total_input_tokens += response.usage.input_tokens
