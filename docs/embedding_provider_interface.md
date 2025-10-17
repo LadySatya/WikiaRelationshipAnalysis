@@ -1,7 +1,12 @@
 # Embedding Provider Interface Design
 
-**Status**: Design Pattern
+**Status**: Design Document (Historical)
 **Last Updated**: 2025-10-15
+**Implementation Status**: ✅ Core design implemented in `src/processor/rag/embeddings.py`
+
+> **Note**: This was the initial design document. The actual implementation in `EmbeddingGenerator`
+> follows this pattern but may have some differences. See `src/processor/rag/embeddings.py` for the
+> current implementation and `tests/test_processor/rag/test_embeddings.py` for usage examples.
 
 ## Overview
 
