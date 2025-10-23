@@ -1,0 +1,17 @@
+{
+  "url": "https://avatar.fandom.com/wiki/Team_Avatar",
+  "saved_at": "2025-10-22T10:00:00",
+  "content": {
+    "title": "Team Avatar",
+    "url": "https://avatar.fandom.com/wiki/Team_Avatar",
+    "namespace": "Main",
+    "main_content": "Team Avatar is the name of the group consisting of Avatar Korra and her closest friends. The team members include Mako, Bolin, and Asami Sato.",
+    "infobox_data": {
+      "name": "Team Avatar",
+      "type": "Organization",
+      "members": "Korra, Mako, Bolin, Asami Sato"
+    },
+    "links": ["Korra", "Mako", "Bolin", "Asami Sato"],
+    "related_articles": ["Korra", "Pro-bending"]
+  }
+}

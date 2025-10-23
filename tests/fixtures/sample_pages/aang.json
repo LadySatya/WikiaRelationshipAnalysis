@@ -1,0 +1,22 @@
+{
+  "url": "https://avatar.fandom.com/wiki/Aang",
+  "saved_at": "2025-10-22T10:00:00",
+  "content": {
+    "title": "Aang",
+    "url": "https://avatar.fandom.com/wiki/Aang",
+    "namespace": "Character",
+    "main_content": "Aang was an Air Nomad born in 12 BG and the Avatar during the Hundred Year War. Though he was the Avatar and therefore capable of bending all four elements, Aang was initially reluctant to learn.",
+    "infobox_data": {
+      "name": "Aang",
+      "species": "Human",
+      "gender": "Male",
+      "age": "112 (biologically 12)",
+      "nationality": "Air Nomads",
+      "weapon": "Staff",
+      "fighting_style": "Airbending",
+      "love_interest": "Katara"
+    },
+    "links": ["Katara", "Sokka", "Toph", "Zuko"],
+    "related_articles": ["Avatar", "Air Nomads"]
+  }
+}

@@ -81,7 +81,7 @@ flake8 src/                                            # Linting
 - Test fixtures use Naruto and Avatar characters as sample data
 - Output files contain: url, title, main_content, links, infobox_data, namespace, related_articles
 
-## Phase 2: RAG-Based Character Analysis (PLANNED - Next Implementation)
+## Phase 2: RAG-Based Character Analysis (IN PROGRESS)
 
 Phase 2 uses a **Retrieval Augmented Generation (RAG)** approach to analyze the large corpus of crawled wiki data and extract character information and relationships.
 
@@ -152,11 +152,15 @@ Index ready for semantic search
   - Dynamic dimension detection (no hardcoded magic numbers)
   - Batch processing for performance
   - Configurable via `config/processor_config.yaml`
-**VectorStore** 📋: ChromaDB-based persistent vector database with metadata filtering (NEXT)
-**RAGRetriever** 📋: Semantic search to find relevant chunks for queries
-**QueryEngine** 📋: Combines retrieval + LLM (Claude) to answer questions about the wiki
-**CharacterExtractor** 📋: Discovers all characters using multi-query RAG approach
-**ProfileBuilder** 📋: Builds comprehensive character profiles via targeted RAG queries
+**VectorStore** ✅: ChromaDB-based persistent vector database with metadata filtering
+**RAGRetriever** ✅: Semantic search to find relevant chunks for queries
+**QueryEngine** ✅: Combines retrieval + LLM (Claude) to answer questions about the wiki
+**CharacterExtractor** ✅: Discovers characters using page-based classification with duplicate name handling
+  - **Page-Based Discovery**: Classifies each crawled page instead of corpus-wide RAG
+  - **3-Tier Classification**: Metadata (FREE) → Batch LLM (CHEAP) → Content (SELECTIVE)
+  - **Duplicate Name Handling**: Parses disambiguation from titles, filters validation by source URL
+  - **40 Tests**: 32 unit tests + 4 integration tests with real ChromaDB + 4 demo scenarios
+**ProfileBuilder** 📋: Builds comprehensive character profiles via targeted RAG queries (NEXT)
 
 ### Output Structure
 
@@ -265,6 +269,39 @@ pip install -e ".[dev,rag]"  # Installs: anthropic, voyageai, chromadb, tiktoken
 6. ✅ Total cost < $1 for full project processing
 7. ✅ Ready for Phase 3 (relationship graph visualization)
 
+### Duplicate Character Name Handling (IMPLEMENTED ✅)
+
+Wiki pages often have multiple characters with the same name, disambiguated by page titles (e.g., "Bumi (King of Omashu)" vs "Bumi (son of Aang)"). The system handles this using a hybrid approach:
+
+**1. Name Parsing** (`_parse_character_name`):
+- Extracts base name, disambiguation tag, and full name from page titles
+- Regex pattern: `r'^(.+)\s*\((.+?)\)$'`
+- Example: `"Bumi (King of Omashu)"` → base: `"Bumi"`, disambiguation: `"King of Omashu"`, full: `"Bumi (King of Omashu)"`
+
+**2. Standardized Character Entries** (`_create_character_entry`):
+```python
+{
+  "name": "Bumi",                           # Base name for RAG queries
+  "full_name": "Bumi (King of Omashu)",     # Display name
+  "disambiguation": "King of Omashu",        # Disambiguation tag
+  "source_url": "wiki/Bumi_(King)",         # Unique identifier
+  "name_variations": ["Bumi"],
+  "discovered_via": ["metadata"]
+}
+```
+
+**3. URL-Filtered Validation** (`_validate_characters`):
+- Filters RAG chunks by `source_url` to prevent false merging
+- Query "Bumi" returns chunks from BOTH characters → filter by URL → count separately
+- Ensures each character's mentions are counted independently
+
+**Testing**:
+- 32 unit tests (including 8 duplicate name tests)
+- 4 integration tests with real ChromaDB
+- Demo script: `python scripts/demo_duplicate_names.py`
+
+**Cost**: Zero additional LLM calls (parsing is regex-based, filtering is local)
+
 ### Why RAG?
 
 - **Scalability**: Handles thousands of pages efficiently
@@ -278,7 +315,7 @@ pip install -e ".[dev,rag]"  # Installs: anthropic, voyageai, chromadb, tiktoken
 
 The system is designed for 6 modular components:
 1. **Crawler** (Phase 1 - ✅ COMPLETE)
-2. **RAG Processor** (Phase 2 - 📋 PLANNED - see above)
+2. **RAG Processor** (Phase 2 - 🔄 IN PROGRESS - Character discovery with duplicate handling ✅, Profile building 📋)
 3. **Relationship Graph Builder** (Phase 3 - character network construction)
 4. **Graph Analysis** (Phase 4 - community detection, centrality measures)
 5. **Visualizer** (Phase 5 - interactive network graphs, exports)
@@ -334,10 +371,15 @@ Each module will be independently testable and configurable.
 - ✅ `src/processor/core/content_chunker.py` - Splits pages into chunks (COMPLETE)
 - ✅ `src/processor/config.py` - Centralized config management (COMPLETE)
 - ✅ `src/processor/rag/embeddings.py` - Generate embeddings from text (COMPLETE, 20 tests, 91% coverage)
-- 📋 `src/processor/rag/vector_store.py` - ChromaDB integration (NEXT)
-- 📋 `src/processor/rag/retriever.py` - Semantic search (TODO)
-- 📋 `src/processor/rag/query_engine.py` - RAG query interface (TODO)
-- 📋 `src/processor/llm/llm_client.py` - LLM API wrapper (TODO)
+- ✅ `src/processor/rag/vector_store.py` - ChromaDB integration (COMPLETE)
+- ✅ `src/processor/rag/retriever.py` - Semantic search (COMPLETE)
+- ✅ `src/processor/rag/query_engine.py` - RAG query interface (COMPLETE)
+- ✅ `src/processor/llm/llm_client.py` - LLM API wrapper (COMPLETE)
+- ✅ `src/processor/analysis/character_extractor.py` - Page-based character discovery (COMPLETE, 40 tests)
+  - **32 unit tests**: Comprehensive logic testing including 8 duplicate name tests
+  - **4 integration tests**: Real ChromaDB indexing, embeddings, and vector search
+  - **Duplicate name handling**: Parses disambiguation, filters by URL, prevents false merging
+- 📋 `src/processor/analysis/profile_builder.py` - Character profile building (NEXT)
 
 🔄 **Implementation Pattern Established**:
 - Comprehensive test suites with 5-8 test classes per component
@@ -510,3 +552,265 @@ pip install -e ".[all]"        # Full installation
 ```
 
 Development tools are pre-configured: black (formatting), mypy (typing), pytest (testing), coverage (test coverage).
+
+## LLM API Mocking Strategy (CRITICAL FOR COST CONTROL)
+
+**IMPORTANT**: Phase 2 (RAG) and beyond use LLM APIs (Anthropic Claude) which cost real money. To enable cost-free development and testing, this project implements comprehensive LLM mocking.
+
+### Why Mock LLM APIs?
+
+✅ **Cost Control**: Prevent accidental API spending during development
+✅ **Speed**: Instant test feedback without network latency
+✅ **Reliability**: Tests work offline and don't hit rate limits
+✅ **Determinism**: Consistent test results across runs
+✅ **Safety**: Cannot accidentally run expensive operations
+
+### Automatic Mocking System
+
+**All tests use mocked LLM by default** via `tests/conftest.py`:
+- `LLMClient` is automatically patched with `MockLLMClient`
+- No API calls are made unless explicitly opted-in
+- Mock responses come from fixtures or synthetic patterns
+- Token usage and costs are still tracked (for realistic estimates)
+
+### Mock Architecture
+
+```
+tests/
+├── conftest.py                    # Auto-patches LLMClient for all tests
+├── mocks/
+│   ├── mock_llm_client.py        # MockLLMClient implementation
+│   └── __init__.py
+└── fixtures/
+    └── llm_responses/
+        ├── character_discovery/  # Fixtures for character extraction
+        │   ├── query_1_major_characters.json
+        │   ├── query_2_storyline_characters.json
+        │   ├── query_3_protagonists_antagonists.json
+        │   ├── query_4_affiliations.json
+        │   └── query_5_relationships.json
+        └── __init__.py
+```
+
+### Fixture Format
+
+Fixtures are JSON files with realistic LLM responses:
+
+```json
+{
+  "query": "List all major characters mentioned in this wiki...",
+  "pattern": "list all major characters",
+  "response": "Korra\nAang\nMako\nBolin\nAsami Sato\n...",
+  "usage": {
+    "input_tokens": 250,
+    "output_tokens": 65
+  },
+  "metadata": {
+    "created_at": "2025-10-22",
+    "model": "claude-3-5-haiku-20241022",
+    "purpose": "Character discovery - comprehensive list",
+    "notes": "Includes title variations to test deduplication"
+  }
+}
+```
+
+### Running Tests with Mocks
+
+```bash
+# DEFAULT: Run all tests with mocking (FREE, FAST)
+pytest tests/test_processor/analysis/
+
+# Run only unit tests (guaranteed mock)
+pytest -m unit
+
+# Run without integration tests (faster)
+pytest -m "not integration"
+
+# Show mock usage stats
+pytest tests/test_processor/ -v -s  # See "mode": "MOCK" in output
+```
+
+### Using Real API (Opt-In Only)
+
+To run tests with real Anthropic API:
+
+```bash
+# 1. Set API key
+export ANTHROPIC_API_KEY="your-key-here"  # Linux/Mac
+$env:ANTHROPIC_API_KEY="your-key-here"    # Windows PowerShell
+
+# 2. Mark tests with @pytest.mark.realapi
+@pytest.mark.realapi
+@pytest.mark.expensive
+def test_with_real_api():
+    # This test will make real API calls
+    pass
+
+# 3. Run explicitly (future feature - not yet implemented)
+pytest -m realapi --confirm-cost
+```
+
+**WARNING**: Real API tests are NOT YET IMPLEMENTED. All tests currently use mocks by default.
+
+### Keeping Mocks Updated (CRITICAL MAINTENANCE)
+
+**As you iterate on implementation and see real LLM query results, you MUST keep mock fixtures current and realistic.**
+
+#### When to Update Mocks
+
+1. **After implementing new LLM queries** - Record actual responses
+2. **When LLM prompt changes** - Update corresponding fixture
+3. **After observing unexpected real API behavior** - Add edge cases
+4. **When adding new features** - Create fixtures for new query patterns
+
+#### How to Update Mocks
+
+**Method 1: Manual Fixture Creation** (Current)
+```bash
+# 1. Run component with real API once (manually with API key set)
+# 2. Observe actual LLM responses
+# 3. Create/update fixture file in tests/fixtures/llm_responses/
+# 4. Format as JSON with metadata
+```
+
+**Method 2: Recording Mode** (Future - Not Yet Implemented)
+```bash
+# Will automatically record real API responses to fixtures
+pytest --record-mode tests/test_processor/analysis/
+```
+
+#### Mock Quality Checklist
+
+✅ **Realistic Responses**: Mimic actual LLM output format
+✅ **Edge Cases**: Include variations, typos, title variations
+✅ **Token Counts**: Estimate realistic input/output tokens
+✅ **Metadata**: Document purpose, creation date, notes
+✅ **Pattern Matching**: Include regex pattern for automatic matching
+
+#### Example: Updating Character Discovery Fixtures
+
+When you observe that real LLM returns character names with prefixes:
+
+```json
+// BEFORE (synthetic mock)
+{
+  "response": "Korra\nAang\nMako"
+}
+
+// AFTER (realistic based on actual API)
+{
+  "response": "Korra\nAvatar Aang\nFire Lord Zuko\nMaster Katara\nKorra",
+  "metadata": {
+    "notes": "Includes title variations (Avatar Aang, Fire Lord Zuko) and duplicates (Korra appears twice) to test deduplication logic"
+  }
+}
+```
+
+### Mock Response Patterns
+
+MockLLMClient uses pattern matching to generate responses:
+
+```python
+# Built-in synthetic patterns (when no fixture matches)
+SYNTHETIC_RESPONSES = {
+    "character_discovery": "Korra\nAang\nMako\nBolin...",
+    "protagonists": "Korra\nAang\nKatara...",
+    "antagonists": "Amon\nUnalaq\nZaheer...",
+    # ... more patterns
+}
+```
+
+**Matching Priority**:
+1. Exact fixture match (by query text)
+2. Pattern-based fixture match (by regex)
+3. Synthetic pattern match (built-in responses)
+4. Default fallback
+
+### Testing Guidelines with Mocks
+
+**DO:**
+- ✅ Use mocks for all unit tests
+- ✅ Test logic, not LLM quality
+- ✅ Verify mock mode in test output
+- ✅ Update fixtures when prompts change
+- ✅ Add edge cases to fixtures
+
+**DON'T:**
+- ❌ Test actual LLM response quality with mocks
+- ❌ Expect mocks to handle novel queries perfectly
+- ❌ Leave fixtures stale after prompt changes
+- ❌ Use real API without explicit opt-in
+- ❌ Commit .env files with API keys
+
+### Mock Limitations
+
+Mocks cannot test:
+- ❌ Actual LLM response quality
+- ❌ Prompt engineering effectiveness
+- ❌ Real-world edge cases not in fixtures
+- ❌ API rate limiting behavior
+- ❌ Network error handling
+
+**Solution**: Periodically validate with real API tests (manual, on-demand).
+
+### Cost Tracking (Even with Mocks)
+
+MockLLMClient tracks estimated costs as if real:
+
+```python
+# Mock usage stats look like real ones
+{
+    "total_input_tokens": 1250,
+    "total_output_tokens": 320,
+    "estimated_cost_usd": 0.0029,  # Estimated, not actual
+    "mode": "MOCK"  # Indicates this is simulated
+}
+```
+
+This helps:
+- Estimate real costs before running live
+- Optimize prompt sizes
+- Track "budget" in development
+
+### Maintenance Schedule
+
+**Weekly** (During Active Development):
+- Review mock responses for realism
+- Add new fixtures for new features
+- Update patterns if prompts changed
+
+**Monthly**:
+- Validate a sample of mocks against real API
+- Update token estimates
+- Review and clean up unused fixtures
+
+**Before Major Releases**:
+- Run real API validation suite
+- Update all fixtures based on actual responses
+- Document any LLM behavior changes
+
+### Quick Reference
+
+```bash
+# Run tests with mocks (default, free)
+pytest tests/test_processor/analysis/
+
+# Check if mocks are being used
+pytest -v -s  # Look for "mode": "MOCK" in output
+
+# List all fixtures
+ls tests/fixtures/llm_responses/character_discovery/
+
+# Update a fixture
+# 1. Run real API manually (set ANTHROPIC_API_KEY)
+# 2. Observe response
+# 3. Edit tests/fixtures/llm_responses/<category>/<fixture>.json
+
+# Test mock coverage
+# Ensure all LLM queries have corresponding fixtures or patterns
+```
+
+### Remember
+
+**Mocks are a development tool, not a replacement for validation.**
+Periodically test with real API to ensure mocks remain accurate and the system works end-to-end.

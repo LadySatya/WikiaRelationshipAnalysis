@@ -1,0 +1,15 @@
+{
+  "query": "What characters have significant relationships with each other?",
+  "pattern": "significant relationship",
+  "response": "Korra\nAsami Sato\nMako\nBolin\nAang\nKatara\nSokka\nZuko\nIroh\nTenzin\nKya\nBumi\nLin Beifong\nSuyin Beifong\nToph Beifong\nJinora\nKai\nOpal\nBaatar Jr.",
+  "usage": {
+    "input_tokens": 245,
+    "output_tokens": 54
+  },
+  "metadata": {
+    "created_at": "2025-10-22",
+    "model": "claude-3-5-haiku-20241022",
+    "purpose": "Character discovery - relationship focus",
+    "notes": "Characters with romantic, family, or mentor-student relationships"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "query": "List ALL characters mentioned in this wiki, including:\n- Main protagonists and antagonists\n- Supporting characters and side characters\n- Characters in major storylines\n- Characters with significant relationships\n- Characters mentioned in affiliations, factions, or groups\n- Minor characters that appear in the content\n\nIMPORTANT - Name Variations vs Different Characters:\n- If you see the SAME character with different titles/names, group them with \" | \"\n- If you see DIFFERENT characters who share a name, list them SEPARATELY\n- When grouping, put the most common/canonical name FIRST\n- Be CONSERVATIVE - only group if you're CERTAIN they're the same character\n\nReturn one character per line. Include all characters regardless of importance.",
+  "pattern": "list all characters.*including:.*regardless of importance",
+  "response": "Korra | Avatar Korra\nAang | Avatar Aang\nMako\nBolin\nAsami Sato | Asami\nTenzin | Master Tenzin\nLin Beifong | Chief Beifong\nKatara | Master Katara\nZuko | Fire Lord Zuko\nToph Beifong\nSokka\nSuyin Beifong\nOpal\nJinora\nIkki\nMeelo\nKya\nBumi\nBumi\nAmon\nUnalaq\nVaatu\nZaheer\nGhazan\nMing-Hua\nP'Li\nKuvira\nBaatar Jr.\nVarrick\nZhu Li\nTarrlok\nLieutenant\nHiroshi Sato\nIroh | General Iroh\nAzula\nOzai | Fire Lord Ozai",
+  "usage": {
+    "input_tokens": 480,
+    "output_tokens": 130
+  },
+  "metadata": {
+    "created_at": "2025-10-22",
+    "model": "claude-3-5-haiku-20241022",
+    "purpose": "Comprehensive character discovery with variation grouping",
+    "notes": "LLM groups same character's variations with '|' (e.g., 'Zuko | Fire Lord Zuko') and lists different characters separately (note the two 'Bumi' entries - King Bumi from ATLA and Commander Bumi from LOK). This approach eliminates hardcoded title lists and works for any fictional universe."
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "url": "https://avatar.fandom.com/wiki/Republic_City",
+  "saved_at": "2025-10-22T10:00:00",
+  "content": {
+    "title": "Republic City",
+    "url": "https://avatar.fandom.com/wiki/Republic_City",
+    "namespace": "Main",
+    "main_content": "Republic City is the capital of the United Republic of Nations and one of the largest and most modern cities in the world. It was founded by Avatar Aang and Fire Lord Zuko after the Hundred Year War.",
+    "infobox_data": {
+      "name": "Republic City",
+      "location": "United Republic of Nations",
+      "population": "Millions",
+      "founded": "After Hundred Year War"
+    },
+    "links": ["Aang", "Zuko", "Korra", "United Republic"],
+    "related_articles": ["United Republic", "Air Temple Island"]
+  }
+}
