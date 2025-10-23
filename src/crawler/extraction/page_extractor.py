@@ -2,6 +2,7 @@
 HTML parsing and text content extraction from web pages.
 """
 
+import re
 from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
@@ -13,6 +14,36 @@ class PageExtractor:
     def __init__(self, config: Optional[Dict] = None):
         """Initialize extractor with configuration."""
         self.config = config or self._get_default_config()
+
+        # Exclusion patterns for namespace detection (from WikiaParser)
+        self.exclude_patterns = [
+            # MediaWiki standard namespaces
+            "Template:",
+            "User:",
+            "File:",
+            "Category:",
+            "Help:",
+            "Special:",
+            "MediaWiki:",
+            "Talk:",
+            "User_talk:",
+            "Template_talk:",
+            "File_talk:",
+            "Help_talk:",
+            "MediaWiki_talk:",
+            "Category_talk:",
+            # Fandom-specific patterns
+            "/f/",
+            "/f?",
+            "fandom.com/f",
+            "/wiki/Fanon",
+            ":Fanon",
+            "/wiki/Discuss",
+            "Transcript:",
+            "_Wiki:",
+            "wiki:Policy",
+            "wiki:Featured",
+        ]
 
     def _get_default_config(self) -> Dict:
         """Get default configuration for PageExtractor."""
@@ -59,9 +90,38 @@ class PageExtractor:
             "links": self.extract_links(soup, url),
             "infobox_data": self.extract_infobox_data(soup),
             "is_disambiguation": self.is_disambiguation_page(soup),
+            "namespace": self.get_namespace(url),
         }
 
         return result
+
+    def get_namespace(self, url: str) -> Optional[str]:
+        """
+        Extract namespace from Wikia URL.
+
+        Returns None for excluded pages, "Main" or specific namespace for valid pages.
+        Ported from WikiaParser.get_page_namespace().
+        """
+        if not url:
+            return None
+
+        # Check blacklist first - if matches any exclude pattern, reject
+        if any(exclude in url for exclude in self.exclude_patterns):
+            return None
+
+        # Check for explicit namespace prefixes (e.g., Character:, Location:)
+        if "/wiki/" in url:
+            path_part = url.split("/wiki/")[-1]
+            if ":" in path_part:
+                potential_namespace = path_part.split(":")[0]
+                # Return the namespace as-is
+                return potential_namespace
+
+        # Default to Main for wiki pages without explicit namespace
+        if "/wiki/" in url:
+            return "Main"
+
+        return None
 
     def extract_title(self, soup: BeautifulSoup) -> Optional[str]:
         """Extract page title from HTML."""
@@ -133,13 +193,37 @@ class PageExtractor:
         return list(set(links))  # Remove duplicates
 
     def extract_infobox_data(self, soup: BeautifulSoup) -> Dict:
-        """Extract infobox data if present."""
+        """
+        Extract infobox data if present.
+
+        Supports both Fandom portable infoboxes and Wikipedia-style table infoboxes.
+        Ported from WikiaParser.extract_portable_infobox().
+        """
         if not soup:
             return {}
 
         infobox_data = {}
 
-        # Try infobox selectors
+        # Try portable infobox first (Fandom format)
+        portable_infobox = soup.select_one(".portable-infobox")
+        if portable_infobox:
+            # Extract data from portable infobox structure
+            data_items = portable_infobox.select(".pi-item")
+            for item in data_items:
+                label_elem = item.select_one(".pi-data-label")
+                value_elem = item.select_one(".pi-data-value")
+
+                if label_elem and value_elem:
+                    label = label_elem.get_text(strip=True)
+                    value = value_elem.get_text(strip=True)
+                    if label and value:
+                        infobox_data[label] = self._clean_text(value)
+
+            # If we found portable infobox data, return it
+            if infobox_data:
+                return infobox_data
+
+        # Fall back to Wikipedia-style table infobox
         for selector in self.config.get("infobox_selectors", []):
             infobox = soup.select_one(selector)
             if infobox:

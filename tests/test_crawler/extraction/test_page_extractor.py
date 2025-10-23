@@ -246,3 +246,309 @@ class TestPageExtractorInit:
         assert extractor.config == custom_config
         assert extractor.config["title_selectors"] == [".custom-title"]
         assert extractor.config["min_content_length"] == 100
+
+
+class TestPageExtractorNamespaceDetection:
+    """Test namespace extraction from Wikia URLs."""
+
+    @pytest.fixture
+    def page_extractor(self):
+        """Create PageExtractor instance for testing."""
+        return PageExtractor()
+
+    def test_get_namespace_main_namespace(self, page_extractor):
+        """Test detection of Main namespace from standard wiki URLs."""
+        test_cases = [
+            "https://avatar.fandom.com/wiki/Aang",
+            "https://avatar.fandom.com/wiki/Bolin",
+            "https://naruto.fandom.com/wiki/Naruto_Uzumaki",
+            "https://buffy.fandom.com/wiki/Buffy_Summers",
+        ]
+
+        for url in test_cases:
+            namespace = page_extractor.get_namespace(url)
+            assert namespace == "Main", f"Expected Main namespace for {url}"
+
+    def test_get_namespace_character_namespace_explicit(self, page_extractor):
+        """Test detection of Character namespace with explicit prefix."""
+        test_cases = [
+            "https://avatar.fandom.com/wiki/Character:Aang",
+            "https://starwars.fandom.com/wiki/Characters:Luke_Skywalker",
+        ]
+
+        for url in test_cases:
+            namespace = page_extractor.get_namespace(url)
+            assert "character" in namespace.lower(), f"Expected Character namespace for {url}"
+
+    def test_get_namespace_location_namespace(self, page_extractor):
+        """Test detection of Location namespace."""
+        test_cases = [
+            "https://avatar.fandom.com/wiki/Location:Ba_Sing_Se",
+            "https://starwars.fandom.com/wiki/Locations:Tatooine",
+        ]
+
+        for url in test_cases:
+            namespace = page_extractor.get_namespace(url)
+            assert "location" in namespace.lower(), f"Expected Location namespace for {url}"
+
+    def test_get_namespace_excluded_pages_return_none(self, page_extractor):
+        """Test that excluded pages (Template, User, etc.) return None."""
+        excluded_urls = [
+            "https://avatar.fandom.com/wiki/Template:Character_Infobox",
+            "https://avatar.fandom.com/wiki/User:JohnDoe",
+            "https://avatar.fandom.com/wiki/File:Aang.jpg",
+            "https://avatar.fandom.com/wiki/Category:Characters",
+            "https://avatar.fandom.com/wiki/Help:Editing",
+            "https://avatar.fandom.com/wiki/Special:RecentChanges",
+        ]
+
+        for url in excluded_urls:
+            namespace = page_extractor.get_namespace(url)
+            assert namespace is None, f"Expected None for excluded URL {url}"
+
+    def test_get_namespace_generic_namespace_prefix(self, page_extractor):
+        """Test detection of generic namespace prefixes."""
+        test_cases = [
+            ("https://avatar.fandom.com/wiki/Event:Hundred_Year_War", "Event"),
+            ("https://avatar.fandom.com/wiki/Organization:White_Lotus", "Organization"),
+        ]
+
+        for url, expected_namespace in test_cases:
+            namespace = page_extractor.get_namespace(url)
+            assert namespace == expected_namespace, f"Expected {expected_namespace} for {url}"
+
+    def test_get_namespace_empty_url(self, page_extractor):
+        """Test that empty URL returns None."""
+        assert page_extractor.get_namespace("") is None
+        assert page_extractor.get_namespace(None) is None
+
+    def test_get_namespace_non_wiki_url(self, page_extractor):
+        """Test that non-wiki URLs return None."""
+        non_wiki_urls = [
+            "https://avatar.fandom.com/",
+            "https://avatar.fandom.com/f/p/12345",
+            "https://twitter.com/avatar",
+        ]
+
+        for url in non_wiki_urls:
+            namespace = page_extractor.get_namespace(url)
+            assert namespace is None, f"Expected None for non-wiki URL {url}"
+
+
+class TestPageExtractorPortableInfobox:
+    """Test extraction of Fandom portable infoboxes."""
+
+    @pytest.fixture
+    def page_extractor(self):
+        """Create PageExtractor instance for testing."""
+        return PageExtractor()
+
+    def test_extract_portable_infobox_basic(self, page_extractor):
+        """Test extraction of basic portable infobox data."""
+        html = """
+        <html>
+        <body>
+            <aside class="portable-infobox">
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Species</h3>
+                    <div class="pi-data-value">Human</div>
+                </div>
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Affiliation</h3>
+                    <div class="pi-data-value">Team Avatar</div>
+                </div>
+            </aside>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        infobox_data = page_extractor.extract_infobox_data(soup)
+
+        assert "Species" in infobox_data
+        assert infobox_data["Species"] == "Human"
+        assert "Affiliation" in infobox_data
+        assert infobox_data["Affiliation"] == "Team Avatar"
+
+    def test_extract_portable_infobox_multiple_fields(self, page_extractor):
+        """Test extraction with many character-specific fields."""
+        html = """
+        <html>
+        <body>
+            <aside class="portable-infobox">
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Gender</h3>
+                    <div class="pi-data-value">Male</div>
+                </div>
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Age</h3>
+                    <div class="pi-data-value">112</div>
+                </div>
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Abilities</h3>
+                    <div class="pi-data-value">Airbending, Waterbending</div>
+                </div>
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Weapon</h3>
+                    <div class="pi-data-value">Staff</div>
+                </div>
+            </aside>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        infobox_data = page_extractor.extract_infobox_data(soup)
+
+        assert len(infobox_data) == 4
+        assert infobox_data["Gender"] == "Male"
+        assert infobox_data["Age"] == "112"
+        assert infobox_data["Abilities"] == "Airbending, Waterbending"
+        assert infobox_data["Weapon"] == "Staff"
+
+    def test_extract_infobox_fallback_to_wikipedia_style(self, page_extractor):
+        """Test fallback to Wikipedia-style table infobox if no portable infobox."""
+        html = """
+        <html>
+        <body>
+            <table class="infobox">
+                <tr>
+                    <th>Species</th>
+                    <td>Human</td>
+                </tr>
+                <tr>
+                    <th>Gender</th>
+                    <td>Male</td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        infobox_data = page_extractor.extract_infobox_data(soup)
+
+        # Should still extract from Wikipedia-style infobox
+        assert "Species" in infobox_data
+        assert infobox_data["Species"] == "Human"
+        assert "Gender" in infobox_data
+        assert infobox_data["Gender"] == "Male"
+
+    def test_extract_infobox_prefers_portable_over_table(self, page_extractor):
+        """Test that portable infobox is preferred when both formats exist."""
+        html = """
+        <html>
+        <body>
+            <aside class="portable-infobox">
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Source</h3>
+                    <div class="pi-data-value">Portable</div>
+                </div>
+            </aside>
+            <table class="infobox">
+                <tr>
+                    <th>Source</th>
+                    <td>Table</td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        infobox_data = page_extractor.extract_infobox_data(soup)
+
+        # Should use portable infobox data
+        assert infobox_data["Source"] == "Portable"
+
+    def test_extract_infobox_empty_when_no_infobox(self, page_extractor):
+        """Test that empty dict is returned when no infobox present."""
+        html = """
+        <html>
+        <body>
+            <p>This page has no infobox.</p>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        infobox_data = page_extractor.extract_infobox_data(soup)
+
+        assert infobox_data == {}
+
+    def test_extract_infobox_handles_empty_values(self, page_extractor):
+        """Test that empty label/value pairs are skipped."""
+        html = """
+        <html>
+        <body>
+            <aside class="portable-infobox">
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">Valid</h3>
+                    <div class="pi-data-value">Value</div>
+                </div>
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label"></h3>
+                    <div class="pi-data-value">No label</div>
+                </div>
+                <div class="pi-item pi-data">
+                    <h3 class="pi-data-label">No value</h3>
+                    <div class="pi-data-value"></div>
+                </div>
+            </aside>
+        </body>
+        </html>
+        """
+        soup = BeautifulSoup(html, "html.parser")
+
+        infobox_data = page_extractor.extract_infobox_data(soup)
+
+        # Should only have the valid pair
+        assert len(infobox_data) == 1
+        assert infobox_data["Valid"] == "Value"
+
+
+class TestPageExtractorContentWithNamespace:
+    """Test that extract_content includes namespace in result."""
+
+    @pytest.fixture
+    def page_extractor(self):
+        """Create PageExtractor instance for testing."""
+        return PageExtractor()
+
+    def test_extract_content_includes_namespace(self, page_extractor):
+        """Test that extract_content result includes namespace field."""
+        html = """
+        <html>
+        <head><title>Aang</title></head>
+        <body>
+            <h1>Aang</h1>
+            <p>Aang is the Avatar.</p>
+        </body>
+        </html>
+        """
+        url = "https://avatar.fandom.com/wiki/Aang"
+
+        result = page_extractor.extract_content(html, url)
+
+        assert "namespace" in result
+        assert result["namespace"] == "Main"
+
+    def test_extract_content_namespace_character(self, page_extractor):
+        """Test namespace extraction for Character: prefix."""
+        html = "<html><body><p>Content</p></body></html>"
+        url = "https://avatar.fandom.com/wiki/Character:Zuko"
+
+        result = page_extractor.extract_content(html, url)
+
+        assert "namespace" in result
+        assert "character" in result["namespace"].lower()
+
+    def test_extract_content_namespace_none_for_excluded(self, page_extractor):
+        """Test that excluded pages have None namespace."""
+        html = "<html><body><p>Template content</p></body></html>"
+        url = "https://avatar.fandom.com/wiki/Template:Infobox"
+
+        result = page_extractor.extract_content(html, url)
+
+        assert "namespace" in result
+        assert result["namespace"] is None

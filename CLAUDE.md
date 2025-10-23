@@ -56,8 +56,7 @@ flake8 src/                                            # Linting
 
 **Content Pipeline** (`src/crawler/`)
 - `WikiaCrawler`: Main orchestrator, handles session management
-- `PageExtractor`: BeautifulSoup-based HTML parsing 
-- `WikiaParser`: Wikia/Fandom-specific content filtering and namespace handling
+- `PageExtractor`: BeautifulSoup-based HTML parsing with Fandom portable infobox extraction and namespace detection
 - `LinkDiscoverer`: Intelligent character/location page discovery
 - `ContentSaver`: File-based storage with URL-to-filename mapping
 

@@ -32,8 +32,7 @@ The core web crawling infrastructure is now fully implemented and tested:
 - **Purpose**: Extract content from wikia sites with ethical crawling practices
 - **Components**:
   - `WikiaCrawler`: Main orchestrator with session management and state persistence
-  - `PageExtractor`: Extracts structured content from wikia pages
-  - `WikiaParser`: Wikia/Fandom-specific content parsing and namespace handling
+  - `PageExtractor`: Extracts structured content, namespaces, and Fandom portable infoboxes
   - `LinkDiscoverer`: Relationship-aware character/location page discovery
   - `ContentFilter`: Filters wikia navigation while preserving main content
   - `SessionManager`: HTTP session handling with timeout and retry logic
@@ -361,22 +360,17 @@ mkdir -p data/projects  # Create if needed
 
 ### Development Continuation
 
-#### Priority Implementation Order:
-1. **PageExtractor** (`src/crawler/extraction/page_extractor.py`) - Extract content from HTML
-2. **WikiaParser** (`src/crawler/extraction/wikia_parser.py`) - Parse Wikia-specific content
-3. **CrawlState** (`src/crawler/persistence/crawl_state.py`) - Save/load crawl state
-4. **Main CLI** (`main.py`, `scripts/crawl_wikia.py`) - Working command interface
+#### Priority Implementation Order (Phase 1 - Complete ✅):
+1. ✅ **PageExtractor** (`src/crawler/extraction/page_extractor.py`) - Extract content, namespaces, and infoboxes
+2. ✅ **CrawlState** (`src/crawler/persistence/crawl_state.py`) - Save/load crawl state
+3. ✅ **Main CLI** (`main.py`, `scripts/crawl_wikia.py`) - Working command interface
 
-#### Validation After Each Step:
+#### Phase 2 Next Steps:
 ```bash
-# After implementing PageExtractor:
-python test_crawl.py  # Should show pages_crawled > 0
-
-# After implementing CrawlState:
-ls data/projects/avatar_test/crawl_state/  # Should have state files
-
-# After implementing CLI:
-python main.py crawl test_project https://avatar.fandom.com/wiki/Avatar_Wiki --max-pages 5
+# Implement RAG indexing pipeline:
+python main.py index <project_name>                    # Index crawled data
+python main.py discover-characters <project_name>      # Find characters via RAG
+python main.py build-profile <project_name> "Aang"     # Build character profile
 ```
 
 ## Configuration
