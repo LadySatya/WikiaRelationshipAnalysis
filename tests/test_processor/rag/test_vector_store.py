@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 class TestVectorStoreInitialization:
     """Test VectorStore initialization and configuration."""
 
-    def test_init_with_project_name(self):
+    def test_init_with_project_name(self, tmp_path):
         """VectorStore should initialize with project name and create collection."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -34,7 +34,10 @@ class TestVectorStoreInitialization:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="naruto_wiki")
+            store = VectorStore(
+                project_name="naruto_wiki",
+                persist_directory=str(tmp_path)
+            )
 
             assert store.project_name == "naruto_wiki"
             mock_client.get_or_create_collection.assert_called_once()
@@ -59,7 +62,7 @@ class TestVectorStoreInitialization:
             path_used = str(call_kwargs.get("path", "")).replace("\\", "/")
             assert custom_dir in path_used
 
-    def test_init_uses_config_default_path(self):
+    def test_init_uses_config_default_path(self, tmp_path):
         """VectorStore should use config default path when no persist_directory provided."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -69,14 +72,17 @@ class TestVectorStoreInitialization:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_project")
+            # Mock config to return tmp_path
+            with patch("src.processor.rag.vector_store.get_config") as mock_config:
+                mock_config.return_value.vector_store_path = str(tmp_path)
+                store = VectorStore(project_name="test_project")
 
-            # Should use config path (data/projects/test_project)
+            # Should use config path
             mock_client_class.assert_called_once()
             call_kwargs = mock_client_class.call_args[1]
-            assert "data" in str(call_kwargs.get("path", ""))
-            assert "projects" in str(call_kwargs.get("path", ""))
-            assert "test_project" in str(call_kwargs.get("path", ""))
+            path_used = str(call_kwargs.get("path", ""))
+            assert str(tmp_path) in path_used
+            assert "test_project" in path_used
 
     def test_init_validates_project_name(self):
         """VectorStore should validate project name is not empty."""
@@ -88,7 +94,7 @@ class TestVectorStoreInitialization:
         with pytest.raises(ValueError, match="project_name cannot be empty"):
             VectorStore(project_name="   ")
 
-    def test_init_creates_persistent_client(self):
+    def test_init_creates_persistent_client(self, tmp_path):
         """VectorStore should create PersistentClient for disk storage."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -98,7 +104,7 @@ class TestVectorStoreInitialization:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            VectorStore(project_name="test_project")
+            VectorStore(project_name="test_project", persist_directory=str(tmp_path))
 
             # Should use PersistentClient, not Client (ephemeral)
             mock_client_class.assert_called_once()
@@ -107,7 +113,7 @@ class TestVectorStoreInitialization:
 class TestVectorStoreDocumentAddition:
     """Test adding documents to vector store."""
 
-    def test_add_documents_with_embeddings(self):
+    def test_add_documents_with_embeddings(self, tmp_path):
         """VectorStore should add documents with embeddings and metadata."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -130,7 +136,7 @@ class TestVectorStoreDocumentAddition:
                 }
             ]
 
-            store = VectorStore(project_name="avatar_wiki")
+            store = VectorStore(project_name="avatar_wiki", persist_directory=str(tmp_path))
             doc_ids = store.add_documents(chunks)
 
             # Should add documents to collection
@@ -138,7 +144,7 @@ class TestVectorStoreDocumentAddition:
             assert len(doc_ids) == 2
             assert all(isinstance(doc_id, str) for doc_id in doc_ids)
 
-    def test_add_documents_generates_unique_ids(self):
+    def test_add_documents_generates_unique_ids(self, tmp_path):
         """VectorStore should generate unique IDs for each document."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -157,13 +163,13 @@ class TestVectorStoreDocumentAddition:
                 for i in range(5)
             ]
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             doc_ids = store.add_documents(chunks)
 
             # All IDs should be unique
             assert len(doc_ids) == len(set(doc_ids))
 
-    def test_add_documents_preserves_metadata(self):
+    def test_add_documents_preserves_metadata(self, tmp_path):
         """VectorStore should preserve all metadata fields when adding documents."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -186,7 +192,7 @@ class TestVectorStoreDocumentAddition:
                 }
             ]
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             store.add_documents(chunks)
 
             # Verify metadata was passed to ChromaDB
@@ -196,7 +202,7 @@ class TestVectorStoreDocumentAddition:
             assert metadatas[0]["url"] == "https://example.com"
             assert metadatas[0]["page_title"] == "Test Page"
 
-    def test_add_documents_converts_numpy_to_list(self):
+    def test_add_documents_converts_numpy_to_list(self, tmp_path):
         """VectorStore should convert numpy arrays to lists for ChromaDB."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -214,7 +220,7 @@ class TestVectorStoreDocumentAddition:
                 }
             ]
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             store.add_documents(chunks)
 
             # ChromaDB expects lists, not numpy arrays
@@ -222,7 +228,7 @@ class TestVectorStoreDocumentAddition:
             embeddings = call_kwargs.get("embeddings", [])
             assert isinstance(embeddings[0], list)
 
-    def test_add_documents_validates_chunks_have_embeddings(self):
+    def test_add_documents_validates_chunks_have_embeddings(self, tmp_path):
         """VectorStore should validate chunks contain embeddings."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -240,12 +246,12 @@ class TestVectorStoreDocumentAddition:
                 }
             ]
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             with pytest.raises(ValueError, match="missing 'embedding' field"):
                 store.add_documents(chunks)
 
-    def test_add_documents_empty_list(self):
+    def test_add_documents_empty_list(self, tmp_path):
         """VectorStore should handle empty document list gracefully."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -255,7 +261,7 @@ class TestVectorStoreDocumentAddition:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             doc_ids = store.add_documents([])
 
             # Should return empty list without calling ChromaDB
@@ -266,7 +272,7 @@ class TestVectorStoreDocumentAddition:
 class TestVectorStoreSimilaritySearch:
     """Test semantic similarity search functionality."""
 
-    def test_similarity_search_basic(self):
+    def test_similarity_search_basic(self, tmp_path):
         """VectorStore should perform similarity search with query embedding."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -285,7 +291,7 @@ class TestVectorStoreSimilaritySearch:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             query_embedding = np.array([0.1, 0.2, 0.3])
             results = store.similarity_search(query_embedding, k=2)
 
@@ -295,7 +301,7 @@ class TestVectorStoreSimilaritySearch:
             assert results[0]["metadata"]["url"] == "url1"
             assert "distance" in results[0]
 
-    def test_similarity_search_with_k_parameter(self):
+    def test_similarity_search_with_k_parameter(self, tmp_path):
         """VectorStore should respect k parameter for number of results."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -311,7 +317,7 @@ class TestVectorStoreSimilaritySearch:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             query_embedding = np.array([0.1, 0.2, 0.3])
             store.similarity_search(query_embedding, k=5)
 
@@ -319,7 +325,7 @@ class TestVectorStoreSimilaritySearch:
             call_kwargs = mock_collection.query.call_args[1]
             assert call_kwargs["n_results"] == 5
 
-    def test_similarity_search_with_metadata_filter(self):
+    def test_similarity_search_with_metadata_filter(self, tmp_path):
         """VectorStore should support metadata filtering in searches."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -335,7 +341,7 @@ class TestVectorStoreSimilaritySearch:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             query_embedding = np.array([0.1, 0.2, 0.3])
 
             # Filter to only character pages
@@ -346,7 +352,7 @@ class TestVectorStoreSimilaritySearch:
             call_kwargs = mock_collection.query.call_args[1]
             assert call_kwargs.get("where") == filter_dict
 
-    def test_similarity_search_converts_numpy_to_list(self):
+    def test_similarity_search_converts_numpy_to_list(self, tmp_path):
         """VectorStore should convert numpy query embedding to list."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -362,7 +368,7 @@ class TestVectorStoreSimilaritySearch:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             query_embedding = np.array([0.1, 0.2, 0.3])
             store.similarity_search(query_embedding)
 
@@ -371,7 +377,7 @@ class TestVectorStoreSimilaritySearch:
             query_embeddings = call_kwargs["query_embeddings"]
             assert isinstance(query_embeddings[0], list)
 
-    def test_similarity_search_no_results(self):
+    def test_similarity_search_no_results(self, tmp_path):
         """VectorStore should handle empty search results gracefully."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -387,7 +393,7 @@ class TestVectorStoreSimilaritySearch:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             query_embedding = np.array([0.1, 0.2, 0.3])
             results = store.similarity_search(query_embedding)
 
@@ -397,7 +403,7 @@ class TestVectorStoreSimilaritySearch:
 class TestVectorStoreCollectionManagement:
     """Test collection management operations."""
 
-    def test_get_collection_stats(self):
+    def test_get_collection_stats(self, tmp_path):
         """VectorStore should return collection statistics."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -409,13 +415,13 @@ class TestVectorStoreCollectionManagement:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             stats = store.get_collection_stats()
 
             assert stats["count"] == 42
             assert stats["name"] == "test_wiki_collection"
 
-    def test_clear_collection(self):
+    def test_clear_collection(self, tmp_path):
         """VectorStore should clear all documents from collection."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -426,13 +432,13 @@ class TestVectorStoreCollectionManagement:
             mock_client.delete_collection = MagicMock()
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             store.clear()
 
             # Should delete and recreate collection
             mock_client.delete_collection.assert_called_once()
 
-    def test_has_documents_true(self):
+    def test_has_documents_true(self, tmp_path):
         """VectorStore should detect if collection has documents."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -443,11 +449,11 @@ class TestVectorStoreCollectionManagement:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             assert store.has_documents() is True
 
-    def test_has_documents_false_empty(self):
+    def test_has_documents_false_empty(self, tmp_path):
         """VectorStore should return False for empty collections."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -458,7 +464,7 @@ class TestVectorStoreCollectionManagement:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             assert store.has_documents() is False
 
@@ -466,7 +472,7 @@ class TestVectorStoreCollectionManagement:
 class TestVectorStoreEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_add_documents_with_special_characters_in_metadata(self):
+    def test_add_documents_with_special_characters_in_metadata(self, tmp_path):
         """VectorStore should handle special characters in metadata."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -487,13 +493,13 @@ class TestVectorStoreEdgeCases:
                 }
             ]
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             doc_ids = store.add_documents(chunks)
 
             assert len(doc_ids) == 1
             mock_collection.add.assert_called_once()
 
-    def test_similarity_search_with_zero_k(self):
+    def test_similarity_search_with_zero_k(self, tmp_path):
         """VectorStore should handle k=0 gracefully."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -509,13 +515,13 @@ class TestVectorStoreEdgeCases:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
             query_embedding = np.array([0.1, 0.2, 0.3])
 
             with pytest.raises(ValueError, match="k must be greater than 0"):
                 store.similarity_search(query_embedding, k=0)
 
-    def test_add_documents_with_mismatched_embedding_dimensions(self):
+    def test_add_documents_with_mismatched_embedding_dimensions(self, tmp_path):
         """VectorStore should detect mismatched embedding dimensions."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -540,7 +546,7 @@ class TestVectorStoreEdgeCases:
                 }
             ]
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             with pytest.raises(Exception, match="dimension mismatch"):
                 store.add_documents(chunks)
@@ -626,7 +632,7 @@ class TestVectorStoreSecurityValidation:
         with pytest.raises(ValueError, match="too long.*max 255"):
             VectorStore(project_name=long_name)
 
-    def test_invalid_embedding_type_string(self):
+    def test_invalid_embedding_type_string(self, tmp_path):
         """VectorStore should reject non-array embeddings (string)."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -636,7 +642,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -649,7 +655,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="embedding must be numpy array or list"):
                 store.add_documents(chunks)
 
-    def test_invalid_embedding_type_dict(self):
+    def test_invalid_embedding_type_dict(self, tmp_path):
         """VectorStore should reject non-array embeddings (dict)."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -659,7 +665,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -672,7 +678,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="embedding must be numpy array or list"):
                 store.add_documents(chunks)
 
-    def test_embedding_with_nan_values(self):
+    def test_embedding_with_nan_values(self, tmp_path):
         """VectorStore should reject embeddings containing NaN."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -682,7 +688,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -695,7 +701,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="contains NaN or Inf"):
                 store.add_documents(chunks)
 
-    def test_embedding_with_inf_values(self):
+    def test_embedding_with_inf_values(self, tmp_path):
         """VectorStore should reject embeddings containing Inf."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -705,7 +711,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -718,7 +724,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="contains NaN or Inf"):
                 store.add_documents(chunks)
 
-    def test_embedding_dimension_mismatch(self):
+    def test_embedding_dimension_mismatch(self, tmp_path):
         """VectorStore should reject embeddings with inconsistent dimensions."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -728,7 +734,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -746,7 +752,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="dimension mismatch.*Expected 3, got 4"):
                 store.add_documents(chunks)
 
-    def test_empty_embedding_array(self):
+    def test_empty_embedding_array(self, tmp_path):
         """VectorStore should reject empty embeddings."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -756,7 +762,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -769,7 +775,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="embedding cannot be empty"):
                 store.add_documents(chunks)
 
-    def test_invalid_metadata_type_numpy_array(self):
+    def test_invalid_metadata_type_numpy_array(self, tmp_path):
         """VectorStore should reject numpy arrays in metadata."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -779,7 +785,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -794,7 +800,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="invalid type.*ndarray.*Only str, int, float, bool"):
                 store.add_documents(chunks)
 
-    def test_invalid_metadata_type_datetime(self):
+    def test_invalid_metadata_type_datetime(self, tmp_path):
         """VectorStore should reject datetime objects in metadata."""
         from src.processor.rag.vector_store import VectorStore
         from datetime import datetime
@@ -805,7 +811,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             chunks = [
                 {
@@ -820,7 +826,7 @@ class TestVectorStoreSecurityValidation:
             with pytest.raises(ValueError, match="invalid type.*datetime.*Only str, int, float, bool"):
                 store.add_documents(chunks)
 
-    def test_valid_primitive_metadata_types(self):
+    def test_valid_primitive_metadata_types(self, tmp_path):
         """VectorStore should accept valid primitive types in metadata."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -830,7 +836,7 @@ class TestVectorStoreSecurityValidation:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            store = VectorStore(project_name="test_wiki")
+            store = VectorStore(project_name="test_wiki", persist_directory=str(tmp_path))
 
             # All primitive types should work
             chunks = [

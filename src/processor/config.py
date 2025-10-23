@@ -135,6 +135,16 @@ class ProcessorConfig:
         """Get LLM model name."""
         return self.get("processor", "rag", "llm_model", default="claude-3-5-haiku-20241022")
 
+    @property
+    def character_discovery_min_mentions(self) -> int:
+        """Get minimum mentions threshold for character discovery."""
+        return self.get("processor", "character_discovery", "min_mentions", default=3)
+
+    @property
+    def character_discovery_confidence_threshold(self) -> float:
+        """Get confidence threshold for character discovery."""
+        return self.get("processor", "character_discovery", "confidence_threshold", default=0.7)
+
 
 # Convenience function for quick access
 def get_config() -> ProcessorConfig:

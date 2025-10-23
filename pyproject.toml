@@ -192,6 +192,8 @@ markers = [
     "slow: Tests that take >1 second (run less frequently)",
     "timing: Tests that verify actual timing behavior",
     "network: Tests that require network access (skip in offline mode)",
+    "realapi: Tests that use real Anthropic API (opt-in only, costs money)",
+    "expensive: Tests that consume significant API quota (>$0.10)",
 ]
 
 # Coverage configuration

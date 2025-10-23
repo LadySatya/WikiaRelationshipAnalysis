@@ -155,42 +155,49 @@ Index ready for semantic search
 **VectorStore** ✅: ChromaDB-based persistent vector database with metadata filtering
 **RAGRetriever** ✅: Semantic search to find relevant chunks for queries
 **QueryEngine** ✅: Combines retrieval + LLM (Claude) to answer questions about the wiki
-**CharacterExtractor** ✅: Discovers characters using page-based classification with duplicate name handling
+**CharacterExtractor** ✅: Discovers characters using page-based classification with duplicate name handling and persistence
   - **Page-Based Discovery**: Classifies each crawled page instead of corpus-wide RAG
   - **3-Tier Classification**: Metadata (FREE) → Batch LLM (CHEAP) → Content (SELECTIVE)
   - **Duplicate Name Handling**: Parses disambiguation from titles, filters validation by source URL
-  - **40 Tests**: 32 unit tests + 4 integration tests with real ChromaDB + 4 demo scenarios
+  - **Persistence**: `save_characters()` saves to `data/projects/<name>/characters/` with auto-save option
+  - **47 Tests**: 39 unit tests + 4 integration tests with real ChromaDB + 4 demo scenarios
 **ProfileBuilder** 📋: Builds comprehensive character profiles via targeted RAG queries (NEXT)
 
 ### Output Structure
 
-**Character Profile** (`data/projects/<name>/characters/Aang.json`):
+**Discovered Character** (`data/projects/<name>/characters/Aang.json`):
 ```json
 {
   "name": "Aang",
-  "discovered_at": "2025-10-09T...",
-  "profile": {
-    "overview": "Aang is the Avatar and last surviving Air Nomad...",
-    "affiliations": ["Air Nomads", "Team Avatar"],
-    "abilities": ["Airbending", "Waterbending", "Earthbending", "Firebending"],
-    "relationships": [
-      {
-        "character": "Katara",
-        "relationship_type": "romantic",
-        "description": "Wife and closest companion",
-        "confidence": 0.95,
-        "source_chunks": ["chunk_id_1", "chunk_id_2"]
-      }
-    ],
-    "key_events": ["Discovered in iceberg", "Defeated Fire Lord Ozai"]
-  },
-  "metadata": {
-    "queries_used": 6,
-    "chunks_analyzed": 45,
-    "confidence": 0.92
-  }
+  "full_name": "Aang",
+  "disambiguation": null,
+  "source_url": "https://avatar.fandom.com/wiki/Aang",
+  "name_variations": ["Aang", "Avatar Aang"],
+  "discovered_via": ["metadata"],
+  "mentions": 45,
+  "confidence": 0.92,
+  "saved_at": "2025-10-22T14:30:00Z",
+  "project_name": "avatar_wiki"
 }
 ```
+
+**Discovered Character with Disambiguation** (`data/projects/<name>/characters/Bumi_(King_of_Omashu).json`):
+```json
+{
+  "name": "Bumi",
+  "full_name": "Bumi (King of Omashu)",
+  "disambiguation": "King of Omashu",
+  "source_url": "https://avatar.fandom.com/wiki/Bumi_(King)",
+  "name_variations": ["Bumi", "King Bumi"],
+  "discovered_via": ["metadata", "title_llm"],
+  "mentions": 28,
+  "confidence": 0.88,
+  "saved_at": "2025-10-22T14:30:00Z",
+  "project_name": "avatar_wiki"
+}
+```
+
+**Note**: Character profiles with relationships, abilities, etc. will be added by ProfileBuilder (Phase 2b - planned)
 
 ### Configuration (`config/processor_config.yaml`)
 
@@ -210,13 +217,39 @@ processor:
     confidence_threshold: 0.7
 ```
 
+### Programmatic Usage (Available Now)
+
+```python
+from src.processor.analysis.character_extractor import CharacterExtractor
+
+# Discover characters from crawled pages
+extractor = CharacterExtractor(
+    project_name="avatar_wiki",
+    min_mentions=3,
+    confidence_threshold=0.7
+)
+
+# Option 1: Discover and save separately
+characters = extractor.discover_characters()
+extractor.save_characters(characters)
+
+# Option 2: Discover with auto-save
+characters = extractor.discover_characters(save=True)
+
+# Characters saved to: data/projects/avatar_wiki/characters/
+# - Aang.json
+# - Bumi_(King_of_Omashu).json
+# - Bumi_(son_of_Aang).json
+# ... etc
+```
+
 ### CLI Commands (Planned)
 
 ```bash
 # Index project for RAG queries
 python main.py index <project_name>
 
-# Discover all characters in corpus
+# Discover all characters in corpus (with auto-save)
 python main.py discover-characters <project_name>
 
 # Build specific character profile

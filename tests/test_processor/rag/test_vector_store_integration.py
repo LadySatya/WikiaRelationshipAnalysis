@@ -20,12 +20,9 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def temp_vector_store_dir():
+def temp_vector_store_dir(tmp_path):
     """Create a temporary directory for vector store data."""
-    temp_dir = tempfile.mkdtemp()
-    yield temp_dir
-    # Cleanup after test
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    return tmp_path
 
 
 class TestVectorStoreIntegrationBasic:

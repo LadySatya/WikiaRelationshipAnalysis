@@ -20,15 +20,9 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def temp_vector_store():
+def temp_vector_store(tmp_path):
     """Create temporary directory for vector store."""
-    temp_dir = tempfile.mkdtemp()
-    yield temp_dir
-    # Cleanup: ChromaDB may keep files locked on Windows, so use ignore_errors
-    try:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    except Exception:
-        pass  # Ignore cleanup errors in tests
+    return tmp_path
 
 
 @pytest.fixture
