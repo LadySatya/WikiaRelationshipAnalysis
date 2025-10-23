@@ -27,7 +27,10 @@ class WikiaParser:
             "Event",
             "Organization",
         ]
+
+        # Blacklist patterns - exclude pages matching these patterns
         self.exclude_patterns = exclude_patterns or [
+            # MediaWiki standard namespaces (universal across all wikis)
             "Template:",
             "User:",
             "File:",
@@ -42,6 +45,18 @@ class WikiaParser:
             "Help_talk:",
             "MediaWiki_talk:",
             "Category_talk:",
+            # Fandom-specific patterns (work for any Fandom wiki)
+            "/f/",  # Fandom discussion forums (e.g., /f or /f/p/...)
+            "/f?",  # Discussion forum with query params
+            "fandom.com/f",  # Catch any forum URL
+            "/wiki/Fanon",  # Fan-created content (common across wikis)
+            ":Fanon",  # Fanon namespace
+            "/wiki/Discuss",  # Discussion pages
+            "Transcript:",  # Episode transcripts (optional - comment out if needed)
+            # Wiki project/meta pages (generic pattern - works for any wiki)
+            "_Wiki:",  # Project pages like "Avatar_Wiki:", "Memory_Alpha:", etc.
+            "wiki:Policy",  # Policy pages
+            "wiki:Featured",  # Featured content pages
         ]
 
         # Wikia-specific selectors
@@ -124,8 +139,17 @@ class WikiaParser:
         return result
 
     def get_page_namespace(self, url: str) -> Optional[str]:
-        """Extract namespace from Wikia URL."""
+        """
+        Extract namespace from Wikia URL.
+
+        Uses blacklist approach - if URL is not excluded, it's crawlable.
+        Returns None for excluded pages, "Main" or specific namespace for valid pages.
+        """
         if not url:
+            return None
+
+        # Check blacklist first - if matches any exclude pattern, reject
+        if any(exclude in url for exclude in self.exclude_patterns):
             return None
 
         # Check each namespace pattern
@@ -133,29 +157,16 @@ class WikiaParser:
             if re.search(pattern, url, re.IGNORECASE):
                 return namespace
 
-        # Check for explicit namespace prefixes
+        # Check for explicit namespace prefixes (e.g., Character:, Location:)
         if "/wiki/" in url:
             path_part = url.split("/wiki/")[-1]
             if ":" in path_part:
                 potential_namespace = path_part.split(":")[0]
-                if potential_namespace in [
-                    "Character",
-                    "Location",
-                    "Event",
-                    "Organization",
-                    "Category",
-                    "Template",
-                    "User",
-                    "Help",
-                    "Special",
-                    "File",
-                ]:
-                    return potential_namespace
+                # Return the namespace as-is (don't whitelist, just detect)
+                return potential_namespace
 
         # Default to Main for wiki pages without explicit namespace
-        if "/wiki/" in url and not any(
-            exclude in url for exclude in self.exclude_patterns
-        ):
+        if "/wiki/" in url:
             return "Main"
 
         return None

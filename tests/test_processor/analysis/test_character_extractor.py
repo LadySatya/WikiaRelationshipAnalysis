@@ -688,4 +688,240 @@ class TestDuplicateNameHandling:
         assert all(d is not None for d in disambiguations)
 
 
+class TestCharacterSaving:
+    """Test saving discovered characters to disk."""
+
+    def test_save_characters_creates_directory(self, tmp_path):
+        """Test that save_characters creates the characters directory."""
+        characters_dir = tmp_path / "characters"
+
+        extractor = CharacterExtractor(project_name="test_project")
+
+        characters = [
+            {
+                "name": "Aang",
+                "full_name": "Aang",
+                "disambiguation": None,
+                "source_url": "https://avatar.fandom.com/wiki/Aang",
+                "mentions": 10,
+                "confidence": 0.95,
+                "discovered_via": ["metadata"],
+                "name_variations": ["Aang"]
+            }
+        ]
+
+        save_path = extractor.save_characters(characters, output_dir=characters_dir)
+
+        # Characters directory should exist
+        assert save_path.exists()
+        assert save_path.is_dir()
+
+    def test_save_characters_writes_json_files(self, tmp_path):
+        """Test that save_characters writes JSON files for each character."""
+        characters_dir = tmp_path / "characters"
+
+        extractor = CharacterExtractor(project_name="test_project")
+
+        characters = [
+            {
+                "name": "Aang",
+                "full_name": "Aang",
+                "disambiguation": None,
+                "source_url": "https://avatar.fandom.com/wiki/Aang",
+                "mentions": 10,
+                "confidence": 0.95,
+                "discovered_via": ["metadata"],
+                "name_variations": ["Aang"]
+            },
+            {
+                "name": "Zuko",
+                "full_name": "Zuko",
+                "disambiguation": None,
+                "source_url": "https://avatar.fandom.com/wiki/Zuko",
+                "mentions": 8,
+                "confidence": 0.90,
+                "discovered_via": ["title_llm"],
+                "name_variations": ["Zuko", "Prince Zuko"]
+            }
+        ]
+
+        save_path = extractor.save_characters(characters, output_dir=characters_dir)
+
+        # Character files should exist
+        aang_file = save_path / "Aang.json"
+        zuko_file = save_path / "Zuko.json"
+
+        assert aang_file.exists()
+        assert zuko_file.exists()
+
+    def test_save_characters_handles_duplicate_names(self, tmp_path):
+        """Test that duplicate character names are saved with disambiguation."""
+        characters_dir = tmp_path / "characters"
+
+        extractor = CharacterExtractor(project_name="test_project")
+
+        characters = [
+            {
+                "name": "Bumi",
+                "full_name": "Bumi (King of Omashu)",
+                "disambiguation": "King of Omashu",
+                "source_url": "https://avatar.fandom.com/wiki/Bumi_(King)",
+                "mentions": 5,
+                "confidence": 0.88,
+                "discovered_via": ["metadata"],
+                "name_variations": ["Bumi"]
+            },
+            {
+                "name": "Bumi",
+                "full_name": "Bumi (son of Aang)",
+                "disambiguation": "son of Aang",
+                "source_url": "https://avatar.fandom.com/wiki/Bumi_(Aang's_son)",
+                "mentions": 3,
+                "confidence": 0.85,
+                "discovered_via": ["metadata"],
+                "name_variations": ["Bumi"]
+            }
+        ]
+
+        save_path = extractor.save_characters(characters, output_dir=characters_dir)
+
+        # Both Bumis should be saved with different filenames
+        king_file = save_path / "Bumi_(King_of_Omashu).json"
+        son_file = save_path / "Bumi_(son_of_Aang).json"
+
+        assert king_file.exists()
+        assert son_file.exists()
+
+    def test_save_characters_preserves_all_fields(self, tmp_path):
+        """Test that saved JSON contains all character fields."""
+        characters_dir = tmp_path / "characters"
+
+        extractor = CharacterExtractor(project_name="test_project")
+
+        characters = [
+            {
+                "name": "Korra",
+                "full_name": "Korra",
+                "disambiguation": None,
+                "source_url": "https://avatar.fandom.com/wiki/Korra",
+                "mentions": 15,
+                "confidence": 0.98,
+                "discovered_via": ["metadata", "title_llm"],
+                "name_variations": ["Korra", "Avatar Korra"]
+            }
+        ]
+
+        save_path = extractor.save_characters(characters, output_dir=characters_dir)
+
+        # Load and verify
+        korra_file = save_path / "Korra.json"
+        with open(korra_file, 'r', encoding='utf-8') as f:
+            saved_data = json.load(f)
+
+        assert saved_data["name"] == "Korra"
+        assert saved_data["full_name"] == "Korra"
+        assert saved_data["source_url"] == "https://avatar.fandom.com/wiki/Korra"
+        assert saved_data["mentions"] == 15
+        assert saved_data["confidence"] == 0.98
+        assert "metadata" in saved_data["discovered_via"]
+        assert "title_llm" in saved_data["discovered_via"]
+
+    def test_save_characters_adds_metadata(self, tmp_path):
+        """Test that saved files include save metadata (timestamp, project)."""
+        characters_dir = tmp_path / "characters"
+
+        extractor = CharacterExtractor(project_name="test_project")
+
+        characters = [
+            {
+                "name": "Mako",
+                "full_name": "Mako",
+                "disambiguation": None,
+                "source_url": "https://avatar.fandom.com/wiki/Mako",
+                "mentions": 7,
+                "confidence": 0.87,
+                "discovered_via": ["metadata"],
+                "name_variations": ["Mako"]
+            }
+        ]
+
+        save_path = extractor.save_characters(characters, output_dir=characters_dir)
+
+        # Load and verify metadata
+        mako_file = save_path / "Mako.json"
+        with open(mako_file, 'r', encoding='utf-8') as f:
+            saved_data = json.load(f)
+
+        assert "saved_at" in saved_data
+        assert "project_name" in saved_data
+        assert saved_data["project_name"] == "test_project"
+
+    def test_save_characters_returns_path(self, tmp_path):
+        """Test that save_characters returns the save directory path."""
+        project_dir = tmp_path / "data" / "projects" / "test_project"
+        characters_dir = project_dir / "characters"
+
+        extractor = CharacterExtractor(project_name="test_project")
+
+        characters = [
+            {
+                "name": "Toph",
+                "full_name": "Toph Beifong",
+                "disambiguation": None,
+                "source_url": "https://avatar.fandom.com/wiki/Toph",
+                "mentions": 12,
+                "confidence": 0.93,
+                "discovered_via": ["metadata"],
+                "name_variations": ["Toph", "Toph Beifong"]
+            }
+        ]
+
+        save_path = extractor.save_characters(characters, output_dir=characters_dir)
+
+        assert save_path == characters_dir
+
+    def test_discover_characters_with_auto_save(self, tmp_path):
+        """Test that discover_characters calls save_characters when save=True."""
+        extractor = CharacterExtractor(project_name="test_project")
+
+        # Mock discover_characters to return fake characters without running full pipeline
+        fake_characters = [
+            {
+                "name": "TestChar",
+                "full_name": "TestChar",
+                "disambiguation": None,
+                "source_url": "https://test.com",
+                "mentions": 5,
+                "confidence": 0.9,
+                "discovered_via": ["metadata"],
+                "name_variations": ["TestChar"]
+            }
+        ]
+
+        # Mock the entire discovery pipeline to return fake characters
+        extractor._execute_discovery_queries = Mock(return_value=fake_characters)
+        extractor._deduplicate_characters = Mock(return_value=fake_characters)
+        extractor._validate_characters = Mock(return_value=fake_characters)
+
+        # Mock save_characters with output_dir pointing to tmp_path
+        characters_dir = tmp_path / "characters"
+        original_save = extractor.save_characters
+
+        def mock_save_with_temp_dir(chars, output_dir=None):
+            return original_save(chars, output_dir=characters_dir)
+
+        extractor.save_characters = Mock(side_effect=mock_save_with_temp_dir)
+
+        # Discover with auto-save
+        characters = extractor.discover_characters(save=True)
+
+        # Verify save_characters was called
+        extractor.save_characters.assert_called_once()
+
+        # Verify files were created
+        assert characters_dir.exists()
+        character_files = list(characters_dir.glob("*.json"))
+        assert len(character_files) == 1
+
+
 print(f"[INFO] Test file rewritten with {__name__}")

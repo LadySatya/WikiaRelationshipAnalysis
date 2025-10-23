@@ -71,10 +71,12 @@ class TestVectorStoreInitialization:
 
             store = VectorStore(project_name="test_project")
 
-            # Should use config path (data/vector_stores)
+            # Should use config path (data/projects/test_project)
             mock_client_class.assert_called_once()
             call_kwargs = mock_client_class.call_args[1]
-            assert "vector_stores" in str(call_kwargs.get("path", ""))
+            assert "data" in str(call_kwargs.get("path", ""))
+            assert "projects" in str(call_kwargs.get("path", ""))
+            assert "test_project" in str(call_kwargs.get("path", ""))
 
     def test_init_validates_project_name(self):
         """VectorStore should validate project name is not empty."""

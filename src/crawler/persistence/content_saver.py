@@ -19,12 +19,10 @@ class ContentSaver:
             raise TypeError("project_path must be a Path object")
 
         self.project_path = project_path
-        self.raw_dir = project_path / "raw"
         self.processed_dir = project_path / "processed"
         self.cache_dir = project_path / "cache"
 
         # Ensure all directories exist
-        self._ensure_directory_exists(self.raw_dir)
         self._ensure_directory_exists(self.processed_dir)
         self._ensure_directory_exists(self.cache_dir)
 
@@ -63,28 +61,6 @@ class ContentSaver:
                 "saved_at": save_data["saved_at"],
             }
         )
-
-        return file_path
-
-    def save_raw_html(self, url: str, html: str) -> Path:
-        """Save raw HTML content."""
-        if not url or not html:
-            raise ValueError("URL and HTML cannot be empty")
-
-        # Save to raw directory
-        self._ensure_directory_exists(self.raw_dir)
-        filename = self._generate_filename(url).replace(".json", ".html")
-        file_path = self.raw_dir / filename
-
-        # Save HTML with metadata
-        save_data = {
-            "url": url,
-            "saved_at": datetime.now().isoformat(),
-            "html": html
-        }
-
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(save_data, f, indent=2, ensure_ascii=False)
 
         return file_path
 

@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 from pathlib import Path
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..rag.query_engine import QueryEngine
 from ..config import get_config
@@ -117,24 +117,31 @@ Be conservative: if unsure, classify as "no".
 
             >>> _parse_character_name("Aang")
             {"base_name": "Aang", "disambiguation": None, "full_name": "Aang"}
+
+            >>> _parse_character_name("Amon | Avatar Wiki | Fandom")
+            {"base_name": "Amon", "disambiguation": None, "full_name": "Amon"}
         """
+        # Strip common wiki title suffixes (e.g., " | Avatar Wiki | Fandom")
+        # Pattern: anything after " | " followed by "Wiki" or "Fandom"
+        cleaned_title = re.sub(r'\s*\|\s*.*(Wiki|Fandom).*$', '', title)
+
         # Match pattern: "Name (Disambiguation)"
         # Use greedy match for first group to capture LAST set of parentheses
         # e.g., "Character (First) (Second)" → base="Character (First)", disambiguation="Second"
-        match = re.match(r'^(.+)\s*\((.+?)\)$', title)
+        match = re.match(r'^(.+)\s*\((.+?)\)$', cleaned_title)
 
         if match:
             return {
                 "base_name": match.group(1).strip(),
                 "disambiguation": match.group(2).strip(),
-                "full_name": title
+                "full_name": cleaned_title
             }
 
         # No disambiguation found
         return {
-            "base_name": title,
+            "base_name": cleaned_title,
             "disambiguation": None,
-            "full_name": title
+            "full_name": cleaned_title
         }
 
     def _create_character_entry(
@@ -181,7 +188,8 @@ Be conservative: if unsure, classify as "no".
     def discover_characters(
         self,
         max_characters: Optional[int] = None,
-        enable_disambiguation: bool = True
+        enable_disambiguation: bool = True,
+        save: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Discover all characters in the wiki corpus.
@@ -189,6 +197,7 @@ Be conservative: if unsure, classify as "no".
         Args:
             max_characters: Maximum characters to return (default: None = all)
             enable_disambiguation: Whether to split duplicate names (default: True)
+            save: Whether to automatically save discovered characters to disk (default: False)
 
         Returns:
             List of character dictionaries with full variation tracking
@@ -237,7 +246,109 @@ Be conservative: if unsure, classify as "no".
             sorted_characters = sorted_characters[:max_characters]
             print(f"[INFO] Limited to top {max_characters} characters")
 
+        # Step 8: Optionally save to disk
+        if save:
+            self.save_characters(sorted_characters)
+
         return sorted_characters
+
+    def save_characters(
+        self,
+        characters: List[Dict[str, Any]],
+        output_dir: Optional[Path] = None
+    ) -> Path:
+        """
+        Save discovered characters to disk as JSON files.
+
+        Each character is saved to a separate JSON file in the characters directory.
+        Duplicate names are saved with disambiguated filenames (e.g., "Bumi_(King_of_Omashu).json").
+
+        Args:
+            characters: List of character dictionaries from discover_characters()
+            output_dir: Optional custom output directory (default: data/projects/<project_name>/characters)
+
+        Returns:
+            Path to the characters directory where files were saved
+
+        Example:
+            >>> extractor = CharacterExtractor(project_name="avatar_wiki")
+            >>> characters = extractor.discover_characters()
+            >>> save_path = extractor.save_characters(characters)
+            >>> print(f"Saved {len(characters)} characters to {save_path}")
+        """
+        # Determine output directory
+        if output_dir is None:
+            output_dir = Path("data/projects") / self.project_name / "characters"
+
+        # Create directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save timestamp
+        saved_at = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+        # Save each character to a separate file
+        for char in characters:
+            # Generate filename from full_name (handles disambiguation)
+            filename = self._generate_filename(char["full_name"])
+
+            # Add save metadata
+            char_data = char.copy()
+            char_data["saved_at"] = saved_at
+            char_data["project_name"] = self.project_name
+
+            # Remove source_page to avoid saving entire page content
+            if "source_page" in char_data:
+                del char_data["source_page"]
+
+            # Write to file
+            file_path = output_dir / f"{filename}.json"
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(char_data, f, indent=2, ensure_ascii=False)
+
+        print(f"[OK] Saved {len(characters)} characters to {output_dir}")
+        return output_dir
+
+    def _generate_filename(self, full_name: str) -> str:
+        """
+        Generate safe filename from character's full name.
+
+        Replaces special characters with underscores, preserves disambiguation.
+
+        Args:
+            full_name: Character's full name (e.g., "Bumi (King of Omashu)")
+
+        Returns:
+            Safe filename without extension (e.g., "Bumi_(King_of_Omashu)")
+
+        Examples:
+            >>> extractor._generate_filename("Aang")
+            "Aang"
+            >>> extractor._generate_filename("Bumi (King of Omashu)")
+            "Bumi_(King_of_Omashu)"
+            >>> extractor._generate_filename("Avatar: Roku")
+            "Avatar_Roku"
+        """
+        # Replace problematic characters with underscores
+        # Keep parentheses for disambiguation, replace other special chars
+        safe_name = full_name
+        safe_name = safe_name.replace(":", "_")
+        safe_name = safe_name.replace("/", "_")
+        safe_name = safe_name.replace("\\", "_")
+        safe_name = safe_name.replace("*", "_")
+        safe_name = safe_name.replace("?", "_")
+        safe_name = safe_name.replace("\"", "_")
+        safe_name = safe_name.replace("<", "_")
+        safe_name = safe_name.replace(">", "_")
+        safe_name = safe_name.replace("|", "_")
+
+        # Replace spaces with underscores (except inside parentheses for readability)
+        # "Bumi (King of Omashu)" -> "Bumi_(King_of_Omashu)"
+        safe_name = re.sub(r'\s+', '_', safe_name)
+
+        # Remove any trailing/leading underscores
+        safe_name = safe_name.strip("_")
+
+        return safe_name
 
     def _load_crawled_pages(self) -> List[Dict[str, Any]]:
         """
@@ -689,10 +800,11 @@ First paragraph: {snippet}
             # (e.g., if metadata doesn't include source_url)
             chunks_to_count = url_filtered_chunks if url_filtered_chunks else chunks
 
-            # Count high-relevance mentions (distance < 0.5)
+            # Count high-relevance mentions (distance < 1.0)
+            # Note: Embedding similarity is imperfect, typical relevant chunks have distance 0.8-1.0
             relevant_chunks = [
                 chunk for chunk in chunks_to_count
-                if chunk["distance"] < 0.5
+                if chunk["distance"] < 1.0
             ]
 
             char["mentions"] = len(relevant_chunks)

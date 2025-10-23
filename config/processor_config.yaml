@@ -13,7 +13,7 @@ processor:
 
     # Vector store settings
     vector_store_type: "chromadb"
-    vector_store_path: "data/vector_stores"
+    vector_store_path: "data/projects"  # Vector stores live alongside crawled data
 
     # Retrieval settings
     default_k: 10                # number of chunks to retrieve per query
