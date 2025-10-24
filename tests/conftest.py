@@ -58,6 +58,7 @@ def auto_patch_llm_client(monkeypatch, mock_llm_client, request):
     This fixture runs automatically for every test unless:
     - Test is marked with @pytest.mark.realapi
     - Test explicitly opts out
+    - Test is in the LLMClient's own test file (to allow direct unit testing)
 
     Args:
         monkeypatch: Pytest monkeypatch fixture
@@ -67,6 +68,11 @@ def auto_patch_llm_client(monkeypatch, mock_llm_client, request):
     # Check if test wants real API
     if "realapi" in request.keywords:
         # Skip patching for real API tests
+        return
+
+    # Skip auto-patching for LLMClient's own unit tests
+    # (they manually mock the Anthropic client for direct testing)
+    if "test_llm_client.py" in str(request.fspath):
         return
 
     # Patch LLMClient.__init__ to return our mock

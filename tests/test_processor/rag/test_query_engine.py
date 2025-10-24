@@ -312,3 +312,233 @@ class TestQueryEngineEdgeCases:
 
             assert "total_tokens" in stats
             assert "estimated_cost_usd" in stats
+
+
+class TestQueryEngineWithCitations:
+    """Test citation-enabled RAG queries."""
+
+    def test_query_with_citations_retrieves_chunks(self):
+        """QueryEngine should retrieve chunks for citation-enabled queries."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = [
+                {"id": "c1", "text": "Aang is the Avatar", "metadata": {"url": "wiki/aang", "title": "Aang"}, "distance": 0.1}
+            ]
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            mock_llm.query_with_citations.return_value = {
+                "text": "Aang is the protagonist",
+                "evidence": []
+            }
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            result = engine.query_with_citations("Who is Aang?")
+
+            # Should retrieve chunks
+            mock_retriever.retrieve.assert_called_once_with(query="Who is Aang?", k=10, metadata_filter=None)
+
+    def test_query_with_citations_passes_documents_to_llm(self):
+        """QueryEngine should pass retrieved chunks as documents to LLM."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            chunks = [
+                {"id": "c1", "text": "Doc 1 text", "metadata": {"url": "url1", "title": "T1"}, "distance": 0.1},
+                {"id": "c2", "text": "Doc 2 text", "metadata": {"url": "url2", "title": "T2"}, "distance": 0.2}
+            ]
+            mock_retriever.retrieve.return_value = chunks
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            mock_llm.query_with_citations.return_value = {
+                "text": "Answer",
+                "evidence": []
+            }
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            result = engine.query_with_citations("Query")
+
+            # Should call query_with_citations with documents and metadata
+            mock_llm.query_with_citations.assert_called_once()
+            call_kwargs = mock_llm.query_with_citations.call_args[1]
+
+            # Check documents list
+            assert "documents" in call_kwargs
+            assert len(call_kwargs["documents"]) == 2
+            assert call_kwargs["documents"][0] == "Doc 1 text"
+            assert call_kwargs["documents"][1] == "Doc 2 text"
+
+            # Check metadata list
+            assert "document_metadata" in call_kwargs
+            assert len(call_kwargs["document_metadata"]) == 2
+            assert call_kwargs["document_metadata"][0]["url"] == "url1"
+            assert call_kwargs["document_metadata"][1]["url"] == "url2"
+
+    def test_query_with_citations_returns_text_and_evidence(self):
+        """QueryEngine should return both text and evidence from citation query."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = [
+                {"id": "c1", "text": "Context", "metadata": {"url": "wiki/aang", "title": "Aang"}, "distance": 0.1}
+            ]
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            mock_llm.query_with_citations.return_value = {
+                "text": "Aang is the last Airbender",
+                "evidence": [
+                    {
+                        "cited_text": "Aang is the Avatar",
+                        "source_url": "wiki/aang",
+                        "page_title": "Aang",
+                        "document_index": 0,
+                        "location": {"start": 0, "end": 20}
+                    }
+                ]
+            }
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            result = engine.query_with_citations("Who is Aang?")
+
+            # Should return dict with text and evidence
+            assert "text" in result
+            assert "evidence" in result
+            assert result["text"] == "Aang is the last Airbender"
+            assert len(result["evidence"]) == 1
+            assert result["evidence"][0]["cited_text"] == "Aang is the Avatar"
+
+    def test_query_with_citations_supports_custom_k(self):
+        """QueryEngine citation query should support custom k parameter."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = []
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            mock_llm.query_with_citations.return_value = {"text": "Answer", "evidence": []}
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            engine.query_with_citations("Query", k=15)
+
+            # Should pass k to retriever
+            call_args = mock_retriever.retrieve.call_args
+            assert call_args[1]["k"] == 15
+
+    def test_query_with_citations_supports_metadata_filter(self):
+        """QueryEngine citation query should support metadata filtering."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = []
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            mock_llm.query_with_citations.return_value = {"text": "Answer", "evidence": []}
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            filter_dict = {"namespace": "Character"}
+            engine.query_with_citations("Query", metadata_filter=filter_dict)
+
+            # Should pass filter to retriever
+            call_args = mock_retriever.retrieve.call_args
+            assert call_args[1]["metadata_filter"] == filter_dict
+
+    def test_query_with_citations_validates_empty_query(self):
+        """QueryEngine citation query should validate query is not empty."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever"), \
+             patch("src.processor.rag.query_engine.LLMClient"):
+
+            engine = QueryEngine(project_name="test_wiki")
+
+            with pytest.raises(ValueError, match="query cannot be empty"):
+                engine.query_with_citations("")
+
+    def test_query_with_citations_handles_no_chunks(self):
+        """QueryEngine should handle case when retriever returns no chunks."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = []  # No chunks found
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            # LLM should not be called if no chunks
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            result = engine.query_with_citations("Unknown topic")
+
+            # Should return empty result
+            assert result["text"] == ""
+            assert result["evidence"] == []
+            # LLM should not be called
+            mock_llm.query_with_citations.assert_not_called()
+
+    def test_query_detailed_with_citations_includes_evidence(self):
+        """QueryEngine detailed response should include citation evidence when enabled."""
+        from src.processor.rag.query_engine import QueryEngine
+
+        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
+             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+
+            mock_retriever = MagicMock()
+            chunks = [
+                {"id": "c1", "text": "Context", "metadata": {"url": "wiki/aang", "title": "Aang"}, "distance": 0.1}
+            ]
+            mock_retriever.retrieve.return_value = chunks
+            mock_retriever_class.return_value = mock_retriever
+
+            mock_llm = MagicMock()
+            mock_llm.query_with_citations.return_value = {
+                "text": "Aang is the Avatar",
+                "evidence": [
+                    {"cited_text": "Source text", "source_url": "wiki/aang"}
+                ]
+            }
+            mock_llm.get_usage_stats.return_value = {
+                "total_tokens": 100,
+                "estimated_cost_usd": 0.001
+            }
+            mock_llm_class.return_value = mock_llm
+
+            engine = QueryEngine(project_name="test_wiki")
+            result = engine.query_detailed("Who is Aang?", use_citations=True)
+
+            # Should include evidence in result
+            assert "evidence" in result
+            assert len(result["evidence"]) == 1
+            assert result["evidence"][0]["cited_text"] == "Source text"
+
+            # Should still have traditional fields
+            assert "answer" in result
+            assert "sources" in result
+            assert "usage" in result

@@ -245,3 +245,164 @@ class LLMClient:
         """Reset token usage statistics to zero."""
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+
+    def query_with_citations(
+        self,
+        query: str,
+        documents: List[str],
+        document_metadata: List[Dict[str, Any]],
+        temperature: float = 0.7,
+        max_tokens: int = 1024
+    ) -> Dict[str, Any]:
+        """
+        Query Claude with documents and get automatic citation tracking.
+
+        This method enables Claude's citation feature to track which documents
+        support each claim in the response. Citations are automatically mapped
+        back to source pages using the provided metadata.
+
+        Args:
+            query: Question or prompt to send to Claude
+            documents: List of document texts (retrieved chunks)
+            document_metadata: List of metadata dicts (one per document)
+                Each dict should contain source tracking fields like:
+                - source_url: URL of the source page
+                - page_title: Title of the source page
+                - chunk_id: ID of the chunk (optional)
+            temperature: Sampling temperature 0-1 (default: 0.7)
+            max_tokens: Maximum tokens to generate (default: 1024)
+
+        Returns:
+            Dictionary with:
+                {
+                    "text": "Generated response text",
+                    "evidence": [
+                        {
+                            "cited_text": "Exact text from document",
+                            "source_url": "wiki/page",
+                            "page_title": "Page Title",
+                            "document_index": 0,
+                            "location": {"start": 0, "end": 27},
+                            ... (other metadata fields)
+                        },
+                        ...
+                    ]
+                }
+
+        Raises:
+            ValueError: If inputs are invalid
+
+        Example:
+            >>> client = LLMClient()
+            >>> result = client.query_with_citations(
+            ...     "Who is Aang?",
+            ...     ["Aang is the Avatar...", "He is the last Airbender..."],
+            ...     [
+            ...         {"source_url": "wiki/aang", "page_title": "Aang"},
+            ...         {"source_url": "wiki/avatar", "page_title": "Avatar"}
+            ...     ]
+            ... )
+            >>> print(result["text"])
+            >>> print(f"Citations: {len(result['evidence'])}")
+        """
+        # Validate inputs
+        if not query or not query.strip():
+            raise ValueError("query cannot be empty")
+
+        if not documents:
+            raise ValueError("documents cannot be empty")
+
+        if len(documents) != len(document_metadata):
+            raise ValueError("documents and metadata must have same length")
+
+        if not (0 <= temperature <= 1):
+            raise ValueError("temperature must be between 0 and 1")
+
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be positive")
+
+        # Initialize client if needed
+        self._init_client()
+        assert self._client is not None, "Client should be initialized"
+
+        # Build document blocks with citations enabled
+        content_blocks: List[Dict[str, Any]] = []
+
+        for doc_text in documents:
+            content_blocks.append({
+                "type": "document",
+                "source": {
+                    "type": "text",
+                    "media_type": "text/plain",
+                    "data": doc_text
+                },
+                "citations": {"enabled": True}
+            })
+
+        # Add text query at the end
+        content_blocks.append({
+            "type": "text",
+            "text": query.strip()
+        })
+
+        # Build message with mixed content
+        messages: List["MessageParam"] = [
+            cast("MessageParam", {
+                "role": "user",
+                "content": content_blocks
+            })
+        ]
+
+        # Call Claude API
+        try:
+            response = self._client.messages.create(
+                model=self.model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+        except Exception as e:
+            raise Exception(f"Claude API call failed: {str(e)}") from e
+
+        # Extract text and citations from response
+        result_text = ""
+        evidence: List[Dict[str, Any]] = []
+
+        for block in response.content:
+            if block.type == "text":
+                # Accumulate text from all text blocks
+                text_block = cast("TextBlock", block)
+                result_text += text_block.text
+
+                # Extract citations if present
+                if hasattr(block, "citations") and block.citations:
+                    for citation in block.citations:
+                        # Map citation back to source metadata
+                        doc_idx = citation.document_index
+                        metadata = document_metadata[doc_idx]
+
+                        # Build evidence entry with all metadata fields
+                        # citation has: cited_text, document_index, and a location object
+                        # location is a CitationCharLocation with start and end attributes
+                        location_dict = {
+                            "start": citation.location.start,
+                            "end": citation.location.end
+                        } if hasattr(citation, "location") and citation.location else None
+
+                        evidence_entry = {
+                            "cited_text": citation.cited_text,
+                            "document_index": doc_idx,
+                            "location": location_dict,
+                            **metadata  # Include all metadata fields
+                        }
+
+                        evidence.append(evidence_entry)
+
+        # Track token usage
+        self.total_input_tokens += response.usage.input_tokens
+        self.total_output_tokens += response.usage.output_tokens
+
+        return {
+            "text": result_text,
+            "evidence": evidence
+        }

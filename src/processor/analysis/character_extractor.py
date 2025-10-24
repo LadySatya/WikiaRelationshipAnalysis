@@ -419,13 +419,31 @@ Be conservative: if unsure, classify as "no".
         Returns:
             "character" if definitely a character, None if ambiguous
         """
-        # Check namespace
-        namespace = page.get("namespace", "").lower()
+        # FIRST: Check if this is a title/position page (NOT a character)
+        # These pages are about political/social titles, not individual people
+        main_content = page.get("main_content", "").lower()
+        title = page.get("title", "").lower()
+        url = page.get("url", "").lower()
+
+        title_indicators = [
+            "this article is about the title",
+            "this article is about the political position",
+            ":titles" in url,
+            "/category:titles" in url,
+            "category:titles" in main_content[:500],  # Check early in content
+        ]
+
+        if any(indicator if isinstance(indicator, bool) else indicator in main_content[:500]
+               for indicator in title_indicators):
+            return "not_character"  # Explicitly mark as non-character
+
+        # Check namespace (handle None explicitly)
+        namespace = page.get("namespace") or ""
+        namespace = namespace.lower()
         if "character" in namespace:
             return "character"
 
         # Check URL patterns
-        url = page.get("url", "").lower()
         if any(pattern in url for pattern in ["/characters/", "/character:", "category:characters"]):
             return "character"
 
@@ -615,16 +633,20 @@ First paragraph: {snippet}
         ambiguous_pages = []
 
         print("[INFO] Tier 1: Classifying by metadata...")
+        filtered_count = 0
         for page in pages:
             classification = self._classify_by_metadata(page)
 
             if classification == "character":
                 characters.append(self._create_character_entry(page, tier="metadata"))
+            elif classification == "not_character":
+                # Explicitly filtered out (e.g., title pages)
+                filtered_count += 1
             else:
-                # Needs further classification
+                # Ambiguous - needs further classification
                 ambiguous_pages.append(page)
 
-        print(f"[INFO] Tier 1 classified {len(characters)} characters, {len(ambiguous_pages)} ambiguous")
+        print(f"[INFO] Tier 1 classified {len(characters)} characters, {filtered_count} filtered, {len(ambiguous_pages)} ambiguous")
 
         # Tier 2: Batch title classification
         if ambiguous_pages:

@@ -348,3 +348,273 @@ class TestLLMClientWithContext:
             assert len(messages) == 3
             assert messages[0]["content"] == "What is retrieval augmented generation?"
             assert messages[2]["content"] == "Can you give me an example?"
+
+
+class TestLLMClientWithCitations:
+    """Test citation support for evidence tracking."""
+
+    def test_query_with_citations_builds_document_blocks(self):
+        """LLMClient should build document blocks with citations enabled."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_content = MagicMock()
+            mock_content.type = "text"
+            mock_content.text = "Aang is the Avatar"
+            mock_content.citations = []
+            mock_response.content = [mock_content]
+            mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            documents = ["Document 1 content", "Document 2 content"]
+            metadata = [
+                {"source_url": "wiki/page1", "page_title": "Page 1"},
+                {"source_url": "wiki/page2", "page_title": "Page 2"}
+            ]
+
+            result = client.query_with_citations("Who is Aang?", documents, metadata)
+
+            # Should call API with document blocks
+            call_kwargs = mock_client.messages.create.call_args[1]
+            messages = call_kwargs["messages"]
+
+            # Should have 1 message with multiple content blocks
+            assert len(messages) == 1
+            content_blocks = messages[0]["content"]
+
+            # Should have 2 documents + 1 text query = 3 blocks
+            assert len(content_blocks) == 3
+
+            # First two should be document blocks
+            assert content_blocks[0]["type"] == "document"
+            assert content_blocks[0]["source"]["data"] == "Document 1 content"
+            assert content_blocks[0]["citations"]["enabled"] is True
+
+            assert content_blocks[1]["type"] == "document"
+            assert content_blocks[1]["source"]["data"] == "Document 2 content"
+            assert content_blocks[1]["citations"]["enabled"] is True
+
+            # Last should be text query
+            assert content_blocks[2]["type"] == "text"
+            assert content_blocks[2]["text"] == "Who is Aang?"
+
+    def test_query_with_citations_extracts_text_response(self):
+        """LLMClient should extract text from citation-enabled response."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_content = MagicMock()
+            mock_content.type = "text"
+            mock_content.text = "Aang is the last Airbender and Avatar"
+            mock_content.citations = []
+            mock_response.content = [mock_content]
+            mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            result = client.query_with_citations(
+                "Who is Aang?",
+                ["Document content"],
+                [{"source_url": "wiki/aang", "page_title": "Aang"}]
+            )
+
+            assert result["text"] == "Aang is the last Airbender and Avatar"
+            assert "evidence" in result
+            assert isinstance(result["evidence"], list)
+
+    def test_query_with_citations_extracts_citation_evidence(self):
+        """LLMClient should extract citations and map to source metadata."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+
+            # Mock citation objects
+            citation1 = MagicMock()
+            citation1.document_index = 0
+            citation1.cited_text = "Aang is the last Airbender"
+            citation1.location = {"start": 0, "end": 27}
+
+            citation2 = MagicMock()
+            citation2.document_index = 1
+            citation2.cited_text = "He is a master of all four elements"
+            citation2.location = {"start": 50, "end": 85}
+
+            mock_content = MagicMock()
+            mock_content.type = "text"
+            mock_content.text = "Aang is the last Airbender and a master of all elements"
+            mock_content.citations = [citation1, citation2]
+
+            mock_response.content = [mock_content]
+            mock_response.usage = MagicMock(input_tokens=150, output_tokens=75)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            documents = ["Document 1", "Document 2"]
+            metadata = [
+                {"source_url": "wiki/aang", "page_title": "Aang", "chunk_id": "chunk1"},
+                {"source_url": "wiki/avatar", "page_title": "Avatar", "chunk_id": "chunk2"}
+            ]
+
+            result = client.query_with_citations("Who is Aang?", documents, metadata)
+
+            # Should extract and map citations
+            assert len(result["evidence"]) == 2
+
+            # First citation
+            assert result["evidence"][0]["cited_text"] == "Aang is the last Airbender"
+            assert result["evidence"][0]["source_url"] == "wiki/aang"
+            assert result["evidence"][0]["page_title"] == "Aang"
+            assert result["evidence"][0]["chunk_id"] == "chunk1"
+            assert result["evidence"][0]["document_index"] == 0
+            assert result["evidence"][0]["location"] == {"start": 0, "end": 27}
+
+            # Second citation
+            assert result["evidence"][1]["cited_text"] == "He is a master of all four elements"
+            assert result["evidence"][1]["source_url"] == "wiki/avatar"
+            assert result["evidence"][1]["page_title"] == "Avatar"
+            assert result["evidence"][1]["chunk_id"] == "chunk2"
+
+    def test_query_with_citations_handles_no_citations(self):
+        """LLMClient should handle responses with no citations gracefully."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_content = MagicMock()
+            mock_content.type = "text"
+            mock_content.text = "No specific information found"
+            # No citations attribute
+            mock_response.content = [mock_content]
+            mock_response.usage = MagicMock(input_tokens=50, output_tokens=20)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            result = client.query_with_citations(
+                "Who is Unknown Character?",
+                ["Document"],
+                [{"source_url": "wiki/unknown", "page_title": "Unknown"}]
+            )
+
+            assert result["text"] == "No specific information found"
+            assert result["evidence"] == []
+
+    def test_query_with_citations_tracks_token_usage(self):
+        """LLMClient should track token usage for citation queries."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_content = MagicMock()
+            mock_content.type = "text"
+            mock_content.text = "Response"
+            mock_content.citations = []
+            mock_response.content = [mock_content]
+            mock_response.usage = MagicMock(input_tokens=500, output_tokens=100)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            client.query_with_citations(
+                "Query",
+                ["Document"],
+                [{"source_url": "wiki/page"}]
+            )
+
+            # Should track tokens
+            assert client.total_input_tokens == 500
+            assert client.total_output_tokens == 100
+
+    def test_query_with_citations_validates_empty_documents(self):
+        """LLMClient should validate documents list is not empty."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient(provider="anthropic")
+
+        with pytest.raises(ValueError, match="documents cannot be empty"):
+            client.query_with_citations("Query", [], [])
+
+    def test_query_with_citations_validates_metadata_match(self):
+        """LLMClient should validate documents and metadata have same length."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient(provider="anthropic")
+
+        with pytest.raises(ValueError, match="documents and metadata must have same length"):
+            client.query_with_citations(
+                "Query",
+                ["Doc 1", "Doc 2"],
+                [{"source_url": "wiki/page1"}]  # Only 1 metadata for 2 docs
+            )
+
+    def test_query_with_citations_validates_empty_query(self):
+        """LLMClient should validate query is not empty."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient(provider="anthropic")
+
+        with pytest.raises(ValueError, match="query cannot be empty"):
+            client.query_with_citations(
+                "",
+                ["Document"],
+                [{"source_url": "wiki/page"}]
+            )
+
+    def test_query_with_citations_handles_multiple_text_blocks(self):
+        """LLMClient should handle responses with multiple text blocks."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+
+            # Multiple text blocks in response
+            block1 = MagicMock()
+            block1.type = "text"
+            block1.text = "First part. "
+            block1.citations = []
+
+            block2 = MagicMock()
+            block2.type = "text"
+            block2.text = "Second part."
+            citation = MagicMock()
+            citation.document_index = 0
+            citation.cited_text = "Source text"
+            citation.location = {"start": 0, "end": 11}
+            block2.citations = [citation]
+
+            mock_response.content = [block1, block2]
+            mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            result = client.query_with_citations(
+                "Query",
+                ["Document"],
+                [{"source_url": "wiki/page", "page_title": "Page"}]
+            )
+
+            # Should concatenate text from all blocks
+            assert result["text"] == "First part. Second part."
+            # Should extract citations from all blocks
+            assert len(result["evidence"]) == 1
+            assert result["evidence"][0]["cited_text"] == "Source text"

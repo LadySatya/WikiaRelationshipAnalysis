@@ -65,6 +65,9 @@ class WikiaCrawler:
         self.project_name = project_name
         self.config = config.copy()
 
+        # Setup logger
+        self.logger = logging.getLogger(f"wikia_analyzer.{project_name}.crawler")
+
         # Set defaults for optional configuration
         self.timeout_seconds = config.get("timeout_seconds", 30)
         self.max_retries = config.get("max_retries", 3)
@@ -147,12 +150,20 @@ class WikiaCrawler:
 
         start_time = time.time()
 
+        # Log crawl start
+        self.logger.info("="*60)
+        self.logger.info(f"Starting crawl: {self.project_name}")
+        self.logger.info(f"Start URLs: {start_urls}")
+        self.logger.info(f"Max pages: {max_pages if max_pages else 'unlimited'}")
+        self.logger.info("="*60)
+
         try:
             # Set target domain for domain validation
             self._set_target_domain(start_urls)
 
             # Add start URLs to the queue
             self.url_manager.add_urls(start_urls)
+            self.logger.info(f"Added {len(start_urls)} seed URLs to queue")
 
             # Main crawling loop
             while True:
@@ -184,6 +195,13 @@ class WikiaCrawler:
                                 page_data["characters_mentioned"]
                             )
 
+                        # Log progress
+                        queue_size = self.url_manager.queue_size()
+                        self.logger.info(
+                            f"Crawled [{stats['pages_crawled']}/{max_pages if max_pages else '?'}]: "
+                            f"{page_data.get('title', 'Unknown')} (Queue: {queue_size})"
+                        )
+
                         # Mark URL as visited
                         self.url_manager.mark_visited(url)
 
@@ -195,6 +213,7 @@ class WikiaCrawler:
                                 if self._should_crawl_url(link)
                             ]
                             self.url_manager.add_urls(new_links)
+                            self.logger.debug(f"  Added {len(new_links)} new links to queue")
                     else:
                         # Mark as failed if no data returned
                         self.url_manager.mark_failed(url, "No data extracted")
@@ -216,13 +235,24 @@ class WikiaCrawler:
 
             # Final statistics
             end_time = time.time()
+            elapsed = end_time - start_time
             stats.update(
                 {
                     "end_time": datetime.now(timezone.utc).isoformat(),
-                    "duration_seconds": end_time - start_time,
+                    "duration_seconds": elapsed,
                     "urls_in_queue": self.url_manager.queue_size(),
                 }
             )
+
+            # Log completion
+            self.logger.info("="*60)
+            self.logger.info("Crawl complete!")
+            self.logger.info(f"Pages crawled: {stats['pages_crawled']}")
+            self.logger.info(f"Errors: {stats['errors']}")
+            self.logger.info(f"Time: {elapsed:.1f}s")
+            self.logger.info(f"Rate: {stats['pages_crawled']/elapsed:.2f} pages/sec")
+            self.logger.info(f"Remaining in queue: {stats['urls_in_queue']}")
+            self.logger.info("="*60)
 
             # Save final state
             await self._save_crawl_state(stats)

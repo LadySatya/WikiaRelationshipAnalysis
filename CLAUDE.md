@@ -6,6 +6,110 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 WikiaAnalyzer is a modular system that webcrawls wikia sites, extracts character information, and uses LLM analysis to discover and visualize character relationships. The project uses file-based storage with a project-oriented architecture.
 
+## LLM Prompt Engineering Standards
+
+**CRITICAL**: This project uses Claude (Anthropic) for character and relationship extraction. All LLM prompts MUST follow Claude's prompt engineering best practices to minimize errors and improve output quality.
+
+### Required Techniques for All LLM Prompts
+
+1. **Use XML Tags for Structure** (Highest Priority)
+   ```python
+   query = f"""<task>
+   Clear statement of what you want Claude to do.
+   </task>
+
+   <instructions>
+   Step-by-step numbered instructions.
+   </instructions>
+
+   <format>
+   Explicit output format specification.
+   </format>
+
+   <examples>
+   Good examples and BAD examples (what NOT to do).
+   </examples>
+   """
+   ```
+
+2. **Provide Clear Context**
+   - Explain what the task results will be used for
+   - State the intended audience for the output
+   - Describe where this fits in the larger workflow
+
+3. **Use Specific Examples (Few-Shot Prompting)**
+   - Include 3-5 examples of correct output
+   - Include 2-3 examples of INCORRECT output with "DO NOT DO THIS"
+   - Cover edge cases in examples
+
+4. **Be Explicit About Exclusions**
+   - Don't just say what to include - say what to EXCLUDE
+   - List specific patterns to avoid
+   - Provide examples of invalid outputs
+
+5. **Use Sequential Instructions**
+   - Break complex tasks into numbered steps
+   - Use bullet points for clarity
+   - One instruction per line
+
+### Bad vs Good Prompt Examples
+
+**BAD** (Vague, no structure):
+```python
+query = f"List characters that {char_name} has relationships with."
+```
+
+**GOOD** (Structured, clear, with examples):
+```python
+query = f"""<task>
+You are analyzing a wiki to identify character relationships.
+List all OTHER CHARACTERS that {char_name} has a relationship with.
+</task>
+
+<instructions>
+1. Only list NAMED INDIVIDUALS (e.g., "Katara", "Prince Zuko")
+2. Do NOT list:
+   - Titles or roles (e.g., "Phoenix King")
+   - Groups (e.g., "Team Avatar")
+   - Concepts (e.g., "friendship")
+</instructions>
+
+<format>
+CHARACTER_NAME - brief_relationship_type
+</format>
+
+<examples>
+Good:
+1. Katara - romantic partner
+2. Prince Zuko - former enemy turned ally
+
+Bad (DO NOT DO THIS):
+1. The Avatar - enemy (this is a title, not a name)
+2. Team Avatar - friends (this is a group, not a person)
+</examples>
+
+Analyze the wiki content and list the characters:
+"""
+```
+
+### When to Avoid Hardcoded Validation Lists
+
+Prefer good prompt engineering over hardcoded validation:
+- ✅ **Good**: Clear examples and instructions prevent bad outputs
+- ❌ **Bad**: Hardcoded list of invalid keywords to filter (`["relationship type", "description", ...]`)
+
+Hardcoded validation should only be a **last resort** for edge cases the prompt can't prevent.
+
+### Resources
+
+- [Claude Prompt Engineering Overview](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview)
+- [Be Clear and Direct](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/be-clear-and-direct)
+- [Use XML Tags](https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags)
+
+**Implementation Examples:**
+- `src/processor/analysis/profile_builder.py:86-124` (relationship discovery)
+- `src/processor/analysis/profile_builder.py:218-255` (relationship details)
+
 ## Key Development Commands
 
 ```bash
@@ -14,19 +118,37 @@ pip install -e .                    # Install in development mode
 pip install -e ".[dev]"             # Install with dev dependencies
 pip install -e ".[dev,llm,viz]"     # Install with specific extras
 
-# Main application interface
+# ========== Main Application Interface (All Phases) ==========
+
+# Full pipeline (recommended)
+python main.py pipeline <project_name> <wikia_url> [--max-pages N] [--max-characters N]
+
+# Phase 1: Crawling
 python main.py crawl <project_name> <wikia_url> [--max-pages N]
-python main.py resume <project_name>
-python main.py status <project_name>
-python main.py list
+python main.py resume <project_name> [--max-pages N]
 
-# Direct crawler scripts (alternative interface)
-python scripts/crawl_wikia.py <project_name> <wikia_url> [--max-pages N] [--config path]
+# Phase 2: Processing & Analysis
+python main.py index <project_name>                    # Build vector database
+python main.py discover <project_name> [--min-mentions N] [--confidence THRESHOLD]
+python main.py build <project_name> [--max-characters N]
 
-# Resume crawling (implicit - just run crawl_wikia.py again with same project name)
-# The crawler automatically loads previous queue/visited URLs from the project
+# Phase 3: Validation
+python main.py validate <project_name>                 # Show results and statistics
 
-# Testing and Quality
+# Project Management
+python main.py list                                    # List all projects
+python main.py status <project_name>                   # Show project status
+python main.py view <project_name>                     # View sample content
+
+# ========== PoC Scripts (Deprecated - will be removed) ==========
+# NOTE: Use main.py commands instead. These are kept temporarily for reference.
+python scripts/poc_crawl_avatar.py                     # Use: python main.py crawl
+python scripts/poc_index_avatar.py                     # Use: python main.py index
+python scripts/poc_discover_characters.py              # Use: python main.py discover
+python scripts/poc_build_relationships.py              # Use: python main.py build
+python scripts/poc_validate_results.py                 # Use: python main.py validate
+
+# ========== Testing and Quality ==========
 python -m pytest tests/test_crawler/                        # Run all crawler tests
 python -m pytest tests/test_crawler/core/                   # Core crawler tests
 python -m pytest tests/test_crawler/rate_limiting/          # Rate limiting tests
@@ -78,7 +200,11 @@ flake8 src/                                            # Linting
 - URL normalization and filename generation handles special characters
 - Content filtering removes wikia navigation/ads but preserves main content
 - Test fixtures use Naruto and Avatar characters as sample data
-- Output files contain: url, title, main_content, links, infobox_data, namespace, related_articles
+- **CRITICAL: Crawler saves to `processed/` directory ONLY (not `raw/`)**
+  - ContentSaver structure: `{"url": "...", "saved_at": "...", "content": {...}}`
+  - Content fields: `url, title, main_content, links, infobox_data, namespace, is_disambiguation`
+  - Files are saved as: `<cleaned_title>_YYYYMMDD.json` in `data/projects/<name>/processed/`
+  - RAG indexing must read from `processed/` and extract the `content` field
 
 ## Phase 2: RAG-Based Character Analysis (IN PROGRESS)
 
@@ -242,24 +368,26 @@ characters = extractor.discover_characters(save=True)
 # ... etc
 ```
 
-### CLI Commands (Planned)
+### CLI Commands (IMPLEMENTED ✅)
 
 ```bash
 # Index project for RAG queries
 python main.py index <project_name>
 
 # Discover all characters in corpus (with auto-save)
-python main.py discover-characters <project_name>
+python main.py discover <project_name> [--min-mentions N] [--confidence THRESHOLD]
 
-# Build specific character profile
-python main.py build-profile <project_name> "Aang"
+# Build relationship profiles for characters
+python main.py build <project_name> [--max-characters N]
 
-# Build all character profiles
-python main.py build-all-profiles <project_name>
+# Validate and show results
+python main.py validate <project_name>
 
-# Query the RAG system directly
-python main.py query <project_name> "Who is Katara's brother?"
+# Run full pipeline
+python main.py pipeline <project_name> <wikia_url> [--max-pages N] [--max-characters N]
 ```
+
+**Note:** All CLI commands are now implemented and functional. See "Key Development Commands" section above for full usage details.
 
 ### Cost Estimation
 
@@ -330,7 +458,7 @@ Wiki pages often have multiple characters with the same name, disambiguated by p
 **Testing**:
 - 32 unit tests (including 8 duplicate name tests)
 - 4 integration tests with real ChromaDB
-- Demo script: `python scripts/demo_duplicate_names.py`
+- Comprehensive test coverage in `tests/test_processor/analysis/test_character_extractor.py`
 
 **Cost**: Zero additional LLM calls (parsing is regex-based, filtering is local)
 
@@ -343,17 +471,29 @@ Wiki pages often have multiple characters with the same name, disambiguated by p
 - **Flexibility**: Can answer arbitrary questions about the wiki
 - **Incremental**: Can add new pages to existing index
 
-## Future Architecture (Phases 3-5)
+## Architecture Status
 
-The system is designed for 6 modular components:
-1. **Crawler** (Phase 1 - ✅ COMPLETE)
-2. **RAG Processor** (Phase 2 - 🔄 IN PROGRESS - Character discovery with duplicate handling ✅, Profile building 📋)
-3. **Relationship Graph Builder** (Phase 3 - character network construction)
-4. **Graph Analysis** (Phase 4 - community detection, centrality measures)
-5. **Visualizer** (Phase 5 - interactive network graphs, exports)
-6. **Storage** (implemented as file-based system)
+The system is designed for modular components with a unified CLI interface:
 
-Each module will be independently testable and configurable.
+### Implemented Components ✅
+1. **Crawler** (Phase 1) - Web crawling with rate limiting, robots.txt compliance
+2. **RAG Processor** (Phase 2) - Character discovery and relationship extraction
+   - Content chunking and vector indexing
+   - Character discovery with duplicate name handling
+   - Relationship profile building with structured claims
+3. **CLI Interface** (`src/cli/`) - Unified command-line interface
+   - `crawl_commands.py` - Crawling and resuming
+   - `processor_commands.py` - Indexing, discovery, profile building
+   - `pipeline.py` - Full pipeline orchestration and validation
+   - `utils.py` - Shared logging and config utilities
+4. **Storage** - File-based project architecture
+
+### Future Enhancements (Optional)
+5. **Graph Analysis** - Community detection, centrality measures
+6. **Visualizer** - Interactive network graphs, exports
+7. **API Server** - REST API for programmatic access
+
+Each module is independently testable and configurable.
 
 ## Development Notes
 
@@ -558,7 +698,37 @@ python -m pytest -m "not network" -v
 
 ## Windows Compatibility Notes
 
-**CRITICAL**: When writing log messages, status updates, or console output, avoid Unicode symbols and emojis that don't render properly on Windows terminals. Use text-based indicators instead:
+### Unicode in Python Source Files
+
+**CRITICAL**: **NEVER use Unicode characters in Python source files (.py files)**. Windows console (cmd.exe) uses CP-1252 encoding by default and cannot display most Unicode characters, causing `UnicodeEncodeError` crashes.
+
+**BANNED Characters:**
+- Mathematical symbols: ≥ ≤ ≠ ± × ÷ ∞
+- Arrows: → ← ↑ ↓ ⇒ ⇔
+- Checkmarks/symbols: ✓ ✗ ★ ● ■
+- Greek letters: α β γ δ λ π
+- Any emoji: 🔍 ✅ ❌ 🚀
+
+**Use ASCII Alternatives:**
+```python
+# BAD (will crash on Windows):
+logger.info(f"High (≥0.8): {count}")
+logger.info("✓ Success")
+
+# GOOD (works everywhere):
+logger.info(f"High (>=0.8): {count}")
+logger.info("[OK] Success")
+```
+
+**Allowed Locations for Unicode:**
+- ✅ JSON data files (UTF-8 encoded)
+- ✅ Markdown documentation (.md files)
+- ✅ Test fixture data
+- ❌ **NEVER in .py source code**
+
+### Console Output Guidelines
+
+When writing log messages, status updates, or console output, use text-based indicators:
 
 - ✓ AVOID: "✓ Success", "✗ Error", "🔍 Processing"
 - ✓ USE: "[OK] Success", "[ERROR] Error", "[INFO] Processing"

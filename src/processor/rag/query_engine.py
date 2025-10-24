@@ -123,7 +123,8 @@ Please answer the question based on the information provided above."""
         self,
         query: str,
         k: int = 10,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        use_citations: bool = False
     ) -> Dict[str, Any]:
         """
         Execute RAG query and return detailed response with metadata.
@@ -132,6 +133,7 @@ Please answer the question based on the information provided above."""
             query: User question
             k: Number of chunks to retrieve (default: 10)
             metadata_filter: Optional metadata filter
+            use_citations: Enable citation tracking (default: False)
 
         Returns:
             Dictionary with structure:
@@ -141,6 +143,9 @@ Please answer the question based on the information provided above."""
                     "sources": [
                         {"text": "...", "url": "...", "distance": 0.1},
                         ...
+                    ],
+                    "evidence": [  # Only if use_citations=True
+                        {"cited_text": "...", "url": "...", ...}
                     ],
                     "usage": {
                         "total_tokens": 150,
@@ -155,8 +160,14 @@ Please answer the question based on the information provided above."""
             metadata_filter=metadata_filter
         )
 
-        # Generate answer
-        answer = self.query(query, k=k, metadata_filter=metadata_filter)
+        # Generate answer (with or without citations)
+        if use_citations:
+            result = self.query_with_citations(query, k=k, metadata_filter=metadata_filter)
+            answer = result["text"]
+            evidence = result["evidence"]
+        else:
+            answer = self.query(query, k=k, metadata_filter=metadata_filter)
+            evidence = None
 
         # Get usage stats from LLM client
         usage = self.llm_client.get_usage_stats()
@@ -171,12 +182,19 @@ Please answer the question based on the information provided above."""
             for chunk in chunks
         ]
 
-        return {
+        # Build response
+        response = {
             "query": query,
             "answer": answer,
             "sources": sources,
             "usage": usage
         }
+
+        # Add evidence if citations were used
+        if use_citations and evidence is not None:
+            response["evidence"] = evidence
+
+        return response
 
     def get_usage_stats(self) -> Dict[str, Any]:
         """
@@ -186,3 +204,89 @@ Please answer the question based on the information provided above."""
             Dictionary with usage stats (tokens, cost, etc.)
         """
         return self.llm_client.get_usage_stats()
+
+    def query_with_citations(
+        self,
+        query: str,
+        k: int = 10,
+        metadata_filter: Optional[Dict[str, Any]] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 1024
+    ) -> Dict[str, Any]:
+        """
+        Execute RAG query with automatic citation tracking.
+
+        This method uses Claude's citation feature to track which chunks
+        support each claim in the response, providing verifiable evidence.
+
+        Args:
+            query: User question
+            k: Number of chunks to retrieve (default: 10)
+            metadata_filter: Optional metadata filter
+            temperature: Sampling temperature (default: 0.3 for factual)
+            max_tokens: Maximum tokens to generate (default: 1024)
+
+        Returns:
+            Dictionary with structure:
+                {
+                    "text": "Generated answer",
+                    "evidence": [
+                        {
+                            "cited_text": "Exact text from chunk",
+                            "url": "wiki/page",
+                            "title": "Page Title",
+                            "document_index": 0,
+                            "location": {"start": 0, "end": 27}
+                        },
+                        ...
+                    ]
+                }
+
+        Raises:
+            ValueError: If query is empty
+
+        Example:
+            >>> engine = QueryEngine("avatar_wiki")
+            >>> result = engine.query_with_citations("Who is Aang?")
+            >>> print(result["text"])
+            >>> print(f"Citations: {len(result['evidence'])}")
+        """
+        # Validate query
+        if not query or not query.strip():
+            raise ValueError("query cannot be empty")
+
+        # Retrieve relevant chunks
+        chunks = self.retriever.retrieve(
+            query=query.strip(),
+            k=k,
+            metadata_filter=metadata_filter
+        )
+
+        # If no chunks found, return empty result
+        if not chunks:
+            return {
+                "text": "",
+                "evidence": []
+            }
+
+        # Build documents and metadata for citation-enabled query
+        documents = [chunk["text"] for chunk in chunks]
+        document_metadata = [chunk["metadata"] for chunk in chunks]
+
+        # Build query prompt
+        prompt = f"""Based on the provided wiki content, please answer the following question.
+
+Question: {query.strip()}
+
+Please provide a clear, concise answer based only on the information in the documents."""
+
+        # Query LLM with citations
+        result = self.llm_client.query_with_citations(
+            query=prompt,
+            documents=documents,
+            document_metadata=document_metadata,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
+        return result
