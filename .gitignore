@@ -27,3 +27,18 @@ venv/
 
 # Logs
 *.log
+
+# Temporary files
+*_test.py
+*_temp.py
+rebuild_*.py
+test_*.py
+!tests/test_*.py
+
+# Temporary documentation
+*_STATUS.md
+*_RESULTS.md
+*_RECOMMENDATIONS.md
+*_REPORT.md
+*_PLAN.md
+*_INVESTIGATION.md

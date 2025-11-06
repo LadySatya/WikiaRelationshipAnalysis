@@ -406,3 +406,275 @@ class LLMClient:
             "text": result_text,
             "evidence": evidence
         }
+
+    def generate_with_tools(
+        self,
+        prompt: str,
+        tools: List[Dict[str, Any]],
+        tool_executor: callable,
+        max_iterations: int = 10,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 4096,
+        prune_history: bool = True,
+        keep_last_n: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Generate response with tool calling capability.
+
+        Claude can make multiple tool calls, receive results, and continue reasoning.
+        This enables autonomous information gathering and multi-step reasoning.
+
+        Args:
+            prompt: Initial prompt/task for Claude
+            tools: List of tool definitions (Anthropic API format)
+            tool_executor: Callback function to execute tools
+                          Should have signature: fn(tool_name: str, **kwargs) -> Dict
+            max_iterations: Max tool-call rounds (default: 10)
+            system_prompt: Optional system prompt
+            temperature: Sampling temperature (default: 0.3)
+            max_tokens: Max tokens to generate (default: 4096)
+            prune_history: If True, keep only recent conversation to reduce tokens (default: True)
+            keep_last_n: Number of recent tool exchanges to keep when pruning (default: 3)
+
+        Returns:
+            {
+                "final_response": "Claude's final answer",
+                "tool_calls": [
+                    {
+                        "tool": "search_wiki",
+                        "input": {"query": "..."},
+                        "result": {...}
+                    },
+                    ...
+                ],
+                "usage": {
+                    "total_input_tokens": N,
+                    "total_output_tokens": M,
+                    "estimated_cost_usd": X.XX,
+                    "iterations": I
+                }
+            }
+
+        Raises:
+            RuntimeError: If max iterations reached without completion
+            ValueError: If tool execution fails
+
+        Example:
+            >>> def my_tool_executor(name, **kwargs):
+            ...     if name == "search":
+            ...         return {"result": "..."}
+            >>>
+            >>> result = client.generate_with_tools(
+            ...     prompt="Find info about Aang",
+            ...     tools=[{"name": "search", ...}],
+            ...     tool_executor=my_tool_executor
+            ... )
+        """
+        # Validate inputs
+        if not prompt or not prompt.strip():
+            raise ValueError("prompt cannot be empty")
+
+        if not tools:
+            raise ValueError("tools cannot be empty")
+
+        if not callable(tool_executor):
+            raise ValueError("tool_executor must be callable")
+
+        if not (0 <= temperature <= 1):
+            raise ValueError("temperature must be between 0 and 1")
+
+        if max_tokens <= 0:
+            raise ValueError("max_tokens must be positive")
+
+        # Initialize client if needed
+        self._init_client()
+        assert self._client is not None, "Client should be initialized"
+
+        import json
+
+        conversation: List["MessageParam"] = [
+            cast("MessageParam", {"role": "user", "content": prompt.strip()})
+        ]
+        all_tool_calls = []
+        iteration_input_tokens = 0
+        iteration_output_tokens = 0
+
+        for iteration in range(max_iterations):
+            print(f"[INFO] Tool iteration {iteration + 1}/{max_iterations}")
+
+            # OPTIMIZATION: Prune conversation history to reduce token usage
+            # Keep only the original task and last N tool exchanges
+            if prune_history and iteration > 0:
+                conversation = self._prune_conversation(conversation, keep_last_n)
+
+            # Call Claude with tools available
+            try:
+                if system_prompt:
+                    response = self._client.messages.create(
+                        model=self.model,
+                        messages=conversation,
+                        tools=tools,
+                        system=system_prompt,
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    )
+                else:
+                    response = self._client.messages.create(
+                        model=self.model,
+                        messages=conversation,
+                        tools=tools,
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    )
+            except Exception as e:
+                raise RuntimeError(f"LLM API call failed: {e}") from e
+
+            # Track usage
+            if hasattr(response, "usage"):
+                iteration_input_tokens += response.usage.input_tokens
+                iteration_output_tokens += response.usage.output_tokens
+
+            # Check if Claude made tool calls
+            if response.stop_reason == "tool_use":
+                # Extract and execute tool calls
+                tool_results = []
+
+                for block in response.content:
+                    if block.type == "tool_use":
+                        tool_name = block.name
+                        tool_input = block.input
+
+                        print(f"[INFO] Claude called tool: {tool_name}")
+                        print(f"[INFO] Tool input: {tool_input}")
+
+                        # Execute tool via callback
+                        try:
+                            tool_result = tool_executor(tool_name, **tool_input)
+                        except Exception as e:
+                            # Return error to Claude so it can handle it
+                            tool_result = {
+                                "error": str(e),
+                                "success": False
+                            }
+                            print(f"[ERROR] Tool execution failed: {e}")
+
+                        print(f"[INFO] Tool result: {tool_result}")
+
+                        # Track tool call
+                        all_tool_calls.append({
+                            "tool": tool_name,
+                            "input": tool_input,
+                            "result": tool_result
+                        })
+
+                        # Prepare tool result for Claude
+                        tool_results.append({
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(tool_result)
+                        })
+
+                # Add assistant response and tool results to conversation
+                conversation.append(
+                    cast("MessageParam", {
+                        "role": "assistant",
+                        "content": response.content
+                    })
+                )
+                conversation.append(
+                    cast("MessageParam", {
+                        "role": "user",
+                        "content": tool_results
+                    })
+                )
+
+                # Continue loop to let Claude process results
+                continue
+
+            elif response.stop_reason == "end_turn":
+                # Claude finished - extract final response
+                final_text = ""
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        final_text += block.text
+
+                print(f"[INFO] Tool calling complete after {iteration + 1} iterations")
+                print(f"[INFO] Total tool calls: {len(all_tool_calls)}")
+
+                # Track total usage
+                self.total_input_tokens += iteration_input_tokens
+                self.total_output_tokens += iteration_output_tokens
+
+                # Calculate cost
+                estimated_cost = self.estimate_cost(iteration_input_tokens, iteration_output_tokens)
+
+                return {
+                    "final_response": final_text,
+                    "tool_calls": all_tool_calls,
+                    "usage": {
+                        "total_input_tokens": iteration_input_tokens,
+                        "total_output_tokens": iteration_output_tokens,
+                        "estimated_cost_usd": estimated_cost,
+                        "iterations": iteration + 1
+                    }
+                }
+
+            else:
+                # Unexpected stop reason
+                print(f"[WARN] Unexpected stop reason: {response.stop_reason}")
+                break
+
+        # Max iterations reached
+        raise RuntimeError(
+            f"Max iterations ({max_iterations}) reached without completion. "
+            f"Claude may need more iterations or there may be an issue with the task."
+        )
+
+    def _prune_conversation(
+        self,
+        messages: List["MessageParam"],
+        keep_last_n: int = 3
+    ) -> List["MessageParam"]:
+        """
+        Prune conversation to keep only recent exchanges.
+
+        This prevents unbounded context growth while maintaining recent
+        context for coherent responses. Significantly reduces token usage
+        in multi-iteration tool calling.
+
+        Strategy:
+        - Keep first message (original task description)
+        - Keep last N exchanges (assistant + user pairs)
+        - Discard older exchanges in the middle
+
+        Args:
+            messages: Full conversation history
+            keep_last_n: Number of recent exchanges to keep (default: 3)
+
+        Returns:
+            Pruned conversation
+
+        Example:
+            Original (7 messages):
+            [user_task, assistant_1, user_result_1, assistant_2, user_result_2, assistant_3, user_result_3]
+
+            Pruned with keep_last_n=2:
+            [user_task, assistant_2, user_result_2, assistant_3, user_result_3]
+        """
+        # If conversation is short enough, don't prune
+        # Need at least: 1 task + (keep_last_n * 2) messages
+        if len(messages) <= (keep_last_n * 2 + 1):
+            return messages
+
+        # Keep first message (original task)
+        task_message = messages[0]
+
+        # Keep last N exchanges (each exchange = 2 messages: assistant + user)
+        # Last N exchanges = last (N * 2) messages
+        recent_exchanges = messages[-(keep_last_n * 2):]
+
+        # Rebuild conversation: task + recent exchanges
+        pruned = [task_message] + recent_exchanges
+
+        return pruned

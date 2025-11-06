@@ -14,8 +14,9 @@ Phase 2 - Processing:
   discover Discover characters from indexed data
   build    Build relationship profiles for characters
 
-Phase 3 - Validation:
-  validate Show results and statistics
+Phase 3 - Validation & Visualization:
+  validate  Show results and statistics
+  visualize Generate interactive graph visualization
 
 Pipeline:
   pipeline Run full pipeline (crawl -> index -> discover -> build -> validate)
@@ -25,6 +26,10 @@ Meta:
   list     List all projects
   view     View sample content from a project
 """
+
+# Load environment variables from .env file FIRST (before any other imports that might use them)
+from dotenv import load_dotenv
+load_dotenv()
 
 import argparse
 import asyncio
@@ -204,6 +209,22 @@ def view_command(args):
     print(f"Total files: {len(content_files)}")
 
 
+def visualize_command(project_name: str, open_browser: bool = True):
+    """Start visualization server and open in browser."""
+    from visualizer.visualizer import start_visualization_server
+
+    try:
+        print(f"\n[INFO] Starting visualization server for '{project_name}'...")
+        start_visualization_server(project_name, open_browser=open_browser)
+
+    except FileNotFoundError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"[ERROR] Failed to start visualization: {e}")
+        sys.exit(1)
+
+
 async def main():
     """Main application entry point."""
     parser = argparse.ArgumentParser(
@@ -220,6 +241,7 @@ Examples:
   python main.py discover avatar_wiki
   python main.py build avatar_wiki --max-characters 10
   python main.py validate avatar_wiki
+  python main.py visualize avatar_wiki
 
   # Project management
   python main.py list
@@ -268,6 +290,11 @@ Examples:
     validate_parser = subparsers.add_parser("validate", help="Validate and show results")
     validate_parser.add_argument("project_name", help="Project to validate")
 
+    # visualize command
+    visualize_parser = subparsers.add_parser("visualize", help="Generate interactive graph visualization")
+    visualize_parser.add_argument("project_name", help="Project to visualize")
+    visualize_parser.add_argument("--no-open", action="store_true", help="Don't open browser automatically")
+
     # ========== Pipeline ==========
 
     # pipeline command
@@ -313,6 +340,8 @@ Examples:
             build_command(args.project_name, args.max_characters)
         elif args.command == "validate":
             validate_command(args.project_name)
+        elif args.command == "visualize":
+            visualize_command(args.project_name, not args.no_open)
         elif args.command == "pipeline":
             await pipeline_command(
                 args.project_name,

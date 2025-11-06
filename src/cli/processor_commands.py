@@ -36,19 +36,16 @@ def index_command(project_name: str):
     for file_path in page_files:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # Extract content from wrapper
-            if "content" in data:
-                pages.append(data["content"])
-            else:
-                pages.append(data)
+            # Keep full structure - chunker expects nested content field
+            pages.append(data)
 
     logger.info("Chunking pages...")
 
     # Chunk pages
     config = ProcessorConfig()
     chunker = ContentChunker(
-        chunk_size=config.get("processor.rag.chunk_size", 500),
-        chunk_overlap=config.get("processor.rag.chunk_overlap", 50)
+        chunk_size=config.get("processor", "rag", "chunk_size", default=500),
+        chunk_overlap=config.get("processor", "rag", "chunk_overlap", default=50)
     )
 
     all_chunks = []
@@ -64,31 +61,40 @@ def index_command(project_name: str):
 
     embedding_generator = EmbeddingGenerator()
     texts = [chunk["text"] for chunk in all_chunks]
-    metadatas = [chunk["metadata"] for chunk in all_chunks]
 
-    embeddings = embedding_generator.generate_batch(texts)
+    embeddings = embedding_generator.generate_embeddings(texts)
     logger.info(f"Generated {len(embeddings)} embeddings")
 
-    # Store in ChromaDB
-    vector_store = VectorStore(
-        project_name=project_name,
-        collection_name=f"{project_name}_collection"
-    )
+    # Combine texts, embeddings, and metadata into chunk format
+    chunks_with_embeddings = []
+    for i, chunk in enumerate(all_chunks):
+        chunks_with_embeddings.append({
+            "text": chunk["text"],
+            "embedding": embeddings[i],
+            "metadata": chunk["metadata"]
+        })
 
-    # Add to vector store
-    vector_store.add_documents(
-        texts=texts,
-        embeddings=embeddings,
-        metadatas=metadatas
-    )
+    # Store in ChromaDB
+    vector_store = VectorStore(project_name=project_name)
+
+    # Add to vector store in batches (ChromaDB has max batch size limit)
+    batch_size = 5000
+    total_chunks = len(chunks_with_embeddings)
+    for i in range(0, total_chunks, batch_size):
+        batch = chunks_with_embeddings[i:i + batch_size]
+        logger.info(f"Adding batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size} ({len(batch)} chunks)")
+        vector_store.add_documents(batch)
 
     logger.info(f"Indexed {len(all_chunks)} chunks into ChromaDB")
     logger.info(f"Collection: {project_name}_collection")
 
     # Test retrieval
     logger.info("\nTesting retrieval...")
+    from processor.rag.retriever import RAGRetriever
+
+    retriever = RAGRetriever(project_name=project_name)
     test_query = "Who is Aang?"
-    results = vector_store.query(test_query, k=3)
+    results = retriever.retrieve(test_query, k=3)
 
     logger.info(f"Query: '{test_query}'")
     for i, result in enumerate(results, 1):
@@ -198,12 +204,12 @@ def build_command(project_name: str, max_characters: Optional[int] = 5):
     builder = ProfileBuilder(project_name=project_name)
 
     start_time = time.time()
-    profiles = builder.build_profiles(top_characters, save=True)
+    profiles = builder.build_all_profiles(top_characters, save=True)
     duration = time.time() - start_time
 
     # Calculate statistics
     total_relationships = sum(
-        len(profile.get("relationships", []))
+        len(profile.get("profile", {}).get("relationships", []))
         for profile in profiles.values()
     )
 

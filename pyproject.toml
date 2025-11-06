@@ -84,8 +84,9 @@ llm = [
     "tiktoken>=0.5.0",
 ]
 
-# Future Phase 4-5: Visualization dependencies
+# Phase 4-5: Visualization dependencies
 viz = [
+    "flask>=3.0.0",  # Web server for interactive visualization
     "networkx>=3.1",
     "plotly>=5.15.0",
     "matplotlib>=3.7.0",

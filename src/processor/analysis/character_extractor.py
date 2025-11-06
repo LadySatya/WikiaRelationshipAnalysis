@@ -57,6 +57,53 @@ Exclude:
 Be conservative: if unsure, classify as "no".
 """
 
+    # === CLASSIFICATION CONSTANTS ===
+
+    # Namespaces to exclude from character discovery
+    # These are meta-pages that should never be classified as characters
+    EXCLUDED_NAMESPACES = [
+        "Transcript:",
+        "Category:",
+        "Template:",
+        "User:",
+        "File:",
+        "Help:",
+        "Talk:",
+        "Special:",
+        "MediaWiki:",
+    ]
+
+    # Disambiguation text patterns indicating non-character pages
+    DISAMBIGUATION_PATTERNS = [
+        "this article is about the episode",
+        "this article is about the chapter",
+        "this article is about the title",
+        "this article is about the political position",
+        "for the character, see",
+        "for the titular character, see",
+    ]
+
+    # Infobox fields that indicate episode/chapter/issue pages (NOT characters)
+    EPISODE_INFOBOX_FIELDS = [
+        "episode", "series", "book", "season", "chapter", "issue", "volume",
+        "original air date", "airdate", "air date", "published", "publication date",
+        "written by", "directed by", "animation", "studio", "release date",
+        "previous", "next", "production number",
+    ]
+
+    # URL patterns that indicate character pages
+    CHARACTER_URL_PATTERNS = [
+        "/characters/",
+        "/character:",
+    ]
+
+    # Infobox fields that indicate character pages
+    CHARACTER_INFOBOX_FIELDS = [
+        "species", "affiliation", "age", "gender", "abilities",
+        "weapon", "fighting_style", "love_interest", "family",
+        "nationality", "ethnicity", "profession", "status",
+    ]
+
     def __init__(
         self,
         project_name: str,
@@ -306,6 +353,10 @@ Be conservative: if unsure, classify as "no".
                 json.dump(char_data, f, indent=2, ensure_ascii=False)
 
         print(f"[OK] Saved {len(characters)} characters to {output_dir}")
+
+        # Also save summary file for build command
+        self.save_discovered_characters(characters, output_path=output_dir / "_discovered.json")
+
         return output_dir
 
     def _generate_filename(self, full_name: str) -> str:
@@ -404,153 +455,123 @@ Be conservative: if unsure, classify as "no".
         print(f"[INFO] Loaded {len(pages)} crawled pages")
         return pages
 
+    # === CLASSIFICATION HELPER METHODS ===
+
+    def _is_excluded_namespace(self, title: str) -> bool:
+        """Check if page is in an excluded namespace (Transcript:, Category:, etc.)."""
+        return any(title.startswith(ns) for ns in self.EXCLUDED_NAMESPACES)
+
+    def _has_disambiguation_text(self, content: str) -> bool:
+        """
+        Check if page has disambiguation text indicating it's NOT a character page.
+
+        Examples:
+            "This article is about the episode."
+            "For the character, see Roku"
+        """
+        if not content:
+            return False
+
+        # Check first 500 characters where disambiguation text usually appears
+        first_500 = content[:500].lower()
+        return any(pattern in first_500 for pattern in self.DISAMBIGUATION_PATTERNS)
+
+    def _looks_like_episode_page(self, infobox: Dict[str, Any]) -> bool:
+        """
+        Check if infobox has episode/chapter/issue fields.
+
+        Returns True if page has 2+ episode-specific fields like:
+        - "Episode", "Series", "Book"
+        - "Original air date", "Written by", "Directed by"
+        """
+        if not infobox:
+            return False
+
+        # Normalize infobox keys to lowercase for comparison
+        infobox_lower = {k.lower(): v for k, v in infobox.items()}
+
+        # Count how many episode fields are present
+        episode_matches = sum(
+            1 for field in self.EPISODE_INFOBOX_FIELDS
+            if field in infobox_lower
+        )
+
+        # If 2+ episode fields present, likely an episode/chapter page
+        return episode_matches >= 2
+
+    def _has_character_namespace(self, page: Dict[str, Any]) -> bool:
+        """Check if page is in a character namespace."""
+        namespace = page.get("namespace") or ""
+        return "character" in namespace.lower()
+
+    def _has_character_url(self, url: str) -> bool:
+        """Check if URL indicates a character page (/characters/, /character:)."""
+        url_lower = url.lower()
+        return any(pattern in url_lower for pattern in self.CHARACTER_URL_PATTERNS)
+
+    def _has_character_infobox(self, infobox: Dict[str, Any]) -> bool:
+        """
+        Check if infobox has character-specific fields.
+
+        Returns True if page has 2+ character fields like:
+        - "species", "age", "gender"
+        - "affiliation", "abilities", "weapon"
+        """
+        if not infobox:
+            return False
+
+        # Normalize infobox keys to lowercase
+        infobox_lower = {k.lower(): v for k, v in infobox.items()}
+
+        # Count how many character fields are present
+        character_matches = sum(
+            1 for field in self.CHARACTER_INFOBOX_FIELDS
+            if field in infobox_lower
+        )
+
+        # If 2+ character fields present, likely a character page
+        return character_matches >= 2
+
     def _classify_by_metadata(self, page: Dict[str, Any]) -> Optional[str]:
         """
-        Classify page as character using metadata (Tier 1 - FREE).
-
-        Checks:
-        - Namespace (Character:, Template:Character, etc.)
-        - URL patterns (/characters/, /Character:)
-        - Infobox fields (species, affiliation, age, gender, abilities)
-
-        Args:
-            page: Page dictionary with metadata
+        Classify page using metadata only (Tier 1 - FREE, no LLM calls).
 
         Returns:
-            "character" if definitely a character, None if ambiguous
+            "character" - definitely a character page
+            "not_character" - definitely NOT a character (episode, transcript, etc.)
+            None - ambiguous, needs LLM classification
         """
-        # FIRST: Check if this is a title/position page (NOT a character)
-        # These pages are about political/social titles, not individual people
-        main_content = page.get("main_content", "").lower()
-        title = page.get("title", "").lower()
-        url = page.get("url", "").lower()
-
-        title_indicators = [
-            "this article is about the title",
-            "this article is about the political position",
-            ":titles" in url,
-            "/category:titles" in url,
-            "category:titles" in main_content[:500],  # Check early in content
-        ]
-
-        if any(indicator if isinstance(indicator, bool) else indicator in main_content[:500]
-               for indicator in title_indicators):
-            return "not_character"  # Explicitly mark as non-character
-
-        # Check namespace (handle None explicitly)
-        namespace = page.get("namespace") or ""
-        namespace = namespace.lower()
-        if "character" in namespace:
-            return "character"
-
-        # Check URL patterns
-        if any(pattern in url for pattern in ["/characters/", "/character:", "category:characters"]):
-            return "character"
-
-        # Check infobox for character-specific fields
+        # Extract page data once
+        title = page.get("title", "")
+        content = page.get("main_content", "")
+        url = page.get("url", "")
         infobox = page.get("infobox_data", {})
-        if infobox:
-            # Character pages often have these fields
-            character_indicators = [
-                "species", "affiliation", "age", "gender", "abilities",
-                "weapon", "fighting_style", "love_interest", "family",
-                "nationality", "ethnicity", "profession", "status"
-            ]
 
-            # If page has 2+ character indicators, likely a character
-            matches = sum(1 for field in character_indicators if field in infobox)
-            if matches >= 2:
-                return "character"
+        # === EXCLUSION CHECKS (if any match, NOT a character) ===
 
-        # Ambiguous - needs further classification
+        if self._is_excluded_namespace(title):
+            return "not_character"
+
+        if self._has_disambiguation_text(content):
+            return "not_character"
+
+        if self._looks_like_episode_page(infobox):
+            return "not_character"
+
+        # === INCLUSION CHECKS (if any match, IS a character) ===
+
+        if self._has_character_namespace(page):
+            return "character"
+
+        if self._has_character_url(url):
+            return "character"
+
+        if self._has_character_infobox(infobox):
+            return "character"
+
+        # === AMBIGUOUS (let LLM decide) ===
+
         return None
-
-    def _classify_titles_batch(self, pages: List[Dict[str, Any]]) -> Dict[str, bool]:
-        """
-        Classify pages by title using single LLM call (Tier 2 - CHEAP).
-
-        Args:
-            pages: List of ambiguous pages to classify
-
-        Returns:
-            Dictionary mapping title -> is_character (bool)
-        """
-        if not pages:
-            return {}
-
-        # Extract titles
-        titles = [page.get("title", "Unknown") for page in pages]
-
-        # Build batch classification prompt
-        prompt = f"""Given these page titles from a wiki, identify which are about CHARACTERS.
-
-Page titles:
-{chr(10).join(titles)}
-
-For each title, respond with ONLY:
-TitleName: yes
-or
-TitleName: no
-
-Be strict: only classify as "yes" if the page is clearly about a character (person/being with personality)."""
-
-        try:
-            # Single LLM call for all titles
-            response = self.query_engine.llm_client.generate(
-                prompt=prompt,
-                system_prompt=self.CLASSIFICATION_SYSTEM_PROMPT,
-                temperature=0.0,  # Deterministic
-                max_tokens=len(titles) * 10  # Rough estimate: "Title: yes\n" ~= 10 tokens
-            )
-
-            # Parse response
-            return self._parse_classification_response(response, titles)
-
-        except Exception as e:
-            print(f"[ERROR] Batch classification failed: {e}")
-            return {}
-
-    def _parse_classification_response(
-        self,
-        response: str,
-        expected_titles: List[str]
-    ) -> Dict[str, bool]:
-        """
-        Parse LLM batch classification response.
-
-        Expected format:
-            Zuko: yes
-            Republic City: no
-            Aang: yes
-
-        Args:
-            response: LLM response text
-            expected_titles: List of titles we sent (for validation)
-
-        Returns:
-            Dictionary mapping title -> is_character (bool)
-        """
-        classifications = {}
-
-        for line in response.strip().split("\n"):
-            if not line.strip() or ":" not in line:
-                continue
-
-            # Split on first colon
-            parts = line.split(":", 1)
-            if len(parts) != 2:
-                continue
-
-            title = parts[0].strip()
-            classification = parts[1].strip().lower()
-
-            # Map yes/no to boolean
-            if classification in ["yes", "y", "true"]:
-                classifications[title] = True
-            elif classification in ["no", "n", "false"]:
-                classifications[title] = False
-
-        return classifications
 
     def _classify_by_content(
         self,
@@ -558,7 +579,7 @@ Be strict: only classify as "yes" if the page is clearly about a character (pers
         use_rag: bool = True
     ) -> bool:
         """
-        Classify page using content analysis (Tier 3 - SELECTIVE).
+        Classify page using content analysis (Tier 2 - SELECTIVE).
 
         Uses first paragraph + optional RAG query for context.
 
@@ -616,11 +637,10 @@ First paragraph: {snippet}
 
     def _execute_discovery_queries(self) -> List[Dict[str, Any]]:
         """
-        Execute page-based character discovery using tiered classification.
+        Execute page-based character discovery using two-tier classification.
 
-        Tier 1 (FREE): Metadata filtering (namespace, URL, infobox)
-        Tier 2 (CHEAP): Batch title classification via LLM
-        Tier 3 (SELECTIVE): Content-based classification with optional RAG
+        Tier 1 (FREE): Metadata filtering (namespace, URL, infobox, disambiguation, episode detection)
+        Tier 2 (SELECTIVE): Content-based LLM classification for ambiguous pages
 
         Returns:
             List of character dictionaries with name and discovered_via tracking
@@ -640,49 +660,27 @@ First paragraph: {snippet}
             if classification == "character":
                 characters.append(self._create_character_entry(page, tier="metadata"))
             elif classification == "not_character":
-                # Explicitly filtered out (e.g., title pages)
+                # Explicitly filtered out (transcripts, episodes, categories, etc.)
                 filtered_count += 1
             else:
-                # Ambiguous - needs further classification
+                # Ambiguous - needs LLM classification
                 ambiguous_pages.append(page)
 
         print(f"[INFO] Tier 1 classified {len(characters)} characters, {filtered_count} filtered, {len(ambiguous_pages)} ambiguous")
 
-        # Tier 2: Batch title classification
-        if ambiguous_pages:
-            print(f"[INFO] Tier 2: Batch classifying {len(ambiguous_pages)} titles...")
-            classifications = self._classify_titles_batch(ambiguous_pages)
-
-            # Process classification results
-            tier2_classified = []
-            still_ambiguous = []
+        # Tier 2: Content-based classification for ambiguous pages
+        # Only run if we have ambiguous pages and it's worth the cost
+        if ambiguous_pages and (len(characters) < 50 or len(ambiguous_pages) < 100):
+            print(f"[INFO] Tier 2: Content-classifying {len(ambiguous_pages)} remaining pages...")
 
             for page in ambiguous_pages:
-                title = page.get("title", "Unknown")
+                is_character = self._classify_by_content(page, use_rag=False)  # RAG is expensive, disable by default
 
-                if title in classifications and classifications[title]:
-                    # Classified as character
-                    characters.append(self._create_character_entry(page, tier="title_llm"))
-                    tier2_classified.append(title)
-                elif title not in classifications:
-                    # LLM didn't classify this one (parsing issue?)
-                    still_ambiguous.append(page)
+                if is_character:
+                    characters.append(self._create_character_entry(page, tier="content_llm"))
 
-            print(f"[INFO] Tier 2 classified {len(tier2_classified)} more characters")
-
-            # Tier 3: Content-based classification (optional, for remaining ambiguous)
-            # Only use if we have very few characters or many ambiguous pages
-            if still_ambiguous and (len(characters) < 10 or len(still_ambiguous) < 20):
-                print(f"[INFO] Tier 3: Content-classifying {len(still_ambiguous)} remaining pages...")
-
-                for page in still_ambiguous:
-                    is_character = self._classify_by_content(page, use_rag=False)  # RAG is expensive, disable by default
-
-                    if is_character:
-                        characters.append(self._create_character_entry(page, tier="content_llm"))
-
-                tier3_count = sum(1 for c in characters if "content_llm" in c["discovered_via"])
-                print(f"[INFO] Tier 3 classified {tier3_count} more characters")
+            tier2_count = sum(1 for c in characters if "content_llm" in c["discovered_via"])
+            print(f"[INFO] Tier 2 classified {tier2_count} more characters")
 
         print(f"[INFO] Total discovered: {len(characters)} characters")
         return characters

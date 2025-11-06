@@ -232,6 +232,46 @@ class TestMetadataClassification:
         result = extractor._classify_by_metadata(page)
         assert result is None  # Ambiguous, needs further classification
 
+    def test_classify_excludes_transcript_namespace(self):
+        """Test that transcript pages are excluded from character discovery."""
+        extractor = CharacterExtractor(project_name="test_project")
+
+        # Bug #1 fix: Transcript pages should be excluded
+        transcript_page = {
+            "title": "Transcript:Bato of the Water Tribe",
+            "url": "https://avatar.fandom.com/wiki/Transcript:Bato_of_the_Water_Tribe",
+            "main_content": "Episode transcript with character dialogue..."
+        }
+
+        result = extractor._classify_by_metadata(transcript_page)
+        assert result == "not_character"
+
+    def test_classify_excludes_category_namespace(self):
+        """Test that category pages are excluded from character discovery."""
+        extractor = CharacterExtractor(project_name="test_project")
+
+        category_page = {
+            "title": "Category:Water Tribe members",
+            "url": "https://avatar.fandom.com/wiki/Category:Water_Tribe_members",
+            "main_content": "List of Water Tribe characters..."
+        }
+
+        result = extractor._classify_by_metadata(category_page)
+        assert result == "not_character"
+
+    def test_classify_excludes_template_namespace(self):
+        """Test that template pages are excluded from character discovery."""
+        extractor = CharacterExtractor(project_name="test_project")
+
+        template_page = {
+            "title": "Template:Character infobox",
+            "url": "https://avatar.fandom.com/wiki/Template:Character_infobox",
+            "main_content": "Template for character pages..."
+        }
+
+        result = extractor._classify_by_metadata(template_page)
+        assert result == "not_character"
+
 
 # ============================================================================
 # BATCH TITLE CLASSIFICATION TESTS (Tier 2)
