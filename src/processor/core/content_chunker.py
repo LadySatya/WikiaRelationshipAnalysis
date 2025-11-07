@@ -6,6 +6,11 @@ embedded and stored in a vector database for semantic search.
 """
 from typing import List, Dict, Any, Optional
 import re
+import logging
+
+from src.utils.logging_config import get_logger
+
+logger = get_logger("processor.rag")
 
 
 class ContentChunker:

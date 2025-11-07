@@ -39,15 +39,7 @@ class TestWikiaCrawlerInit:
             "save_state_every_n_pages": 10,
         }
 
-    def test_init_with_valid_config(self, basic_config):
-        """Test initialization with valid configuration."""
-        project_name = "naruto_wiki"
-        crawler = WikiaCrawler(project_name, basic_config)
-
-        # Should create instance without errors
-        assert crawler is not None
-        assert hasattr(crawler, "project_name")
-        assert hasattr(crawler, "config")
+    # Removed test_init_with_valid_config - redundant with more specific tests
 
     def test_init_stores_project_name(self, basic_config):
         """Test that project name is properly stored."""
@@ -167,9 +159,9 @@ class TestWikiaCrawlerInit:
         crawler = WikiaCrawler("test_project", minimal_config)
 
         # Should set defaults for optional values
-        assert hasattr(crawler, "timeout_seconds")
-        assert hasattr(crawler, "max_retries")
-        assert hasattr(crawler, "exclude_patterns")
+        assert crawler.timeout_seconds == 30
+        assert crawler.max_retries == 3
+        assert crawler.exclude_patterns == []
 
     @patch("src.crawler.core.crawler.URLManager")
     @patch("src.crawler.core.crawler.SessionManager")
@@ -180,12 +172,12 @@ class TestWikiaCrawlerInit:
         """Test that initialization creates necessary component instances."""
         crawler = WikiaCrawler("test_project", basic_config)
 
-        # Should create instances of key components
-        assert hasattr(crawler, "rate_limiter")
-        assert hasattr(crawler, "session_manager")
-        assert hasattr(crawler, "url_manager")
-        assert hasattr(crawler, "content_saver")
-        assert hasattr(crawler, "crawl_state")
+        # Should create instances of key components (verify they're not None)
+        assert crawler.rate_limiter is not None
+        assert crawler.session_manager is not None
+        assert crawler.url_manager is not None
+        assert crawler.content_saver is not None
+        assert crawler.crawl_state is not None
 
     def test_init_with_custom_data_dir(self, basic_config, temp_project_dir):
         """Test initialization with custom data directory."""

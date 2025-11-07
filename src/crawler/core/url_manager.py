@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.utils.logging_config import get_logger
+
 
 class URLManager:
     """Manages URL queue with deduplication and persistence."""
@@ -19,7 +21,7 @@ class URLManager:
         self.queue_file = project_path / "cache" / "url_queue.json"
         self.visited_file = project_path / "cache" / "visited_urls.json"
         self.failed_file = project_path / "cache" / "failed_urls.json"
-
+        self.logger = get_logger("crawler")
         # In-memory data structures
         self._queue = []  # List of (priority, url) tuples, sorted by priority
         self._queued_set = set()  # Set for O(1) lookup

@@ -7,6 +7,8 @@ import logging
 import random
 from urllib.parse import urlparse
 
+from src.utils.logging_config import get_logger
+
 
 class BackoffHandler:
     """Handles exponential backoff for failed requests and error recovery."""
@@ -30,7 +32,7 @@ class BackoffHandler:
         self.base_delay = base_delay
         self.max_delay = max_delay
         self.max_retries = max_retries
-
+        self.logger = get_logger("crawler.rate_limiting")
         # Track failures per domain
         self._domain_failures = {}
 
@@ -41,12 +43,12 @@ class BackoffHandler:
 
         delay = self._calculate_delay(attempt)
         domain = self._get_domain(url)
-        logging.warning(
+        self.logger.warning(
             f"[BACKOFF] Retry attempt {attempt} for {domain}: "
             f"waiting {delay:.2f}s before retrying"
         )
         await asyncio.sleep(delay)
-        logging.debug(
+        self.logger.debug(
             f"[BACKOFF] Backoff wait complete for attempt {attempt} ({domain})"
         )
 

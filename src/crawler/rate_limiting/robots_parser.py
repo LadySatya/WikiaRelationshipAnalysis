@@ -12,6 +12,8 @@ from urllib.robotparser import RobotFileParser
 
 import aiohttp
 
+from src.utils.logging_config import get_logger
+
 
 class RobotsParser:
     """Handles robots.txt parsing, caching, and compliance checking."""
@@ -29,7 +31,7 @@ class RobotsParser:
         self.user_agent = user_agent
         self.cache_dir = cache_dir
         self.cache_ttl_hours = cache_ttl_hours
-
+        self.logger = get_logger("crawler.rate_limiting")
         # In-memory cache of parsed robots.txt files
         # Maps domain -> (RobotFileParser, timestamp)
         self._robots_cache: Dict[str, tuple] = {}
@@ -40,7 +42,7 @@ class RobotsParser:
     async def can_fetch(self, url: str) -> bool:
         """Check if URL can be fetched according to robots.txt."""
         if not url or not isinstance(url, str):
-            logging.warning("Invalid URL provided to can_fetch")
+            self.logger.warning("Invalid URL provided to can_fetch")
             return False
 
         try:
@@ -49,7 +51,7 @@ class RobotsParser:
             domain = parsed.netloc
 
             if not domain:
-                logging.warning(f"Cannot extract domain from URL: {url}")
+                self.logger.warning(f"Cannot extract domain from URL: {url}")
                 return False
 
             # Load robots.txt for this domain
@@ -63,7 +65,7 @@ class RobotsParser:
             return robots_parser.can_fetch(self.user_agent, url)
 
         except Exception as e:
-            logging.error(f"Error checking robots.txt for {url}: {e}")
+            self.logger.error(f"Error checking robots.txt for {url}: {e}")
             # On error, allow fetching (fail open, not fail closed)
             return True
 
@@ -97,7 +99,7 @@ class RobotsParser:
             return None
 
         except Exception as e:
-            logging.error(f"Error getting crawl delay for {url}: {e}")
+            self.logger.error(f"Error getting crawl delay for {url}: {e}")
             return None
 
     async def _load_robots_txt(self, domain: str) -> Optional[RobotFileParser]:
@@ -166,7 +168,7 @@ class RobotsParser:
 
             return age_hours < self.cache_ttl_hours
         except Exception as e:
-            logging.error(f"Error checking cache validity: {e}")
+            self.logger.error(f"Error checking cache validity: {e}")
             return False
 
     async def _fetch_robots_txt(self, domain: str) -> Optional[str]:
@@ -180,26 +182,26 @@ class RobotsParser:
                 async with session.get(robots_url) as response:
                     if response.status == 200:
                         content = await response.text()
-                        logging.info(f"Fetched robots.txt from {domain}")
+                        self.logger.info(f"Fetched robots.txt from {domain}")
                         return content
                     elif response.status == 404:
                         # No robots.txt exists - this is normal
-                        logging.info(f"No robots.txt found for {domain} (404)")
+                        self.logger.info(f"No robots.txt found for {domain} (404)")
                         return None
                     else:
-                        logging.warning(
+                        self.logger.warning(
                             f"Unexpected status {response.status} for "
                             f"robots.txt at {domain}"
                         )
                         return None
 
         except aiohttp.ClientError as e:
-            logging.warning(
+            self.logger.warning(
                 f"Network error fetching robots.txt from {domain}: {e}"
             )
             return None
         except Exception as e:
-            logging.error(f"Error fetching robots.txt from {domain}: {e}")
+            self.logger.error(f"Error fetching robots.txt from {domain}: {e}")
             return None
 
     def _save_to_cache(self, domain: str, content: str) -> None:
@@ -211,9 +213,9 @@ class RobotsParser:
             cache_path = self._get_cache_path(domain)
             with open(cache_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            logging.debug(f"Saved robots.txt for {domain} to cache")
+            self.logger.debug(f"Saved robots.txt for {domain} to cache")
         except Exception as e:
-            logging.error(
+            self.logger.error(
                 f"Error saving robots.txt to cache for {domain}: {e}"
             )
 
@@ -224,10 +226,10 @@ class RobotsParser:
             if cache_path.exists():
                 with open(cache_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                logging.debug(f"Loaded robots.txt for {domain} from cache")
+                self.logger.debug(f"Loaded robots.txt for {domain} from cache")
                 return content
         except Exception as e:
-            logging.error(
+            self.logger.error(
                 f"Error loading robots.txt from cache for {domain}: {e}"
             )
 
@@ -244,12 +246,12 @@ class RobotsParser:
                 for cache_file in self.cache_dir.glob("robots_*.txt"):
                     try:
                         cache_file.unlink()
-                        logging.debug(f"Deleted cache file: {cache_file}")
+                        self.logger.debug(f"Deleted cache file: {cache_file}")
                     except Exception as e:
-                        logging.error(
+                        self.logger.error(
                             f"Error deleting cache file {cache_file}: {e}"
                         )
 
-            logging.info("Cleared all robots.txt cache")
+            self.logger.info("Cleared all robots.txt cache")
         except Exception as e:
-            logging.error(f"Error clearing robots.txt cache: {e}")
+            self.logger.error(f"Error clearing robots.txt cache: {e}")

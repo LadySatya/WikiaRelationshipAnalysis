@@ -7,10 +7,14 @@ from pathlib import Path
 from typing import Dict, Any
 import yaml
 
+from src.utils.logging_config import setup_logging, get_logger, log_phase_start
+
 
 def setup_project_logging(project_name: str, phase_name: str) -> logging.Logger:
     """
     Setup logging for a specific project and phase.
+
+    Uses new module-specific logging system.
 
     Args:
         project_name: Name of the project
@@ -19,39 +23,15 @@ def setup_project_logging(project_name: str, phase_name: str) -> logging.Logger:
     Returns:
         Configured logger instance
     """
-    # Create log directory
-    log_dir = Path(f"data/projects/{project_name}/logs")
-    log_dir.mkdir(parents=True, exist_ok=True)
+    # Setup new logging system (only once per project)
+    setup_logging(project_name, log_level="INFO")
 
-    # Create log file with timestamp
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_file = log_dir / f"pipeline_{timestamp}.log"
+    # Get main logger
+    logger = get_logger("main")
 
-    # Configure logger
-    logger = logging.getLogger(f"wikia_analyzer.{project_name}")
-    logger.setLevel(logging.INFO)
-
-    # Clear existing handlers
-    logger.handlers.clear()
-
-    # File handler
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
-    file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter('[%(levelname)s] %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-
-    logger.info(f"Logging initialized. Log file: {log_file}")
+    # Log phase start
     logger.info("=" * 80)
-    logger.info(f"AVATAR WIKI POC - {phase_name.upper()}")
+    logger.info(f"WIKIA ANALYSIS - {phase_name.upper()}")
     logger.info("=" * 80)
 
     return logger

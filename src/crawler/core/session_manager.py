@@ -6,6 +6,8 @@ from typing import Dict
 
 import aiohttp
 
+from src.utils.logging_config import get_logger
+
 
 class SessionManager:
     """Manages HTTP sessions with proper headers and connection pooling."""
@@ -28,12 +30,14 @@ class SessionManager:
         self.user_agent = user_agent
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
+        self.logger = get_logger("crawler")
         self._session = None
 
     async def create_session(self) -> aiohttp.ClientSession:
         """Create and configure aiohttp session."""
         if self._session and not self._session.closed:
             await self._session.close()
+
 
         # Configure timeout
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)

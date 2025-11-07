@@ -9,6 +9,8 @@ from bs4 import BeautifulSoup
 
 from ..utils.url_utils import URLUtils
 
+from src.utils.logging_config import get_logger
+
 
 class LinkDiscoverer:
     """Discovers and prioritizes relevant links for crawling."""
@@ -21,7 +23,7 @@ class LinkDiscoverer:
         """Initialize with domain and namespace filters."""
         self.base_domain = base_domain or "fandom.com"
         self.target_namespaces = target_namespaces or ["Main", "Category"]
-
+        self.logger = get_logger("crawler.extraction")
         # Non-content namespaces that should be deprioritized or excluded
         self.non_content_namespaces = [
             "template:",

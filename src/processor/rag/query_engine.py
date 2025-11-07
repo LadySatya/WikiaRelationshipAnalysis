@@ -6,9 +6,13 @@ search (via RAGRetriever) with LLM generation (via LLMClient) to answer
 questions based on retrieved wiki content.
 """
 from typing import Dict, Any, Optional, List
+import logging
 
 from .retriever import RAGRetriever
 from ..llm.llm_client import LLMClient
+from src.utils.logging_config import get_logger
+
+logger = get_logger("processor.rag")
 
 
 class QueryEngine:

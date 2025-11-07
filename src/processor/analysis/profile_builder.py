@@ -16,9 +16,13 @@ from pathlib import Path
 import json
 import re
 from datetime import datetime, timezone
+import logging
 
 from ..rag.query_engine import QueryEngine
 from .tools import ToolRegistry
+from src.utils.logging_config import get_logger
+
+logger = get_logger("processor.profiles")
 
 
 class ProfileBuilder:

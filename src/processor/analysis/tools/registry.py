@@ -8,10 +8,15 @@ Central registry that:
 - Makes it easy to add/remove tools
 """
 from typing import Dict, List, Any
+import logging
+
 from .base import ToolBase
 from .wiki_search_tool import WikiSearchTool
 from .relationship_verify_tool import RelationshipVerifyTool
 from .character_context_tool import CharacterContextTool
+from src.utils.logging_config import get_logger
+
+logger = get_logger("llm")
 
 
 class ToolRegistry:

@@ -6,8 +6,11 @@ workflows. Supports token counting, cost estimation, and conversation context.
 """
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, cast
 import os
+import logging
+import time
 
 from ..config import get_config
+from src.utils.logging_config import get_logger, get_llm_logger
 
 if TYPE_CHECKING:
     from anthropic import Anthropic
@@ -104,11 +107,26 @@ class LLMClient:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
+        self.logger = get_logger("llm")
+        self.llm_logger = None
+
     def _init_client(self) -> None:
         """Initialize Anthropic client (lazy loading)."""
         if self._client is None:
             import anthropic
             self._client = anthropic.Anthropic(api_key=self.api_key)
+
+    def _ensure_llm_logger(self):
+        """Lazy-initialize LLM logger."""
+        if self.llm_logger is None:
+            try:
+                self.llm_logger = get_llm_logger()
+            except RuntimeError:
+                pass
+
+    def _calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
+        """Calculate cost for given token counts."""
+        return self.estimate_cost(input_tokens, output_tokens)
 
     def generate(
         self,
@@ -191,6 +209,24 @@ class LLMClient:
         # Track token usage
         self.total_input_tokens += response.usage.input_tokens
         self.total_output_tokens += response.usage.output_tokens
+
+        self._ensure_llm_logger()
+        if self.llm_logger:
+            self.llm_logger.log_prompt(
+                prompt=prompt,
+                model=self.model,
+                purpose="text_generation",
+                response=text,
+                usage={
+                    "input_tokens": response.usage.input_tokens,
+                    "output_tokens": response.usage.output_tokens
+                },
+                cost=self._calculate_cost(
+                    response.usage.input_tokens,
+                    response.usage.output_tokens
+                ),
+                metadata={"has_context": context is not None}
+            )
 
         return text
 
@@ -608,6 +644,32 @@ class LLMClient:
 
                 # Calculate cost
                 estimated_cost = self.estimate_cost(iteration_input_tokens, iteration_output_tokens)
+
+                self._ensure_llm_logger()
+                if self.llm_logger:
+                    self.llm_logger.log_prompt(
+                        prompt=prompt,
+                        model=self.model,
+                        purpose="tool_based_generation",
+                        response=final_text,
+                        usage={
+                            "input_tokens": iteration_input_tokens,
+                            "output_tokens": iteration_output_tokens
+                        },
+                        cost=estimated_cost,
+                        metadata={
+                            "iterations": iteration + 1,
+                            "tool_calls_count": len(all_tool_calls)
+                        }
+                    )
+
+                    for tool_call in all_tool_calls:
+                        self.llm_logger.log_tool_call(
+                            tool_name=tool_call["tool"],
+                            tool_input=tool_call["input"],
+                            result=tool_call.get("result"),
+                            error=tool_call.get("error")
+                        )
 
                 return {
                     "final_response": final_text,

@@ -213,6 +213,67 @@ pytest -m integration           # Mocked but slower
 - Test fixtures
 - **NOT .py source code**
 
+## Logging Strategy
+
+**Problem**: All logs in one file makes debugging difficult.
+**Solution**: Module-specific logs + structured LLM tracking.
+
+**Log Directory:**
+```
+data/projects/<project>/logs/
+├── main.log                    # Overall application
+├── errors.log                  # All errors
+├── crawler/                    # Crawling logs
+│   ├── crawler.log
+│   ├── rate_limiting.log
+│   └── extraction.log
+├── processor/                  # Processing logs
+│   ├── processor.log
+│   ├── character_discovery.log
+│   ├── profile_building.log
+│   └── rag.log
+└── llm/                        # LLM tracking
+    ├── llm_calls.log           # Summaries
+    ├── prompts.jsonl           # Full prompts (structured)
+    └── tool_calls.jsonl        # Tool usage (structured)
+```
+
+**Usage:**
+```python
+from src.utils.logging_config import setup_logging, get_logger, get_llm_logger
+
+# Setup once at startup
+setup_logging(project_name="avatar", log_level="INFO")
+
+# Get module-specific logger
+logger = get_logger("crawler")
+logger.info("Started crawling")
+
+# Track LLM calls
+llm_logger = get_llm_logger()
+llm_logger.log_prompt(
+    prompt="Is Aang a character?",
+    model="claude-sonnet-4",
+    purpose="character_classification",
+    response="Yes",
+    usage={"input_tokens": 100, "output_tokens": 5},
+    cost=0.00015
+)
+```
+
+**Module Names:**
+- `"main"` - Top-level application
+- `"crawler"` - Crawling operations
+- `"crawler.rate_limiting"` - Rate limits, robots.txt
+- `"crawler.extraction"` - Page extraction
+- `"processor"` - General processing
+- `"processor.discovery"` - Character discovery
+- `"processor.profiles"` - Profile building
+- `"processor.rag"` - RAG pipeline
+- `"llm"` - LLM communication
+
+**See:** `docs/LOGGING_STRATEGY.md` for full documentation.
+
 ## Dependencies
 
 ```bash

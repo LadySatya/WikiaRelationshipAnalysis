@@ -6,10 +6,14 @@ and VectorStore. It retrieves relevant document chunks for RAG queries and forma
 them for LLM consumption.
 """
 from typing import List, Dict, Any, Optional
+import logging
 
 from .embeddings import EmbeddingGenerator
 from .vector_store import VectorStore
 from ..config import get_config
+from src.utils.logging_config import get_logger
+
+logger = get_logger("processor.rag")
 
 
 class RAGRetriever:

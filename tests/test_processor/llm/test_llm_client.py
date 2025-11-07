@@ -439,16 +439,22 @@ class TestLLMClientWithCitations:
             mock_client = MagicMock()
             mock_response = MagicMock()
 
-            # Mock citation objects
+            # Mock citation objects (location must be an object with .start and .end attrs)
             citation1 = MagicMock()
             citation1.document_index = 0
             citation1.cited_text = "Aang is the last Airbender"
-            citation1.location = {"start": 0, "end": 27}
+            citation1_location = MagicMock()
+            citation1_location.start = 0
+            citation1_location.end = 27
+            citation1.location = citation1_location
 
             citation2 = MagicMock()
             citation2.document_index = 1
             citation2.cited_text = "He is a master of all four elements"
-            citation2.location = {"start": 50, "end": 85}
+            citation2_location = MagicMock()
+            citation2_location.start = 50
+            citation2_location.end = 85
+            citation2.location = citation2_location
 
             mock_content = MagicMock()
             mock_content.type = "text"
@@ -597,7 +603,10 @@ class TestLLMClientWithCitations:
             citation = MagicMock()
             citation.document_index = 0
             citation.cited_text = "Source text"
-            citation.location = {"start": 0, "end": 11}
+            citation_location = MagicMock()
+            citation_location.start = 0
+            citation_location.end = 11
+            citation.location = citation_location
             block2.citations = [citation]
 
             mock_response.content = [block1, block2]

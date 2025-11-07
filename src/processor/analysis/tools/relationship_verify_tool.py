@@ -5,7 +5,12 @@ Checks if a relationship between two characters exists and measures
 how strongly it's supported by wiki evidence.
 """
 from typing import Dict, Any
+import logging
+
 from .base import ToolBase
+from src.utils.logging_config import get_logger
+
+logger = get_logger("llm")
 
 
 class RelationshipVerifyTool(ToolBase):

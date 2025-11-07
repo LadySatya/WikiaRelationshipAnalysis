@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 
 from bs4 import BeautifulSoup
 
+from src.utils.logging_config import get_logger
+
 
 class PageExtractor:
     """Extracts structured content from HTML pages."""
@@ -14,7 +16,7 @@ class PageExtractor:
     def __init__(self, config: Optional[Dict] = None):
         """Initialize extractor with configuration."""
         self.config = config or self._get_default_config()
-
+        self.logger = get_logger("crawler.extraction")
         # Exclusion patterns for namespace detection (from WikiaParser)
         self.exclude_patterns = [
             # MediaWiki standard namespaces

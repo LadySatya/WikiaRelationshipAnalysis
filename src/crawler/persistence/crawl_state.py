@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from src.utils.logging_config import get_logger
+
 
 class CrawlState:
     """Manages crawl state persistence and recovery."""
@@ -20,6 +22,7 @@ class CrawlState:
         self.state_dir = project_path / "crawl_state"
         self.state_file = self.state_dir / "current_state.json"
         self.checkpoint_dir = self.state_dir / "checkpoints"
+        self.logger = get_logger("crawler")
 
         # Ensure directories exist
         self.state_dir.mkdir(parents=True, exist_ok=True)

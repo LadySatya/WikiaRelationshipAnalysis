@@ -9,8 +9,12 @@ from typing import List, Dict, Any, Optional, Union
 import numpy as np
 from pathlib import Path
 import os
+import logging
 
 from ..config import get_config
+from src.utils.logging_config import get_logger
+
+logger = get_logger("processor.rag")
 
 
 class EmbeddingGenerator:

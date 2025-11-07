@@ -9,6 +9,11 @@ All tools must extend ToolBase and implement:
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any
+import logging
+
+from src.utils.logging_config import get_logger
+
+logger = get_logger("llm")
 
 
 class ToolBase(ABC):

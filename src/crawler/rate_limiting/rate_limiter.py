@@ -8,6 +8,8 @@ import time
 from typing import Dict
 from urllib.parse import urlparse
 
+from src.utils.logging_config import get_logger
+
 
 class RateLimiter:
     """Per-domain rate limiting with configurable delays."""
@@ -18,7 +20,7 @@ class RateLimiter:
             raise ValueError("delay must be positive")
 
         self.default_delay = default_delay
-
+        self.logger = get_logger("crawler.rate_limiting")
         # Domain-specific tracking
         self._domain_delays = {}
         self._domain_requests = {}  # domain -> list of timestamps
@@ -38,15 +40,15 @@ class RateLimiter:
         if requests:
             # Not the first request - always wait the configured delay
             delay = self._domain_delays.get(domain, self.default_delay)
-            logging.info(
+            self.logger.info(
                 f"[RATE LIMIT] Waiting {delay:.2f}s before request to "
                 f"{domain}"
             )
             await asyncio.sleep(delay)
-            logging.debug(f"[RATE LIMIT] Wait complete for {domain}")
+            self.logger.debug(f"[RATE LIMIT] Wait complete for {domain}")
         else:
             # First request to domain - no delay needed
-            logging.debug(
+            self.logger.debug(
                 f"[RATE LIMIT] First request to {domain}, no delay needed"
             )
 

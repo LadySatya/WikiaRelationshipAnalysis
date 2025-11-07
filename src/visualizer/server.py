@@ -70,10 +70,10 @@ def get_all_projects() -> List[Dict]:
         if character_count == 0 and chars_dir.exists():
             character_count = len([f for f in chars_dir.glob("*.json") if f.name != "_discovered.json"])
 
-        # Find latest log file
+        # Find latest log file (search recursively in subdirectories)
         latest_log = None
         if logs_dir.exists():
-            log_files = sorted(logs_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+            log_files = sorted(logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
             if log_files:
                 latest_log = str(log_files[0].relative_to(PROJECT_DIR))
 
@@ -390,15 +390,17 @@ def browse_logs(project: str):
     if not logs_dir.exists():
         abort(404, f"No logs found for project '{project}'")
 
-    # Get all log files sorted by modification time (newest first)
-    log_files = sorted(logs_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Get all log files recursively, sorted by modification time (newest first)
+    log_files = sorted(logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
 
     # Build log file list with metadata
     logs = []
     for log_file in log_files:
         stat = log_file.stat()
+        # Get relative path from logs dir for display (e.g., "crawler/crawler.log" or "main.log")
+        rel_path = log_file.relative_to(logs_dir)
         logs.append({
-            "name": log_file.name,
+            "name": str(rel_path).replace('\\', '/'),  # Normalize path separators for display
             "size": stat.st_size,
             "modified": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat.st_mtime)),
             "modified_ts": stat.st_mtime
@@ -598,12 +600,13 @@ def monitor(project: str):
         if not log_file.exists():
             abort(404, f"Log file not found: {log_name}")
     else:
-        # Find most recent log
-        log_files = sorted(logs_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        # Find most recent log (search recursively)
+        log_files = sorted(logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not log_files:
             abort(404, f"No log files found for project '{project}'")
         log_file = log_files[0]
-        log_name = log_file.name
+        # Get relative path from logs dir for display
+        log_name = str(log_file.relative_to(logs_dir)).replace('\\', '/')
 
     html = """
 <!DOCTYPE html>
@@ -810,13 +813,22 @@ def monitor(project: str):
     return render_template_string(html, project=project, log_name=log_name)
 
 
-@app.route('/api/<project>/logs/<filename>')
+@app.route('/api/<project>/logs/<path:filename>')
 def serve_log_file(project: str, filename: str):
-    """Serve complete log file."""
+    """Serve complete log file (supports subdirectories like crawler/crawler.log)."""
     from flask import request
 
     logs_dir = PROJECT_DIR / project / "logs"
     log_file = logs_dir / filename
+
+    # Security check: ensure the resolved path is within logs_dir
+    try:
+        log_file = log_file.resolve()
+        logs_dir = logs_dir.resolve()
+        if not str(log_file).startswith(str(logs_dir)):
+            abort(403, "Access denied")
+    except Exception:
+        abort(400, "Invalid path")
 
     if not log_file.exists():
         abort(404, f"Log file not found: {filename}")
@@ -844,8 +856,8 @@ def stream_logs(project: str):
         if not log_file.exists():
             abort(404, f"Log file not found: {log_name}")
     else:
-        # Find most recent log file
-        log_files = sorted(logs_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        # Find most recent log file (search recursively)
+        log_files = sorted(logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
         if not log_files:
             # No logs yet, stream waiting message
             def generate():

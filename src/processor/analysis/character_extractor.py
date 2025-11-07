@@ -11,9 +11,13 @@ from pathlib import Path
 import json
 import re
 from datetime import datetime, timezone
+import logging
 
 from ..rag.query_engine import QueryEngine
 from ..config import get_config
+from src.utils.logging_config import get_logger
+
+logger = get_logger("processor.discovery")
 
 
 class CharacterExtractor:
@@ -37,24 +41,26 @@ class CharacterExtractor:
     """
 
     # System prompt for batch page classification
-    CLASSIFICATION_SYSTEM_PROMPT = """You are analyzing wiki page titles to identify which pages are about CHARACTERS.
+    CLASSIFICATION_SYSTEM_PROMPT = """You are analyzing wiki pages to identify which are about CHARACTERS (individual people/beings).
 
-A character is a person, being, or entity with a personality and agency in the story.
+A CHARACTER is:
+- An individual person, being, or creature with a NAME and PERSONALITY
+- Has their own thoughts, feelings, and agency
+- Examples: Aang, Katara, Zuko, Appa (the sky bison)
 
-Include:
-- People (heroes, villains, supporting characters)
-- Anthropomorphic beings with personalities
-- Sentient creatures that act as characters
+NOT a character:
+- GROUPS/TEAMS of multiple people (Team Avatar, White Lotus, Fire Nation Army)
+  - Key signals: "members", "founded by", "organization", multiple people working together
+- EPISODES/CHAPTERS (titles of stories, not the people in them)
+  - Key signals: "aired on", "written by", "episode X of series Y"
+- LOCATIONS (places, cities, buildings)
+- CONCEPTS (ideas, states of being, powers)
+- OBJECTS/ITEMS (weapons, vehicles, artifacts)
 
-Exclude:
-- Locations (Republic City, Ba Sing Se)
-- Organizations/Groups (Team Avatar, White Lotus)
-- Concepts (Avatar State, Chakra)
-- Episodes (The Promise, Sozin's Comet)
-- Objects (Appa's saddle, Lion Turtle)
-- List/disambiguation pages
+When you see infobox fields like "members", "founder", "leader" - that indicates a GROUP, not a character.
+When you see fields like "species", "age", "family", "abilities" referring to ONE individual - that's a character.
 
-Be conservative: if unsure, classify as "no".
+Answer ONLY "yes" or "no". If unsure, answer "no".
 """
 
     # === CLASSIFICATION CONSTANTS ===
@@ -83,25 +89,10 @@ Be conservative: if unsure, classify as "no".
         "for the titular character, see",
     ]
 
-    # Infobox fields that indicate episode/chapter/issue pages (NOT characters)
-    EPISODE_INFOBOX_FIELDS = [
-        "episode", "series", "book", "season", "chapter", "issue", "volume",
-        "original air date", "airdate", "air date", "published", "publication date",
-        "written by", "directed by", "animation", "studio", "release date",
-        "previous", "next", "production number",
-    ]
-
     # URL patterns that indicate character pages
     CHARACTER_URL_PATTERNS = [
         "/characters/",
         "/character:",
-    ]
-
-    # Infobox fields that indicate character pages
-    CHARACTER_INFOBOX_FIELDS = [
-        "species", "affiliation", "age", "gender", "abilities",
-        "weapon", "fighting_style", "love_interest", "family",
-        "nationality", "ethnicity", "profession", "status",
     ]
 
     def __init__(
@@ -249,37 +240,37 @@ Be conservative: if unsure, classify as "no".
         Returns:
             List of character dictionaries with full variation tracking
         """
-        print("[INFO] Starting character discovery...")
+        logger.info("Starting character discovery...")
 
         # Step 1: Execute multiple discovery queries
-        print("[INFO] Executing discovery queries...")
+        logger.info("Executing discovery queries...")
         raw_characters = self._execute_discovery_queries()
-        print(f"[INFO] Found {len(raw_characters)} raw character mentions")
+        logger.info(f"Found {len(raw_characters)} raw character mentions")
 
         # Step 2: Deduplicate and track variations
-        print("[INFO] Deduplicating and tracking name variations...")
+        logger.info("Deduplicating and tracking name variations...")
         merged_characters = self._deduplicate_characters(raw_characters)
-        print(f"[INFO] Merged to {len(merged_characters)} unique characters")
+        logger.info(f"Merged to {len(merged_characters)} unique characters")
 
         # Step 3: Validate each character (check mention count + disambiguation detection)
-        print("[INFO] Validating characters and detecting duplicates...")
+        logger.info("Validating characters and detecting duplicates...")
         validated_characters = self._validate_characters(merged_characters)
-        print(f"[INFO] {len(validated_characters)} characters passed validation")
+        logger.info(f"{len(validated_characters)} characters passed validation")
 
         # Step 4: Disambiguate characters with duplicate names
         if enable_disambiguation:
             duplicates = [c for c in validated_characters if c.get("requires_disambiguation", False)]
             if duplicates:
-                print(f"[INFO] Disambiguating {len(duplicates)} characters with duplicate names...")
+                logger.info(f"Disambiguating {len(duplicates)} characters with duplicate names...")
                 validated_characters = self._disambiguate_characters(validated_characters)
-                print(f"[INFO] After disambiguation: {len(validated_characters)} total characters")
+                logger.info(f"After disambiguation: {len(validated_characters)} total characters")
 
         # Step 5: Filter by confidence threshold
         filtered_characters = [
             char for char in validated_characters
             if char["confidence"] >= self.confidence_threshold
         ]
-        print(f"[INFO] {len(filtered_characters)} characters above confidence threshold")
+        logger.info(f"{len(filtered_characters)} characters above confidence threshold")
 
         # Step 6: Sort by confidence (descending)
         sorted_characters = sorted(
@@ -291,7 +282,7 @@ Be conservative: if unsure, classify as "no".
         # Step 7: Apply max limit if specified
         if max_characters:
             sorted_characters = sorted_characters[:max_characters]
-            print(f"[INFO] Limited to top {max_characters} characters")
+            logger.info(f"Limited to top {max_characters} characters")
 
         # Step 8: Optionally save to disk
         if save:
@@ -352,7 +343,7 @@ Be conservative: if unsure, classify as "no".
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(char_data, f, indent=2, ensure_ascii=False)
 
-        print(f"[OK] Saved {len(characters)} characters to {output_dir}")
+        logger.info(f"Saved {len(characters)} characters to {output_dir}")
 
         # Also save summary file for build command
         self.save_discovered_characters(characters, output_path=output_dir / "_discovered.json")
@@ -446,13 +437,13 @@ Be conservative: if unsure, classify as "no".
                     pages.append(page_content)
 
             except Exception as e:
-                print(f"[WARN] Failed to load page {file_path}: {e}")
+                logger.warning(f"Failed to load page {file_path}: {e}")
                 continue
 
         if not pages:
             raise ValueError(f"No pages found in {processed_dir}")
 
-        print(f"[INFO] Loaded {len(pages)} crawled pages")
+        logger.info(f"Loaded {len(pages)} crawled pages")
         return pages
 
     # === CLASSIFICATION HELPER METHODS ===
@@ -476,29 +467,6 @@ Be conservative: if unsure, classify as "no".
         first_500 = content[:500].lower()
         return any(pattern in first_500 for pattern in self.DISAMBIGUATION_PATTERNS)
 
-    def _looks_like_episode_page(self, infobox: Dict[str, Any]) -> bool:
-        """
-        Check if infobox has episode/chapter/issue fields.
-
-        Returns True if page has 2+ episode-specific fields like:
-        - "Episode", "Series", "Book"
-        - "Original air date", "Written by", "Directed by"
-        """
-        if not infobox:
-            return False
-
-        # Normalize infobox keys to lowercase for comparison
-        infobox_lower = {k.lower(): v for k, v in infobox.items()}
-
-        # Count how many episode fields are present
-        episode_matches = sum(
-            1 for field in self.EPISODE_INFOBOX_FIELDS
-            if field in infobox_lower
-        )
-
-        # If 2+ episode fields present, likely an episode/chapter page
-        return episode_matches >= 2
-
     def _has_character_namespace(self, page: Dict[str, Any]) -> bool:
         """Check if page is in a character namespace."""
         namespace = page.get("namespace") or ""
@@ -508,29 +476,6 @@ Be conservative: if unsure, classify as "no".
         """Check if URL indicates a character page (/characters/, /character:)."""
         url_lower = url.lower()
         return any(pattern in url_lower for pattern in self.CHARACTER_URL_PATTERNS)
-
-    def _has_character_infobox(self, infobox: Dict[str, Any]) -> bool:
-        """
-        Check if infobox has character-specific fields.
-
-        Returns True if page has 2+ character fields like:
-        - "species", "age", "gender"
-        - "affiliation", "abilities", "weapon"
-        """
-        if not infobox:
-            return False
-
-        # Normalize infobox keys to lowercase
-        infobox_lower = {k.lower(): v for k, v in infobox.items()}
-
-        # Count how many character fields are present
-        character_matches = sum(
-            1 for field in self.CHARACTER_INFOBOX_FIELDS
-            if field in infobox_lower
-        )
-
-        # If 2+ character fields present, likely a character page
-        return character_matches >= 2
 
     def _classify_by_metadata(self, page: Dict[str, Any]) -> Optional[str]:
         """
@@ -547,30 +492,41 @@ Be conservative: if unsure, classify as "no".
         url = page.get("url", "")
         infobox = page.get("infobox_data", {})
 
-        # === EXCLUSION CHECKS (if any match, NOT a character) ===
+        # === EXCLUSION CHECKS (obvious non-characters only) ===
 
+        # Only exclude truly obvious metadata pages
         if self._is_excluded_namespace(title):
+            logger.debug(f"'{title}' excluded: metadata namespace (Transcript:, Category:, etc.)")
             return "not_character"
 
+        # Only exclude clear disambiguation pages
         if self._has_disambiguation_text(content):
+            logger.debug(f"'{title}' excluded: disambiguation page")
             return "not_character"
 
-        if self._looks_like_episode_page(infobox):
-            return "not_character"
+        # === INCLUSION CHECKS (very strong character signals only) ===
 
-        # === INCLUSION CHECKS (if any match, IS a character) ===
-
+        # Only include if explicitly in a "Character" namespace
         if self._has_character_namespace(page):
+            logger.info(f"'{title}' classified as CHARACTER (metadata: character namespace)")
             return "character"
 
+        # Only include if URL explicitly has "/characters/" path
         if self._has_character_url(url):
+            logger.info(f"'{title}' classified as CHARACTER (metadata: character URL pattern)")
             return "character"
 
-        if self._has_character_infobox(infobox):
-            return "character"
+        # === AMBIGUOUS (let LLM decide with full context) ===
+        #
+        # Instead of hardcoded infobox field matching, we send everything else to the LLM.
+        # The LLM system prompt is trained to recognize:
+        # - Organizations (members, founder, leader fields)
+        # - Episodes (air date, written by, etc.)
+        # - Characters (species, age, family referring to one individual)
+        #
+        # This is more robust than maintaining blacklists.
 
-        # === AMBIGUOUS (let LLM decide) ===
-
+        logger.debug(f"'{title}' is ambiguous, delegating to LLM classification")
         return None
 
     def _classify_by_content(
@@ -593,6 +549,14 @@ Be conservative: if unsure, classify as "no".
         title = page.get("title", "Unknown")
         content = page.get("main_content", "")
 
+        # Get infobox data for better classification
+        infobox = page.get("infobox_data", {})
+        infobox_summary = ""
+        if infobox:
+            # Show key infobox fields to help LLM decide
+            infobox_fields = list(infobox.keys())[:5]  # First 5 fields
+            infobox_summary = f"Infobox fields: {', '.join(infobox_fields)}"
+
         # Get first 300 characters as snippet
         snippet = content[:300] if content else "No content available"
 
@@ -606,13 +570,14 @@ Be conservative: if unsure, classify as "no".
                     system_prompt="Provide a brief 1-2 sentence description."
                 )
             except Exception as e:
-                print(f"[WARN] RAG query failed for '{title}': {e}")
+                logger.warning(f"RAG query failed for '{title}': {e}")
                 rag_context = ""
 
         # Build classification prompt
-        prompt = f"""Is this wiki page about a CHARACTER (a person/being with personality)?
+        prompt = f"""Is this wiki page about a CHARACTER (an individual person/being)?
 
 Page title: {title}
+{infobox_summary}
 First paragraph: {snippet}
 """
 
@@ -620,6 +585,9 @@ First paragraph: {snippet}
             prompt += f"\nAdditional context: {rag_context}"
 
         prompt += "\n\nAnswer with ONLY 'yes' or 'no'."
+
+        # Log what we're classifying
+        logger.debug(f"Classifying page: '{title}' (content-based LLM)")
 
         try:
             response = self.query_engine.llm_client.generate(
@@ -629,10 +597,15 @@ First paragraph: {snippet}
                 max_tokens=10
             )
 
-            return "yes" in response.lower()
+            is_character = "yes" in response.lower()
+            if is_character:
+                logger.info(f"'{title}' classified as CHARACTER (content-based LLM: response='{response.strip()}')")
+            else:
+                logger.debug(f"'{title}' excluded by LLM (response='{response.strip()}')")
+            return is_character
 
         except Exception as e:
-            print(f"[ERROR] Content classification failed for '{title}': {e}")
+            logger.error(f"Content classification failed for '{title}': {e}")
             return False
 
     def _execute_discovery_queries(self) -> List[Dict[str, Any]]:
@@ -652,7 +625,7 @@ First paragraph: {snippet}
         characters = []
         ambiguous_pages = []
 
-        print("[INFO] Tier 1: Classifying by metadata...")
+        logger.info("Tier 1: Classifying by metadata...")
         filtered_count = 0
         for page in pages:
             classification = self._classify_by_metadata(page)
@@ -666,12 +639,12 @@ First paragraph: {snippet}
                 # Ambiguous - needs LLM classification
                 ambiguous_pages.append(page)
 
-        print(f"[INFO] Tier 1 classified {len(characters)} characters, {filtered_count} filtered, {len(ambiguous_pages)} ambiguous")
+        logger.info(f"Tier 1 classified {len(characters)} characters, {filtered_count} filtered, {len(ambiguous_pages)} ambiguous")
 
         # Tier 2: Content-based classification for ambiguous pages
         # Only run if we have ambiguous pages and it's worth the cost
         if ambiguous_pages and (len(characters) < 50 or len(ambiguous_pages) < 100):
-            print(f"[INFO] Tier 2: Content-classifying {len(ambiguous_pages)} remaining pages...")
+            logger.info(f"Tier 2: Content-classifying {len(ambiguous_pages)} remaining pages...")
 
             for page in ambiguous_pages:
                 is_character = self._classify_by_content(page, use_rag=False)  # RAG is expensive, disable by default
@@ -680,9 +653,9 @@ First paragraph: {snippet}
                     characters.append(self._create_character_entry(page, tier="content_llm"))
 
             tier2_count = sum(1 for c in characters if "content_llm" in c["discovered_via"])
-            print(f"[INFO] Tier 2 classified {tier2_count} more characters")
+            logger.info(f"Tier 2 classified {tier2_count} more characters")
 
-        print(f"[INFO] Total discovered: {len(characters)} characters")
+        logger.info(f"Total discovered: {len(characters)} characters")
         return characters
 
     def _deduplicate_characters(
@@ -902,7 +875,7 @@ First paragraph: {snippet}
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(output, f, indent=2, ensure_ascii=False)
 
-        print(f"[INFO] Saved {len(characters)} characters to {output_path}")
+        logger.info(f"Saved {len(characters)} characters to {output_path}")
         return output_path
 
     @staticmethod

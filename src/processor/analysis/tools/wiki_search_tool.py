@@ -6,7 +6,12 @@ This is the primary tool for gathering information about characters,
 relationships, events, and other wiki content.
 """
 from typing import Optional, Dict, Any
+import logging
+
 from .base import ToolBase
+from src.utils.logging_config import get_logger
+
+logger = get_logger("llm")
 
 
 class WikiSearchTool(ToolBase):

@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from src.utils.logging_config import get_logger
+
 
 class ContentSaver:
     """Manages saving crawled content to organized file structure."""
@@ -21,7 +23,7 @@ class ContentSaver:
         self.project_path = project_path
         self.processed_dir = project_path / "processed"
         self.cache_dir = project_path / "cache"
-
+        self.logger = get_logger("crawler")
         # Ensure all directories exist
         self._ensure_directory_exists(self.processed_dir)
         self._ensure_directory_exists(self.cache_dir)

@@ -5,6 +5,7 @@ Pipeline and validation commands.
 from pathlib import Path
 from typing import Optional
 from .utils import validate_project_exists, setup_project_logging
+from src.utils.logging_config import setup_logging, get_logger
 
 
 def validate_command(project_name: str):
@@ -155,49 +156,53 @@ async def pipeline_command(
     from .crawl_commands import crawl_command
     from .processor_commands import index_command, discover_command, build_command
 
-    print("=" * 80)
-    print(f"FULL PIPELINE: {project_name}")
-    print("=" * 80)
-    print("")
+    # Setup logging
+    setup_logging(project_name, log_level="INFO")
+    logger = get_logger("main")
+
+    logger.info("=" * 80)
+    logger.info(f"FULL PIPELINE: {project_name}")
+    logger.info("=" * 80)
+    logger.info("")
 
     # Phase 1: Crawl (optional)
     if not skip_crawl:
         if not wikia_url:
-            print("[ERROR] wikia_url required when not skipping crawl")
+            logger.error("wikia_url required when not skipping crawl")
             return
 
-        print("[PHASE 1] Crawling...")
+        logger.info("[PHASE 1] Crawling...")
         await crawl_command(project_name, wikia_url, max_pages)
-        print("")
+        logger.info("")
     else:
-        print("[PHASE 1] Skipped (using existing crawled data)")
-        print("")
+        logger.info("[PHASE 1] Skipped (using existing crawled data)")
+        logger.info("")
 
     # Phase 2a: Index
-    print("[PHASE 2a] Indexing...")
+    logger.info("[PHASE 2a] Indexing...")
     index_command(project_name)
-    print("")
+    logger.info("")
 
     # Phase 2b: Discover
-    print("[PHASE 2b] Discovering characters...")
+    logger.info("[PHASE 2b] Discovering characters...")
     discover_command(project_name, min_mentions=3, confidence_threshold=0.7)
-    print("")
+    logger.info("")
 
     # Phase 2c: Build profiles
-    print("[PHASE 2c] Building relationship profiles...")
+    logger.info("[PHASE 2c] Building relationship profiles...")
     build_command(project_name, max_characters=max_characters)
-    print("")
+    logger.info("")
 
     # Phase 3: Validate
-    print("[PHASE 3] Validating results...")
+    logger.info("[PHASE 3] Validating results...")
     validate_command(project_name)
-    print("")
+    logger.info("")
 
-    print("=" * 80)
-    print("FULL PIPELINE COMPLETE")
-    print("=" * 80)
-    print("")
-    print(f"Results saved to: data/projects/{project_name}/")
-    print(f"  - Characters: data/projects/{project_name}/characters/")
-    print(f"  - Relationships: data/projects/{project_name}/relationships/graph.json")
-    print(f"  - Logs: data/projects/{project_name}/logs/")
+    logger.info("=" * 80)
+    logger.info("FULL PIPELINE COMPLETE")
+    logger.info("=" * 80)
+    logger.info("")
+    logger.info(f"Results saved to: data/projects/{project_name}/")
+    logger.info(f"  - Characters: data/projects/{project_name}/characters/")
+    logger.info(f"  - Relationships: data/projects/{project_name}/relationships/graph.json")
+    logger.info(f"  - Logs: data/projects/{project_name}/logs/")

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
+from src.utils.logging_config import get_logger
 from ..core.session_manager import SessionManager
 from ..core.url_manager import URLManager
 from ..extraction.page_extractor import PageExtractor
@@ -66,7 +67,7 @@ class WikiaCrawler:
         self.config = config.copy()
 
         # Setup logger
-        self.logger = logging.getLogger(f"wikia_analyzer.{project_name}.crawler")
+        self.logger = get_logger("crawler")
 
         # Set defaults for optional configuration
         self.timeout_seconds = config.get("timeout_seconds", 30)
@@ -221,7 +222,7 @@ class WikiaCrawler:
 
                 except Exception as e:
                     # Log error and continue with next URL
-                    logging.error(f"Error crawling {url}: {e}")
+                    self.logger.error(f"Error crawling {url}: {e}")
                     self.url_manager.mark_failed(url, str(e))
                     stats["errors"] += 1
 
@@ -284,9 +285,9 @@ class WikiaCrawler:
         try:
             if hasattr(self, "session_manager"):
                 await self.session_manager.close_session()
-                logging.info("Session cleanup completed")
+                self.logger.info("Session cleanup completed")
         except Exception as e:
-            logging.warning(f"Error during session cleanup: {e}")
+            self.logger.warning(f"Error during session cleanup: {e}")
 
     async def _crawl_page(self, url: str) -> Optional[Dict]:
         """Crawl a single page and return extracted data."""
@@ -295,19 +296,19 @@ class WikiaCrawler:
             if self.respect_robots_txt and self.robots_parser:
                 can_fetch = await self.robots_parser.can_fetch(url)
                 if not can_fetch:
-                    logging.info(f"Robots.txt disallows fetching: {url}")
+                    self.logger.info(f"Robots.txt disallows fetching: {url}")
                     return None
 
                 # Apply crawl delay from robots.txt if specified
                 crawl_delay = await self.robots_parser.get_crawl_delay(url)
                 if crawl_delay is not None and crawl_delay > 0:
                     domain = urlparse(url).netloc
-                    logging.info(
+                    self.logger.info(
                         f"[ROBOTS.TXT] Applying crawl-delay of "
                         f"{crawl_delay:.2f}s for {domain}"
                     )
                     await asyncio.sleep(crawl_delay)
-                    logging.debug(
+                    self.logger.debug(
                         f"[ROBOTS.TXT] Crawl-delay wait complete for {domain}"
                     )
 
@@ -316,7 +317,7 @@ class WikiaCrawler:
 
             try:  # Ensure response is always cleaned up
                 if response.status != 200:
-                    logging.warning(f"HTTP {response.status} for {url}")
+                    self.logger.warning(f"HTTP {response.status} for {url}")
                     return None
 
                 html = await response.text()
@@ -330,7 +331,7 @@ class WikiaCrawler:
                 # Validate content quality
                 if (not extracted_data or
                         not extracted_data.get("main_content")):
-                    logging.info(f"No main content found for {url}")
+                    self.logger.info(f"No main content found for {url}")
                     return None
 
                 # Save content to file system
@@ -340,9 +341,9 @@ class WikiaCrawler:
                         extracted_data
                     )
                     extracted_data["saved_to"] = str(file_path)
-                    logging.info(f"Saved page content to: {file_path}")
+                    self.logger.info(f"Saved page content to: {file_path}")
                 except Exception as save_error:
-                    logging.error(
+                    self.logger.error(
                         f"Failed to save content for {url}: {save_error}"
                     )
 
@@ -352,7 +353,7 @@ class WikiaCrawler:
                 response.close()  # Ensure response cleanup in all cases
 
         except Exception as e:
-            logging.error(f"Error crawling {url}: {e}")
+            self.logger.error(f"Error crawling {url}: {e}")
             return None
 
     async def _should_crawl_url_async(self, url: str) -> bool:
@@ -443,4 +444,4 @@ class WikiaCrawler:
             # Save URL manager state (queue, visited, failed URLs)
             self.url_manager.save_state()
         except Exception as e:
-            logging.error(f"Failed to save crawl state: {e}")
+            self.logger.error(f"Failed to save crawl state: {e}")

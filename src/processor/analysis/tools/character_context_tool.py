@@ -5,7 +5,12 @@ Retrieves general background information about a character to help
 understand their role in relationships and the story.
 """
 from typing import Optional, Dict, Any
+import logging
+
 from .base import ToolBase
+from src.utils.logging_config import get_logger
+
+logger = get_logger("llm")
 
 
 class CharacterContextTool(ToolBase):
