@@ -15,10 +15,11 @@ For each character you encounter:
 3. If existing: Use update_character() to add new aliases or source URLs
 
 For each relationship you find:
-1. Use get_relationship() to check if we already know about this relationship
-2. If new relationship: Use create_relationship() to establish the basic relationship
-3. Always use add_relationship_claim() to add specific evidence from this page
-4. Each claim should be a concrete fact with a supporting quote
+1. If new relationship: Use create_relationship() to establish the basic relationship
+2. Use add_relationship_claim() to add specific evidence from this page
+3. IMPORTANT: Check the 'updated_claim' field in the response - it shows ALL existing evidence
+4. If evidence is identical or very similar to what already exists, DO NOT add it again
+5. Each claim should be a concrete fact with a supporting quote
 
 For clarification:
 - Use search_wiki() when you need more context about a character or event
@@ -70,10 +71,11 @@ Bad claims:
 <critical_rules>
 1. ALWAYS use search_characters() before create_character() to avoid duplicates
 2. Check character name variations: "Avatar Aang" vs "Aang" vs "The Last Airbender"
-3. Use get_relationship() before adding claims to avoid redundancy
-4. Every add_relationship_claim() must have evidence_url and evidence_text
-5. Be thorough but don't hallucinate - only extract what's on the page
-6. If unsure about something, use search_wiki() to research it
+3. After calling add_relationship_claim(), examine the 'updated_claim' in the response to see what evidence already exists
+4. DO NOT add duplicate or near-duplicate evidence - the response shows you what's already there
+5. Every add_relationship_claim() must have evidence_url and evidence_text
+6. Be thorough but don't hallucinate - only extract what's on the page
+7. If unsure about something, use search_wiki() to research it
 </critical_rules>
 
 Process each page completely before finishing. Extract all characters and all relationships you can find.

@@ -21,6 +21,7 @@ import logging
 from ..rag.query_engine import QueryEngine
 from .tools import ToolRegistry
 from src.utils.logging_config import get_logger
+from src.utils.tool_schema_loader import load_tool_schemas, load_system_prompt
 
 logger = get_logger("processor.profiles")
 
@@ -73,13 +74,17 @@ class ProfileBuilder:
         # Initialize tool registry
         self.tools = ToolRegistry(self.query_engine)
 
+        # Load tool schemas and system prompt from JSON files
+        self.relationship_tools = load_tool_schemas("relationship_extraction")
+        self.relationship_system_prompt = load_system_prompt("relationship_extraction_system")
+
         # Setup paths
         self.project_dir = Path("data") / "projects" / project_name
         self.characters_dir = self.project_dir / "characters"
         self.relationships_dir = self.project_dir / "relationships"
 
-        print(f"[INFO] ProfileBuilder initialized with {len(self.tools.list_tools())} tools:")
-        print(self.tools.get_tool_descriptions())
+        logger.info(f"ProfileBuilder initialized with {len(self.tools.list_tools())} tools (using JSON schemas)")
+        logger.info(f"Loaded {len(self.relationship_tools)} tool schemas: {[t['name'] for t in self.relationship_tools]}")
 
     def build_profile(
         self,
@@ -132,25 +137,19 @@ class ProfileBuilder:
         if verbose:
             print(f"\n[INFO] Building profile for: {character['full_name']}")
 
-        # Build system prompt (static instructions, sent once)
-        system_prompt = self._build_system_prompt()
-
         # Build task prompt (character-specific, minimal)
         task_prompt = self._build_task_prompt(character)
 
-        # Get tools in Anthropic format
-        anthropic_tools = self.tools.to_anthropic_format()
-
-        # Execute with tools
+        # Execute with tools (using JSON schema tools and loaded system prompt)
         if verbose:
             print(f"[INFO] Starting tool-enabled LLM query...")
 
         result = self.query_engine.llm_client.generate_with_tools(
             prompt=task_prompt,
-            tools=anthropic_tools,
-            tool_executor=self.tools.execute,
+            tools=self.relationship_tools,  # Use JSON schema tools
+            tool_executor=self.tools.execute,  # ToolRegistry still executes the tools
             max_iterations=20,  # Increased from 10 to allow more tool calls
-            system_prompt=system_prompt,  # NEW: Pass system prompt
+            system_prompt=self.relationship_system_prompt,  # Use loaded system prompt
             temperature=0.3,
             prune_history=False  # IMPORTANT: Keep full context within character profile building
         )
@@ -164,141 +163,6 @@ class ProfileBuilder:
         profile = self._parse_profile_result(character, result, verbose=verbose)
 
         return profile
-
-    def _build_system_prompt(self) -> str:
-        """
-        Build system prompt with static instructions.
-
-        System prompt contains all static content that doesn't change
-        between characters:
-        - Goal explanation
-        - Tool usage guidelines
-        - Output format specification
-        - Examples (good and bad)
-        - Critical rules
-
-        This is sent once per character instead of being repeated
-        in every tool iteration, significantly reducing token usage.
-
-        Returns:
-            System prompt string
-        """
-        return """You are an expert at analyzing fictional wikis to extract character relationships.
-
-<goal>
-Your goal: Discover and document ALL significant relationships a character has with OTHER CHARACTERS.
-
-A "relationship" means any meaningful connection:
-- Friends, allies, companions
-- Romantic partners, love interests
-- Family members (parents, siblings, children)
-- Enemies, rivals, antagonists
-- Mentors, students, teachers
-- Professional relationships (teammates, commanders, etc.)
-</goal>
-
-<tool_usage_guidelines>
-Use the available tools to gather comprehensive information:
-
-1. START by using search_wiki to discover who this character has relationships with
-   - Search broadly: "Who does [character] have relationships with?"
-   - Search for specific types: "Who are [character]'s friends/enemies/family?"
-
-2. FOR EACH relationship you find:
-   - Use search_wiki to get details about the relationship
-   - Use verify_relationship to measure evidence strength
-   - Focus on relationships with confidence >=0.6 (moderate to strong evidence)
-   - If you encounter an unfamiliar character, use get_character_context
-
-3. GATHER specific claims for each relationship:
-   - How they met
-   - Nature of their relationship
-   - Key events affecting the relationship
-   - Current state of relationship
-
-4. FILTER relationships:
-   - Only include relationships with clear evidence (confidence >=0.6)
-   - Prioritize important relationships (high evidence count)
-   - Skip vague or speculative relationships
-
-5. When you have gathered enough information, provide your final structured response
-</tool_usage_guidelines>
-
-<output_format>
-When you're done researching, provide ONLY a JSON response with this EXACT structure:
-
-{
-  "relationships": [
-    {
-      "target": "Exact character name as it appears in wiki",
-      "type": "relationship_type (e.g., friend, enemy, romantic_partner, mentor, family)",
-      "summary": "One sentence summary of the relationship",
-      "narrative": {
-        "claims": [
-          "Specific factual claim 1 about their relationship",
-          "Specific factual claim 2",
-          "Specific factual claim 3"
-        ]
-      },
-      "confidence": 0.85,
-      "evidence_count": 5,
-      "verified_with": "Name of tool call used (e.g., verify_relationship)"
-    }
-  ]
-}
-
-Requirements:
-- Use EXACT character names from wiki (not descriptions or titles)
-- Each claim must be specific and factual
-- Include confidence and evidence_count from verify_relationship tool
-- Include "verified_with" field to reference which tool call verified this relationship
-- Sort relationships by confidence (highest first)
-- Only include relationships with confidence >=0.6
-
-Note: Evidence citations will be automatically attached from your verify_relationship tool calls during post-processing.
-</output_format>
-
-<examples>
-GOOD relationship entry:
-{
-  "target": "Katara",
-  "type": "romantic_partner",
-  "summary": "Aang's love interest who he eventually marries",
-  "narrative": {
-    "claims": [
-      "Katara was the first person to believe in Aang as the Avatar",
-      "They developed romantic feelings during their journey to defeat the Fire Lord",
-      "Aang and Katara married after the war and had three children together"
-    ]
-  },
-  "confidence": 0.95,
-  "evidence_count": 12,
-  "verified_with": "verify_relationship"
-}
-
-BAD relationship entry (DO NOT DO THIS):
-{
-  "target": "The Water Tribe warrior",  // WRONG: Use actual name "Sokka"
-  "type": "friendship",  // Too generic
-  "summary": "They are friends",  // Too vague
-  "narrative": {
-    "claims": [
-      "They get along well"  // Not specific enough
-    ]
-  },
-  "confidence": 0.3,  // Too low - should be filtered out
-  "evidence_count": 1,
-  "verified_with": "verify_relationship"
-}
-</examples>
-
-<critical_rules>
-1. Only include NAMED CHARACTERS (not titles, groups, or concepts)
-2. Only include relationships with confidence >=0.6
-3. Be specific in claims (avoid vague statements)
-4. Use tools to verify uncertain relationships
-5. Provide ONLY JSON in your final response (no extra commentary)
-</critical_rules>"""
 
     def _build_task_prompt(self, character: Dict[str, Any]) -> str:
         """

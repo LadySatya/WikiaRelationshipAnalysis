@@ -1,6 +1,6 @@
 {
   "name": "create_relationship",
-  "description": "Create a new relationship between two characters in the knowledge base. This establishes the basic relationship type and summary. After creating, use add_relationship_claim to add specific evidence. This will fail if a relationship already exists between these characters.",
+  "description": "Create a new relationship between two characters in the knowledge base. This establishes the basic relationship type and summary with claim_count=0. After creating, use add_relationship_claim to add specific evidence. This will fail if a relationship already exists between these characters.",
   "input_schema": {
     "type": "object",
     "properties": {

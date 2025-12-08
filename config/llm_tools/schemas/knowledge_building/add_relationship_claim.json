@@ -1,6 +1,6 @@
 {
   "name": "add_relationship_claim",
-  "description": "Add a specific claim with evidence to an existing relationship. IMPORTANT: Before calling this, use get_relationship to check existing evidence. Only add evidence if it provides NEW information not already covered by existing evidence. Multiple evidence entries can support the same claim if they come from different pages or provide different perspectives. Each claim should be a specific factual statement supported by evidence from the current page.",
+  "description": "Add a specific claim with evidence to an existing relationship. The response includes 'updated_claim' with ALL existing evidence for that claim - review this carefully before adding more evidence to the same claim. Only add evidence if it provides NEW information not already covered. Multiple evidence entries can support the same claim if they come from different pages or provide genuinely different perspectives. DO NOT add duplicate or near-duplicate evidence. Each claim should be a specific factual statement supported by evidence from the current page.",
   "input_schema": {
     "type": "object",
     "properties": {

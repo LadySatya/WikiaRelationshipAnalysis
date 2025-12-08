@@ -15,9 +15,11 @@ import logging
 
 from ..rag.query_engine import QueryEngine
 from ..config import get_config
-from src.utils.logging_config import get_logger
+from src.utils.logging_config import get_logger, get_llm_logger
+from src.utils.tool_schema_loader import load_tool_schemas, load_system_prompt
 
 logger = get_logger("processor.discovery")
+llm_logger = None  # Initialized in __init__ when we have project_name
 
 
 class CharacterExtractor:
@@ -40,29 +42,6 @@ class CharacterExtractor:
         >>> extractor.save_discovered_characters(characters)
     """
 
-    # System prompt for batch page classification
-    CLASSIFICATION_SYSTEM_PROMPT = """You are analyzing wiki pages to identify which are about CHARACTERS (individual people/beings).
-
-A CHARACTER is:
-- An individual person, being, or creature with a NAME and PERSONALITY
-- Has their own thoughts, feelings, and agency
-- Examples: Aang, Katara, Zuko, Appa (the sky bison)
-
-NOT a character:
-- GROUPS/TEAMS of multiple people (Team Avatar, White Lotus, Fire Nation Army)
-  - Key signals: "members", "founded by", "organization", multiple people working together
-- EPISODES/CHAPTERS (titles of stories, not the people in them)
-  - Key signals: "aired on", "written by", "episode X of series Y"
-- LOCATIONS (places, cities, buildings)
-- CONCEPTS (ideas, states of being, powers)
-- OBJECTS/ITEMS (weapons, vehicles, artifacts)
-
-When you see infobox fields like "members", "founder", "leader" - that indicates a GROUP, not a character.
-When you see fields like "species", "age", "family", "abilities" referring to ONE individual - that's a character.
-
-Answer ONLY "yes" or "no". If unsure, answer "no".
-"""
-
     # === CLASSIFICATION CONSTANTS ===
 
     # Namespaces to exclude from character discovery
@@ -79,21 +58,6 @@ Answer ONLY "yes" or "no". If unsure, answer "no".
         "MediaWiki:",
     ]
 
-    # Disambiguation text patterns indicating non-character pages
-    DISAMBIGUATION_PATTERNS = [
-        "this article is about the episode",
-        "this article is about the chapter",
-        "this article is about the title",
-        "this article is about the political position",
-        "for the character, see",
-        "for the titular character, see",
-    ]
-
-    # URL patterns that indicate character pages
-    CHARACTER_URL_PATTERNS = [
-        "/characters/",
-        "/character:",
-    ]
 
     def __init__(
         self,
@@ -127,6 +91,17 @@ Answer ONLY "yes" or "no". If unsure, answer "no".
 
         # Initialize QueryEngine for RAG queries
         self.query_engine = QueryEngine(project_name=self.project_name)
+
+        # Initialize LLM logger for detailed prompt tracking
+        from pathlib import Path
+        project_log_dir = Path("data/projects") / self.project_name / "logs"
+        self.llm_logger = get_llm_logger(project_log_dir)
+
+        # Load tool schemas and system prompt
+        self.classification_tools = load_tool_schemas("character_classification")
+        self.classification_system_prompt = load_system_prompt("character_classification_system")
+
+        logger.info(f"Loaded {len(self.classification_tools)} classification tools: {[t['name'] for t in self.classification_tools]}")
 
     def _parse_character_name(self, title: str) -> Dict[str, Optional[str]]:
         """
@@ -446,174 +421,260 @@ Answer ONLY "yes" or "no". If unsure, answer "no".
         logger.info(f"Loaded {len(pages)} crawled pages")
         return pages
 
+    # === TOOL-BASED CLASSIFICATION METHODS ===
+
+    def _execute_classification_tool(
+        self,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+        batch: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Execute a classification tool.
+
+        Args:
+            tool_name: Name of the tool to execute
+            tool_input: Tool input parameters (must contain "page_title")
+            batch: Full batch of pages for lookup
+
+        Returns:
+            Tool result dictionary
+
+        Raises:
+            ValueError: If tool_name is unknown or page_title not found
+        """
+        # Get page by title
+        page_title = tool_input.get("page_title", "")
+        page_data = None
+
+        # Try exact match first
+        for page in batch:
+            if page.get("title", "") == page_title:
+                page_data = page
+                break
+
+        # If not found, try case-insensitive match
+        if not page_data:
+            page_title_lower = page_title.lower()
+            for page in batch:
+                if page.get("title", "").lower() == page_title_lower:
+                    page_data = page
+                    break
+
+        if not page_data:
+            # Log available titles for debugging
+            available_titles = [p.get("title", "Unknown") for p in batch]
+            logger.debug(f"Page '{page_title}' not found in batch. Available: {available_titles[:3]}...")
+            return {"error": f"Page not found: {page_title}"}
+
+        if tool_name == "get_infobox_fields":
+            # Return infobox field names
+            infobox = page_data.get("infobox_data", {})
+            return {
+                "fields": list(infobox.keys()) if infobox else [],
+                "field_count": len(infobox) if infobox else 0
+            }
+
+        elif tool_name == "get_page_excerpt":
+            # Return first 500 characters of main content
+            content = page_data.get("main_content", "")
+            return {
+                "excerpt": content[:500] if content else "No content available",
+                "total_length": len(content)
+            }
+
+        else:
+            raise ValueError(f"Unknown tool: {tool_name}")
+
+    def _classify_pages_batch(
+        self,
+        pages: List[Dict[str, Any]],
+        batch_size: int = 10
+    ) -> List[Dict[str, Any]]:
+        """
+        Classify pages using tool-enabled LLM in batches.
+
+        This replaces the old two-tier classification (metadata + selective LLM)
+        with a single LLM-first approach where the LLM can use tools to examine
+        pages before classifying them.
+
+        Args:
+            pages: List of page dictionaries to classify
+            batch_size: Number of pages to classify per LLM call
+
+        Returns:
+            List of character dictionaries (only pages classified as characters)
+        """
+        characters = []
+        total_batches = (len(pages) + batch_size - 1) // batch_size
+
+        logger.info(f"Classifying {len(pages)} pages in {total_batches} batches (size={batch_size})...")
+
+        for batch_num in range(total_batches):
+            start_idx = batch_num * batch_size
+            end_idx = min(start_idx + batch_size, len(pages))
+            batch = pages[start_idx:end_idx]
+
+            logger.info(f"Processing batch {batch_num + 1}/{total_batches} ({len(batch)} pages)...")
+
+            # Build page list for LLM
+            page_titles = [p.get("title", "Unknown") for p in batch]
+            page_list_str = "\n".join([f"{i+1}. {title}" for i, title in enumerate(page_titles)])
+
+            # Create task prompt
+            task_prompt = f"""Classify the following {len(batch)} wiki pages as either CHARACTER or NOT_CHARACTER.
+
+<pages>
+{page_list_str}
+</pages>
+
+For each page, you can use the available tools to gather information:
+- get_infobox_fields: See what metadata fields the page has
+- get_page_excerpt: Read the opening content of the page
+
+When you're done investigating, provide a JSON response with your classifications:
+
+{{
+  "classifications": [
+    {{"page_number": 1, "title": "Page Title", "classification": "CHARACTER", "reasoning": "Brief reason"}},
+    {{"page_number": 2, "title": "Page Title", "classification": "NOT_CHARACTER", "reasoning": "Brief reason"}},
+    ...
+  ]
+}}
+
+Use page_number to match the page in the list above (1-indexed).
+"""
+
+            # Execute with tools
+            try:
+                # Create closure to capture batch in tool executor
+                def tool_executor(tool_name: str, **tool_input):
+                    return self._execute_classification_tool(tool_name, tool_input, batch)
+
+                result = self.query_engine.llm_client.generate_with_tools(
+                    prompt=task_prompt,
+                    tools=self.classification_tools,
+                    tool_executor=tool_executor,
+                    max_iterations=30,  # Allow multiple tool calls
+                    system_prompt=self.classification_system_prompt,
+                    temperature=0.0
+                )
+
+                # Parse JSON response
+                final_response = result["final_response"]
+                classifications = self._parse_classification_response(final_response, batch)
+
+                # Log to LLM logger (convert usage format: total_input_tokens -> input_tokens)
+                usage_stats = result.get("usage", {})
+                self.llm_logger.log_prompt(
+                    prompt=task_prompt,
+                    model=self.query_engine.llm_client.model,
+                    purpose=f"character_classification:batch_{batch_num+1}",
+                    response=final_response,
+                    usage={
+                        "input_tokens": usage_stats.get("total_input_tokens", 0),
+                        "output_tokens": usage_stats.get("total_output_tokens", 0)
+                    },
+                    metadata={
+                        "batch_number": batch_num + 1,
+                        "batch_size": len(batch),
+                        "tool_calls_made": len(result.get("tool_calls", [])),
+                        "characters_found": sum(1 for c in classifications if c["is_character"]),
+                        "system_prompt": self.classification_system_prompt
+                    }
+                )
+
+                # Add character entries
+                for classification in classifications:
+                    if classification["is_character"]:
+                        page_idx = classification["page_index"]
+                        characters.append(self._create_character_entry(batch[page_idx], tier="llm_tools"))
+
+                logger.info(f"Batch {batch_num + 1}: Found {sum(1 for c in classifications if c['is_character'])} characters")
+
+            except Exception as e:
+                logger.error(f"Batch {batch_num + 1} classification failed: {e}")
+                continue
+
+        logger.info(f"Total discovered: {len(characters)} characters")
+        return characters
+
+    def _parse_classification_response(
+        self,
+        response: str,
+        batch: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Parse LLM classification response into structured format.
+
+        Args:
+            response: LLM response text (should contain JSON)
+            batch: Original batch of pages
+
+        Returns:
+            List of classification results:
+            [
+                {"page_index": 0, "is_character": True, "reasoning": "..."},
+                {"page_index": 1, "is_character": False, "reasoning": "..."},
+                ...
+            ]
+        """
+        try:
+            # Extract JSON from response (may be wrapped in markdown code blocks)
+            json_match = re.search(r'```json\s*(\{.*\})\s*```', response, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                # Try to find JSON object directly
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group(0)
+                else:
+                    raise ValueError("No JSON found in LLM response")
+
+            data = json.loads(json_str)
+            classifications_raw = data.get("classifications", [])
+
+            # Convert to normalized format
+            classifications = []
+            for item in classifications_raw:
+                page_num = item.get("page_number", 0)
+                page_idx = page_num - 1  # Convert to 0-indexed
+
+                # Validate page_idx
+                if page_idx < 0 or page_idx >= len(batch):
+                    logger.warning(f"Invalid page_number {page_num} in classification response")
+                    continue
+
+                classification = item.get("classification", "NOT_CHARACTER").upper()
+                is_character = classification == "CHARACTER"
+
+                classifications.append({
+                    "page_index": page_idx,
+                    "is_character": is_character,
+                    "reasoning": item.get("reasoning", "")
+                })
+
+            return classifications
+
+        except Exception as e:
+            logger.error(f"Failed to parse classification response: {e}")
+            logger.error(f"Response: {response[:500]}...")
+            # Return empty list on parse failure
+            return []
+
     # === CLASSIFICATION HELPER METHODS ===
 
     def _is_excluded_namespace(self, title: str) -> bool:
         """Check if page is in an excluded namespace (Transcript:, Category:, etc.)."""
         return any(title.startswith(ns) for ns in self.EXCLUDED_NAMESPACES)
 
-    def _has_disambiguation_text(self, content: str) -> bool:
-        """
-        Check if page has disambiguation text indicating it's NOT a character page.
-
-        Examples:
-            "This article is about the episode."
-            "For the character, see Roku"
-        """
-        if not content:
-            return False
-
-        # Check first 500 characters where disambiguation text usually appears
-        first_500 = content[:500].lower()
-        return any(pattern in first_500 for pattern in self.DISAMBIGUATION_PATTERNS)
-
-    def _has_character_namespace(self, page: Dict[str, Any]) -> bool:
-        """Check if page is in a character namespace."""
-        namespace = page.get("namespace") or ""
-        return "character" in namespace.lower()
-
-    def _has_character_url(self, url: str) -> bool:
-        """Check if URL indicates a character page (/characters/, /character:)."""
-        url_lower = url.lower()
-        return any(pattern in url_lower for pattern in self.CHARACTER_URL_PATTERNS)
-
-    def _classify_by_metadata(self, page: Dict[str, Any]) -> Optional[str]:
-        """
-        Classify page using metadata only (Tier 1 - FREE, no LLM calls).
-
-        Returns:
-            "character" - definitely a character page
-            "not_character" - definitely NOT a character (episode, transcript, etc.)
-            None - ambiguous, needs LLM classification
-        """
-        # Extract page data once
-        title = page.get("title", "")
-        content = page.get("main_content", "")
-        url = page.get("url", "")
-        infobox = page.get("infobox_data", {})
-
-        # === EXCLUSION CHECKS (obvious non-characters only) ===
-
-        # Only exclude truly obvious metadata pages
-        if self._is_excluded_namespace(title):
-            logger.debug(f"'{title}' excluded: metadata namespace (Transcript:, Category:, etc.)")
-            return "not_character"
-
-        # Only exclude clear disambiguation pages
-        if self._has_disambiguation_text(content):
-            logger.debug(f"'{title}' excluded: disambiguation page")
-            return "not_character"
-
-        # === INCLUSION CHECKS (very strong character signals only) ===
-
-        # Only include if explicitly in a "Character" namespace
-        if self._has_character_namespace(page):
-            logger.info(f"'{title}' classified as CHARACTER (metadata: character namespace)")
-            return "character"
-
-        # Only include if URL explicitly has "/characters/" path
-        if self._has_character_url(url):
-            logger.info(f"'{title}' classified as CHARACTER (metadata: character URL pattern)")
-            return "character"
-
-        # === AMBIGUOUS (let LLM decide with full context) ===
-        #
-        # Instead of hardcoded infobox field matching, we send everything else to the LLM.
-        # The LLM system prompt is trained to recognize:
-        # - Organizations (members, founder, leader fields)
-        # - Episodes (air date, written by, etc.)
-        # - Characters (species, age, family referring to one individual)
-        #
-        # This is more robust than maintaining blacklists.
-
-        logger.debug(f"'{title}' is ambiguous, delegating to LLM classification")
-        return None
-
-    def _classify_by_content(
-        self,
-        page: Dict[str, Any],
-        use_rag: bool = True
-    ) -> bool:
-        """
-        Classify page using content analysis (Tier 2 - SELECTIVE).
-
-        Uses first paragraph + optional RAG query for context.
-
-        Args:
-            page: Page dictionary with content
-            use_rag: Whether to use RAG for additional context (default: True)
-
-        Returns:
-            True if character page, False otherwise
-        """
-        title = page.get("title", "Unknown")
-        content = page.get("main_content", "")
-
-        # Get infobox data for better classification
-        infobox = page.get("infobox_data", {})
-        infobox_summary = ""
-        if infobox:
-            # Show key infobox fields to help LLM decide
-            infobox_fields = list(infobox.keys())[:5]  # First 5 fields
-            infobox_summary = f"Infobox fields: {', '.join(infobox_fields)}"
-
-        # Get first 300 characters as snippet
-        snippet = content[:300] if content else "No content available"
-
-        # Optional: Use RAG to get additional context
-        rag_context = ""
-        if use_rag:
-            try:
-                rag_context = self.query_engine.query(
-                    f"What is {title}? Describe it briefly.",
-                    k=3,  # Just a few chunks for context
-                    system_prompt="Provide a brief 1-2 sentence description."
-                )
-            except Exception as e:
-                logger.warning(f"RAG query failed for '{title}': {e}")
-                rag_context = ""
-
-        # Build classification prompt
-        prompt = f"""Is this wiki page about a CHARACTER (an individual person/being)?
-
-Page title: {title}
-{infobox_summary}
-First paragraph: {snippet}
-"""
-
-        if rag_context:
-            prompt += f"\nAdditional context: {rag_context}"
-
-        prompt += "\n\nAnswer with ONLY 'yes' or 'no'."
-
-        # Log what we're classifying
-        logger.debug(f"Classifying page: '{title}' (content-based LLM)")
-
-        try:
-            response = self.query_engine.llm_client.generate(
-                prompt=prompt,
-                system_prompt=self.CLASSIFICATION_SYSTEM_PROMPT,
-                temperature=0.0,
-                max_tokens=10
-            )
-
-            is_character = "yes" in response.lower()
-            if is_character:
-                logger.info(f"'{title}' classified as CHARACTER (content-based LLM: response='{response.strip()}')")
-            else:
-                logger.debug(f"'{title}' excluded by LLM (response='{response.strip()}')")
-            return is_character
-
-        except Exception as e:
-            logger.error(f"Content classification failed for '{title}': {e}")
-            return False
-
     def _execute_discovery_queries(self) -> List[Dict[str, Any]]:
         """
-        Execute page-based character discovery using two-tier classification.
+        Execute page-based character discovery using tool-enabled LLM classification.
 
-        Tier 1 (FREE): Metadata filtering (namespace, URL, infobox, disambiguation, episode detection)
-        Tier 2 (SELECTIVE): Content-based LLM classification for ambiguous pages
+        The LLM uses tools to examine pages before classifying them, allowing it to
+        inspect infobox fields and page content as needed for accurate classification.
 
         Returns:
             List of character dictionaries with name and discovered_via tracking
@@ -621,39 +682,21 @@ First paragraph: {snippet}
         # Load all crawled pages
         pages = self._load_crawled_pages()
 
-        # Tier 1: Metadata classification
-        characters = []
-        ambiguous_pages = []
-
-        logger.info("Tier 1: Classifying by metadata...")
-        filtered_count = 0
+        # Filter out obvious non-character pages (namespace exclusions only)
+        filtered_pages = []
+        excluded_count = 0
         for page in pages:
-            classification = self._classify_by_metadata(page)
+            title = page.get("title", "")
+            # Only exclude obvious metadata pages (Transcript:, Category:, etc.)
+            if self._is_excluded_namespace(title):
+                excluded_count += 1
+                continue
+            filtered_pages.append(page)
 
-            if classification == "character":
-                characters.append(self._create_character_entry(page, tier="metadata"))
-            elif classification == "not_character":
-                # Explicitly filtered out (transcripts, episodes, categories, etc.)
-                filtered_count += 1
-            else:
-                # Ambiguous - needs LLM classification
-                ambiguous_pages.append(page)
+        logger.info(f"Excluded {excluded_count} metadata namespace pages, {len(filtered_pages)} remaining for classification")
 
-        logger.info(f"Tier 1 classified {len(characters)} characters, {filtered_count} filtered, {len(ambiguous_pages)} ambiguous")
-
-        # Tier 2: Content-based classification for ambiguous pages
-        # Only run if we have ambiguous pages and it's worth the cost
-        if ambiguous_pages and (len(characters) < 50 or len(ambiguous_pages) < 100):
-            logger.info(f"Tier 2: Content-classifying {len(ambiguous_pages)} remaining pages...")
-
-            for page in ambiguous_pages:
-                is_character = self._classify_by_content(page, use_rag=False)  # RAG is expensive, disable by default
-
-                if is_character:
-                    characters.append(self._create_character_entry(page, tier="content_llm"))
-
-            tier2_count = sum(1 for c in characters if "content_llm" in c["discovered_via"])
-            logger.info(f"Tier 2 classified {tier2_count} more characters")
+        # Classify all pages using LLM with tools in batches
+        characters = self._classify_pages_batch(filtered_pages, batch_size=10)
 
         logger.info(f"Total discovered: {len(characters)} characters")
         return characters

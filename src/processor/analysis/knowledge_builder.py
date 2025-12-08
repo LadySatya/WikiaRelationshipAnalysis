@@ -404,7 +404,13 @@ Be thorough - extract all characters mentioned, not just the page subject.
 
         char_data["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-        return {"success": True, "name": name}
+        # Return updated character data so LLM can see current state
+        return {
+            "success": True,
+            "name": name,
+            "aliases": char_data.get("aliases", []),
+            "source_url_count": len(char_data.get("source_urls", []))
+        }
 
     def _normalize_relationship_key(self, char_a: str, char_b: str) -> Tuple[str, str]:
         """Normalize relationship key to alphabetical order."""
@@ -428,16 +434,23 @@ Be thorough - extract all characters mentioned, not just the page subject.
         if key in self.knowledge_base["relationships"]:
             return {"error": f"Relationship between '{character_a}' and '{character_b}' already exists", "success": False}
 
-        self.knowledge_base["relationships"][key] = {
+        new_rel = {
             "characters": list(key),
             "type": relationship_type,
             "summary": summary,
             "claims": [],
             "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         }
+        self.knowledge_base["relationships"][key] = new_rel
 
         logger.info(f"Created relationship: {character_a} <-> {character_b} ({relationship_type})")
-        return {"success": True, "characters": list(key)}
+        # Return relationship structure so LLM knows it starts with empty claims
+        return {
+            "success": True,
+            "characters": list(key),
+            "type": relationship_type,
+            "claim_count": 0
+        }
 
     def _tool_add_relationship_claim(
         self,
@@ -475,15 +488,31 @@ Be thorough - extract all characters mentioned, not just the page subject.
             # Add to existing claim's evidence array
             evidence_list = existing_claim.setdefault("evidence", [])
             evidence_list.append(new_evidence)
-            return {"success": True, "claim_count": len(claims_list), "evidence_count": len(evidence_list)}
+            # Return the full updated claim so LLM can see all existing evidence
+            return {
+                "success": True,
+                "claim_count": len(claims_list),
+                "evidence_count": len(evidence_list),
+                "updated_claim": {
+                    "claim": claim,
+                    "evidence": evidence_list  # Show all evidence for this claim
+                }
+            }
         else:
             # Create new claim with evidence array
-            claims_list.append({
+            new_claim = {
                 "claim": claim,
                 "evidence": [new_evidence]
-            })
+            }
+            claims_list.append(new_claim)
             rel_data["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-            return {"success": True, "claim_count": len(claims_list), "evidence_count": 1}
+            # Return the new claim so LLM sees the structure
+            return {
+                "success": True,
+                "claim_count": len(claims_list),
+                "evidence_count": 1,
+                "updated_claim": new_claim
+            }
 
     def _tool_search_wiki(self, query: str, max_results: int = 5) -> Dict[str, Any]:
         """Search wiki using RAG."""
