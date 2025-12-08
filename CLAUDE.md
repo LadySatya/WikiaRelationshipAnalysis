@@ -59,8 +59,7 @@ python main.py resume <project>
 
 # Phase 2: Analysis
 python main.py index <project>                    # Build vector DB
-python main.py discover <project>                 # Find characters
-python main.py build <project>                    # Build profiles
+python main.py discover <project>                 # Build knowledge base (unified discovery + relationships)
 
 # Validation & Management
 python main.py validate <project>
@@ -107,16 +106,15 @@ Crawled pages → ContentChunker → EmbeddingGenerator (Voyage AI)
 ```
 
 **Analysis:**
-- `CharacterExtractor`: Page-based discovery (metadata → batch LLM → content)
-  - 3-tier classification for cost efficiency
-  - Duplicate name handling via URL filtering
-  - Saves to `characters/<name>.json` or `characters/<name>_(<disambiguation>).json`
-
-- `ProfileBuilder`: Tool-based relationship extraction
-  - **Tool System** (`analysis/tools/`): WikiSearchTool, RelationshipVerifyTool, CharacterContextTool
-  - Claude autonomously decides which tools to use
-  - Evidence-backed claims with wiki citations
-  - Extensible: Add tools without modifying ProfileBuilder
+- `CharacterKnowledgeBuilder`: Unified single-pass architecture
+  - **8-Tool System**: search_characters, create_character, update_character, get_character, create_relationship, add_relationship_claim, get_relationship, search_wiki
+  - **Tool Executors**: Each tool returns contextual information to prevent duplicates
+  - **Contextual Responses**: Tools return updated state (e.g., add_relationship_claim returns updated_claim with ALL existing evidence)
+  - **In-Memory Knowledge Base**: Maintains characters and relationships with periodic saves
+  - **Prompt-Driven Workflow**: LLM guided by strong prompts rather than hard validation
+  - Claude autonomously decides which tools to call and when
+  - Evidence-backed claims with full citation support
+  - Saves to `characters/<name>.json` and `relationships/<char_a>_<char_b>.json`
 
 **Config:** `config/processor_config.yaml`
 
@@ -134,11 +132,12 @@ Crawled pages → ContentChunker → EmbeddingGenerator (Voyage AI)
 }
 ```
 
-**Cost (100 pages, 50 characters):**
-- Embeddings: $0.018
-- Discovery: $0.028
-- Profiles: $1.65
-- **Total: ~$1.70**
+**Architecture Highlights:**
+- **Prompt Engineering**: Uses Anthropic's best practices (XML tags, examples, explicit guidance)
+- **Duplicate Prevention**: Tools return context so LLM can see what already exists
+- **Fuzzy Matching**: SequenceMatcher for character name deduplication (threshold 0.6)
+- **Evidence Tracking**: Each claim has array of evidence with source URLs and quotes
+- **RAG Integration**: search_wiki tool queries vector database for additional context
 
 ### Phase 3: Visualization (PLANNED)
 Graph analysis, community detection, interactive visualizations.
@@ -170,7 +169,9 @@ Graph analysis, community detection, interactive visualizations.
 
 **Coverage Status:**
 - Phase 1 Crawler: 383 tests, 73-97% coverage ✅
-- Phase 2 Processor: 40+ tests per component ✅
+- Phase 2 Processor: 688 unit tests total ✅
+  - CharacterKnowledgeBuilder: 51 tests, 69% coverage ✅
+  - RAG Components: Comprehensive coverage ✅
 
 ## LLM Mocking (Cost Control)
 

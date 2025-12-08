@@ -55,9 +55,11 @@ The core web crawling infrastructure is now fully implemented and tested:
   - **RAG Query System**:
     - `RAGRetriever`: Semantic search to find relevant chunks
     - `QueryEngine`: Combines retrieval + Claude LLM to answer questions
-  - **Character Analysis**:
-    - `CharacterExtractor`: 3-tier character discovery (metadata → batch LLM → content)
-    - `ProfileBuilder`: Tool-based relationship extraction with evidence tracking
+  - **Unified Knowledge Building**:
+    - `CharacterKnowledgeBuilder`: Single-pass architecture combining discovery and relationship extraction
+    - **Tool-Based Interaction**: LLM autonomously calls 8 tools (search_characters, create_character, update_character, get_character, create_relationship, add_relationship_claim, get_relationship, search_wiki)
+    - **Contextual Responses**: Tools return updated state to prevent duplicate evidence
+    - **In-Memory Knowledge Base**: Maintains characters and relationships with periodic saves
 
 **Why RAG?**
 - **Scalable**: Handles thousands of pages efficiently
@@ -70,8 +72,7 @@ The core web crawling infrastructure is now fully implemented and tested:
 **Working CLI**:
 ```bash
 python main.py index <project_name>                    # Index crawled data
-python main.py discover <project_name>                 # Find all characters
-python main.py build <project_name>                    # Build relationship profiles
+python main.py discover <project_name>                 # Build knowledge base (unified character discovery + relationships)
 ```
 
 ### 3. **Visualization Module** (`src/visualizer/`) - ✅ IMPLEMENTED (Phase 3)
@@ -139,25 +140,25 @@ python src/visualizer/server.py 8000
 4. ✅ Implement `VectorStore` - ChromaDB integration with persistence
 5. ✅ Test end-to-end indexing on test_resume project (5 pages)
 
-#### Phase 2b: Character Discovery ✅
+#### Phase 2b: Knowledge Building ✅
 6. ✅ Implement `RAGRetriever` - Semantic search functionality
 7. ✅ Implement `QueryEngine` - RAG query interface (retrieval + Claude)
-8. ✅ Implement `CharacterExtractor` - 3-tier classification with duplicate handling
-9. ✅ Implement `ProfileBuilder` - Tool-based architecture with evidence tracking
-10. ✅ Validate on Avatar wiki data (22 characters discovered, 38 relationships)
+8. ✅ Implement `CharacterKnowledgeBuilder` - Unified single-pass architecture
+9. ✅ Implement 8-tool system with contextual responses to prevent duplicates
+10. ✅ Validate on Avatar wiki data (characters discovered with relationships)
 
 #### Phase 2c: CLI & Documentation ✅
-11. ✅ Add CLI commands (index, discover, build, pipeline)
+11. ✅ Add CLI commands (index, discover, pipeline)
 12. ✅ Create `config/processor_config.yaml` with RAG settings
-13. ✅ Update documentation with RAG workflow and examples
-14. ✅ Cost analysis and optimization (~$1.70 per 100 pages with 50 characters)
+13. ✅ Update documentation with unified architecture workflow
+14. ✅ Comprehensive unit tests (51 tests for CharacterKnowledgeBuilder, 69% coverage)
 
 **Success Criteria** (ALL MET):
-- ✅ Index 187 pages into ChromaDB successfully
-- ✅ Discover 22 characters from Avatar corpus
-- ✅ Build accurate profiles with relationship extraction (Claude-powered)
-- ✅ Total processing cost < $2 per project (using Claude 3.5 Haiku)
-- ✅ Ready for Phase 3 (relationship graph visualization)
+- ✅ Index pages into ChromaDB successfully
+- ✅ Unified knowledge building with single-pass architecture
+- ✅ Tool-based extraction with evidence tracking and duplicate prevention
+- ✅ Comprehensive test coverage (688 unit tests passing)
+- ✅ Ready for visualization (relationship graph generation)
 
 ### ✅ Phase 3: Visualization & Interface (COMPLETED)
 1. ✅ Build graph structure from character profiles
@@ -170,7 +171,7 @@ python src/visualizer/server.py 8000
 **Access**: `python src/visualizer/server.py 8000` → http://localhost:8000/
 
 ### 🔄 Phase 4: Enhancements & Polish (PLANNED)
-1. Add unit tests for ProfileBuilder tools (high priority)
+1. ✅ Unit tests for CharacterKnowledgeBuilder (51 tests, 69% coverage)
 2. Implement graph search/filter functionality
 3. Add export functionality (JSON, GraphML, CSV)
 4. Implement community detection algorithms
@@ -206,8 +207,8 @@ WikiaAnalysis/
 - **✅ Evidence Tracking**: Full citation support with source URLs and confidence scores
 - **✅ Interactive Visualization**: D3.js force-directed graphs with live log monitoring
 - **✅ Wikia-Specialized**: Custom parsing for Fandom/Wikia site structures
-- **✅ Test-Driven**: 495+ unit tests ensuring reliability
-- **✅ Cost-Effective**: ~$1.70 per 100 pages with 50 characters analyzed
+- **✅ Test-Driven**: 688+ unit tests ensuring reliability
+- **✅ Unified Architecture**: Single-pass knowledge building with tool-based LLM interaction
 
 ## Getting Started
 
@@ -264,8 +265,7 @@ python main.py pipeline my_project https://avatar.fandom.com/wiki/Aang --max-pag
 # Step-by-step workflow
 python main.py crawl my_project https://avatar.fandom.com/wiki/Aang --max-pages 100
 python main.py index my_project
-python main.py discover my_project
-python main.py build my_project --max-characters 10
+python main.py discover my_project  # Unified character discovery + relationships
 python main.py validate my_project
 
 # Start visualization dashboard
@@ -316,20 +316,16 @@ flake8 src/
 
 All core functionality is complete! Priority enhancements:
 
-1. **Add Tests for ProfileBuilder Tools** (High Priority):
-   - Unit tests for WikiSearchTool, RelationshipVerifyTool, CharacterContextTool
-   - Currently missing test coverage for tools system
-
-2. **Graph Visualization Enhancements**:
+1. **Graph Visualization Enhancements**:
    - Add search/filter functionality to find specific characters
    - Color-code edges by relationship type (romantic, familial, adversarial)
    - Optimize layout for large graphs (20+ characters)
 
-3. **Export Functionality**:
+2. **Export Functionality**:
    - JSON, GraphML, CSV formats
    - Integration with Gephi, Cytoscape, or other graph tools
 
-4. **Advanced Analysis**:
+3. **Advanced Analysis**:
    - Community detection (identify character factions/groups)
    - Temporal analysis (track relationship evolution)
    - Cross-wiki comparative analysis
