@@ -197,21 +197,217 @@ class TestLLMClientTextGeneration:
             assert client.total_output_tokens == 125
 
 
-class TestLLMClientErrorHandling:
-    """Test error handling and edge cases."""
+class TestLLMClientRetryLogic:
+    """Test automatic retry logic for transient API failures."""
 
-    def test_generate_handles_api_error(self):
-        """LLMClient should handle Anthropic API errors gracefully."""
+    def test_generate_retries_on_overload_error(self):
+        """LLMClient should retry on 529 overload errors with exponential backoff."""
         from src.processor.llm.llm_client import LLMClient
 
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = Exception("API Error: Rate limit exceeded")
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Success after retry")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+            # First call fails with 529, second succeeds
+            mock_client.messages.create.side_effect = [
+                Exception("Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error'}}"),
+                mock_response
+            ]
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:  # Mock sleep to speed up test
+                client = LLMClient(provider="anthropic")
+                response = client.generate("Test prompt")
+
+                assert response == "Success after retry"
+                assert mock_client.messages.create.call_count == 2
+                mock_sleep.assert_called_once_with(2.0)  # First retry delay
+
+    def test_generate_retries_on_rate_limit_error(self):
+        """LLMClient should retry on rate_limit errors."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Success")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+            mock_client.messages.create.side_effect = [
+                Exception("rate_limit exceeded"),
+                mock_response
+            ]
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:
+                client = LLMClient(provider="anthropic")
+                response = client.generate("Test")
+
+                assert response == "Success"
+                assert mock_client.messages.create.call_count == 2
+
+    def test_generate_retries_on_timeout_error(self):
+        """LLMClient should retry on timeout errors."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Success")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+            mock_client.messages.create.side_effect = [
+                Exception("Request timeout"),
+                mock_response
+            ]
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:
+                client = LLMClient(provider="anthropic")
+                response = client.generate("Test")
+
+                assert response == "Success"
+                assert mock_client.messages.create.call_count == 2
+
+    def test_generate_retries_on_connection_error(self):
+        """LLMClient should retry on connection errors."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Success")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+            mock_client.messages.create.side_effect = [
+                Exception("Connection refused"),
+                mock_response
+            ]
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:
+                client = LLMClient(provider="anthropic")
+                response = client.generate("Test")
+
+                assert response == "Success"
+
+    def test_generate_uses_exponential_backoff(self):
+        """LLMClient should use exponential backoff: 2s, 4s, 8s."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Success")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+            # Fail twice, succeed on third attempt
+            mock_client.messages.create.side_effect = [
+                Exception("overloaded"),
+                Exception("overloaded"),
+                mock_response
+            ]
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:
+                client = LLMClient(provider="anthropic")
+                response = client.generate("Test")
+
+                assert response == "Success"
+                assert mock_client.messages.create.call_count == 3
+                # Verify exponential backoff delays
+                assert mock_sleep.call_count == 2
+                mock_sleep.assert_any_call(2.0)  # First retry: 2^0 * 2 = 2s
+                mock_sleep.assert_any_call(4.0)  # Second retry: 2^1 * 2 = 4s
+
+    def test_generate_gives_up_after_max_retries(self):
+        """LLMClient should give up after 3 retries and raise exception."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            # Always fail with retryable error
+            mock_client.messages.create.side_effect = Exception("Error code: 529 - overloaded")
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:
+                client = LLMClient(provider="anthropic")
+
+                with pytest.raises(Exception, match="LLM API call failed.*529.*overloaded"):
+                    client.generate("Test")
+
+                # Should attempt 3 times (initial + 2 retries)
+                assert mock_client.messages.create.call_count == 3
+                assert mock_sleep.call_count == 2  # Sleep before 2nd and 3rd attempts
+
+    def test_generate_does_not_retry_non_retryable_errors(self):
+        """LLMClient should not retry on non-retryable errors (auth, validation)."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            # Non-retryable error (authentication failure)
+            mock_client.messages.create.side_effect = Exception("Invalid API key")
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep") as mock_sleep:
+                client = LLMClient(provider="anthropic")
+
+                with pytest.raises(Exception, match="LLM API call failed.*Invalid API key"):
+                    client.generate("Test")
+
+                # Should fail immediately without retries
+                assert mock_client.messages.create.call_count == 1
+                mock_sleep.assert_not_called()
+
+    def test_generate_logs_retry_attempts(self):
+        """LLMClient should log warning messages during retries."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(text="Success")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+
+            mock_client.messages.create.side_effect = [
+                Exception("529 overloaded"),
+                mock_response
+            ]
+            mock_anthropic_class.return_value = mock_client
+
+            with patch("time.sleep"):
+                client = LLMClient(provider="anthropic")
+
+                # Capture log messages
+                with patch.object(client.logger, "warning") as mock_warning:
+                    response = client.generate("Test")
+
+                    assert response == "Success"
+                    # Should log retry attempt
+                    mock_warning.assert_called_once()
+                    log_message = mock_warning.call_args[0][0]
+                    assert "attempt 1/3" in log_message
+                    assert "Retrying in 2.0s" in log_message
+
+
+class TestLLMClientErrorHandling:
+    """Test error handling and edge cases."""
+
+    def test_generate_handles_non_retryable_api_error(self):
+        """LLMClient should handle non-retryable Anthropic API errors gracefully."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_client.messages.create.side_effect = Exception("Invalid request format")
             mock_anthropic_class.return_value = mock_client
 
             client = LLMClient(provider="anthropic")
 
-            with pytest.raises(Exception, match="API Error"):
+            with pytest.raises(Exception, match="LLM API call failed.*Invalid request"):
                 client.generate("Test")
 
     def test_generate_validates_empty_prompt(self):

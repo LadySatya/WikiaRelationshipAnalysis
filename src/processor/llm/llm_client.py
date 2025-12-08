@@ -179,24 +179,54 @@ class LLMClient:
 
         # Call Claude API with explicit parameters (not **kwargs unpacking)
         # The Anthropic SDK requires explicit named parameters for type safety
-        try:
-            if system_prompt:
-                response = self._client.messages.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    system=system_prompt
+        # Retry logic for transient failures (529 overload, rate limits, network issues)
+        max_retries = 3
+        base_delay = 2.0  # seconds
+
+        for attempt in range(max_retries):
+            try:
+                if system_prompt:
+                    response = self._client.messages.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        system=system_prompt
+                    )
+                else:
+                    response = self._client.messages.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens
+                    )
+                break  # Success, exit retry loop
+
+            except Exception as e:
+                error_str = str(e)
+                is_last_attempt = (attempt == max_retries - 1)
+
+                # Check if this is a retryable error (529 overload, rate limits, network)
+                is_retryable = (
+                    "overloaded" in error_str.lower() or
+                    "529" in error_str or
+                    "rate_limit" in error_str.lower() or
+                    "timeout" in error_str.lower() or
+                    "connection" in error_str.lower()
                 )
-            else:
-                response = self._client.messages.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens
-                )
-        except Exception as e:
-            raise Exception(f"Claude API call failed: {str(e)}") from e
+
+                if is_retryable and not is_last_attempt:
+                    # Exponential backoff: 2s, 4s, 8s
+                    delay = base_delay * (2 ** attempt)
+                    self.logger.warning(
+                        f"API call failed (attempt {attempt + 1}/{max_retries}): {error_str}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    continue
+                else:
+                    # Non-retryable error or last attempt failed
+                    raise Exception(f"LLM API call failed: {error_str}") from e
 
         # Extract text from response
         # We expect TextBlock since we're not using tools/thinking
