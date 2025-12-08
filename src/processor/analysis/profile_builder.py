@@ -377,8 +377,8 @@ Begin your research using the available tools."""
 
         except Exception as e:
             if verbose:
-                print(f"[ERROR] Failed to parse LLM response as JSON: {e}")
-                print(f"[ERROR] Response: {final_response[:500]}...")
+                logger.error(f"Failed to parse LLM response as JSON: {e}")
+                logger.error(f"Response: {final_response[:500]}...")
 
             # Return empty profile on parse failure
             profile_data = {"relationships": []}
@@ -610,7 +610,7 @@ Begin your research using the available tools."""
                 print(f"[OK] Total cost so far: ${total_cost:.4f}")
 
             except Exception as e:
-                print(f"[ERROR] Failed to build profile for {char_name}: {e}")
+                logger.error(f"Failed to build profile for {char_name}: {e}")
                 continue
 
         # Print cache statistics

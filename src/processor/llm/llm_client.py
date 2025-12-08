@@ -567,7 +567,7 @@ class LLMClient:
         iteration_output_tokens = 0
 
         for iteration in range(max_iterations):
-            print(f"[INFO] Tool iteration {iteration + 1}/{max_iterations}")
+            self.logger.info(f"Tool iteration {iteration + 1}/{max_iterations}")
 
             # OPTIMIZATION: Prune conversation history to reduce token usage
             # Keep only the original task and last N tool exchanges
@@ -611,8 +611,8 @@ class LLMClient:
                         tool_name = block.name
                         tool_input = block.input
 
-                        print(f"[INFO] Claude called tool: {tool_name}")
-                        print(f"[INFO] Tool input: {tool_input}")
+                        self.logger.info(f"Claude called tool: {tool_name}")
+                        self.logger.info(f"Tool input: {tool_input}")
 
                         # Execute tool via callback
                         try:
@@ -623,9 +623,9 @@ class LLMClient:
                                 "error": str(e),
                                 "success": False
                             }
-                            print(f"[ERROR] Tool execution failed: {e}")
+                            self.logger.error(f"Tool execution failed: {e}")
 
-                        print(f"[INFO] Tool result: {tool_result}")
+                        self.logger.info(f"Tool result: {tool_result}")
 
                         # Track tool call
                         all_tool_calls.append({
