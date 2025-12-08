@@ -1,0 +1,23 @@
+{
+  "name": "search_wiki",
+  "description": "Search the wiki content for specific information using semantic search. This is your primary tool for gathering information from the wiki. It uses RAG (Retrieval Augmented Generation) to find relevant content and synthesize answers. Use this tool to: discover who a character has relationships with, find details about a specific relationship between two characters, learn background information about a character, verify claims about characters/events/relationships, and search for character abilities, affiliations, or attributes. The tool automatically searches semantically (understands meaning, not just keywords), synthesizes coherent answers from multiple sources, tracks citations (which wiki pages support the answer), and ranks sources by relevance. Returns: answer (synthesized answer from wiki content), evidence_count (number of citations supporting the answer), top_sources (URLs of most relevant wiki pages), and citations (sample citations with text excerpts).",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search query. Be specific and clear. Good examples: 'Who does Aang have relationships with?', 'How did Zuko and Aang become friends?', 'What is Katara and Aang relationship history?'. Bad examples: 'Aang' (too vague), 'relationships' (needs character context)"
+      },
+      "character_url": {
+        "type": "string",
+        "description": "Optional: URL of a specific character's wiki page. Use this to filter results to only that character's page. Helpful when searching for info specific to one character or when disambiguating characters with the same name."
+      },
+      "max_results": {
+        "type": "integer",
+        "description": "Maximum number of wiki chunks to retrieve. Default: 10. Use higher values (15-20) for comprehensive searches. Use lower values (5-8) for quick lookups.",
+        "default": 10
+      }
+    },
+    "required": ["query"]
+  }
+}

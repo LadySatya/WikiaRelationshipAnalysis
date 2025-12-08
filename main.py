@@ -238,8 +238,7 @@ Examples:
   # Step by step
   python main.py crawl avatar_wiki https://avatar.fandom.com/wiki/Aang --max-pages 100
   python main.py index avatar_wiki
-  python main.py discover avatar_wiki
-  python main.py build avatar_wiki --max-characters 10
+  python main.py discover avatar_wiki --max-pages 50
   python main.py validate avatar_wiki
   python main.py visualize avatar_wiki
 
@@ -271,12 +270,11 @@ Examples:
     index_parser.add_argument("project_name", help="Project to index")
 
     # discover command
-    discover_parser = subparsers.add_parser("discover", help="Discover characters")
+    discover_parser = subparsers.add_parser("discover", help="Build knowledge base (characters + relationships)")
     discover_parser.add_argument("project_name", help="Project to analyze")
-    discover_parser.add_argument("--min-mentions", type=int, default=3,
-                                 help="Minimum mentions required (default: 3)")
-    discover_parser.add_argument("--confidence", type=float, default=0.7,
-                                 help="Minimum confidence threshold (default: 0.7)")
+    discover_parser.add_argument("--max-pages", type=int, help="Maximum pages to process (default: all)")
+    discover_parser.add_argument("--save-frequency", type=int, default=10,
+                                 help="Save KB every N pages (default: 10)")
 
     # build command
     build_parser = subparsers.add_parser("build", help="Build relationship profiles")
@@ -335,7 +333,7 @@ Examples:
         elif args.command == "index":
             index_command(args.project_name)
         elif args.command == "discover":
-            discover_command(args.project_name, args.min_mentions, args.confidence)
+            discover_command(args.project_name, args.max_pages, args.save_frequency)
         elif args.command == "build":
             build_command(args.project_name, args.max_characters)
         elif args.command == "validate":

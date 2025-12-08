@@ -1,0 +1,26 @@
+{
+  "name": "create_relationship",
+  "description": "Create a new relationship between two characters in the knowledge base. This establishes the basic relationship type and summary. After creating, use add_relationship_claim to add specific evidence. This will fail if a relationship already exists between these characters.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "character_a": {
+        "type": "string",
+        "description": "Name of the first character in the relationship"
+      },
+      "character_b": {
+        "type": "string",
+        "description": "Name of the second character in the relationship"
+      },
+      "relationship_type": {
+        "type": "string",
+        "description": "Type of relationship (e.g., 'friend', 'enemy', 'romantic_partner', 'mentor', 'family', 'ally')"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Brief one-sentence summary of the relationship"
+      }
+    },
+    "required": ["character_a", "character_b", "relationship_type", "summary"]
+  }
+}

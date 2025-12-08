@@ -1,0 +1,14 @@
+{
+  "name": "get_infobox_fields",
+  "description": "Retrieves the infobox fields from a wiki page. Infoboxes are structured metadata boxes that appear on character pages containing information like 'Gender', 'Affiliation', 'First appearance', etc. Use this to examine what metadata is available before making classification decisions.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "page_title": {
+        "type": "string",
+        "description": "The exact title of the wiki page to retrieve infobox fields from"
+      }
+    },
+    "required": ["page_title"]
+  }
+}

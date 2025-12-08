@@ -1,0 +1,18 @@
+{
+  "name": "get_character_context",
+  "description": "Get background information about a character. Use this tool to learn about a character's identity, role, and background. The tool provides who the character is, their role in the story, general background and history, and key attributes or affiliations. When to use: when you encounter an unfamiliar character mentioned in relationships, to understand context for relationship dynamics, to verify character identities (especially with duplicate names), and to distinguish between similar character names. Returns: context (background summary about the character) and sources (URLs of wiki pages with more info). Note: If you already know the character from previous searches, you don't need this tool.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "character_name": {
+        "type": "string",
+        "description": "Name of character to get context for (e.g., 'Zuko')"
+      },
+      "disambiguation": {
+        "type": "string",
+        "description": "Optional: Disambiguation tag if multiple characters share this name. Example: For 'Bumi (King of Omashu)' use disambiguation='King of Omashu'"
+      }
+    },
+    "required": ["character_name"]
+  }
+}

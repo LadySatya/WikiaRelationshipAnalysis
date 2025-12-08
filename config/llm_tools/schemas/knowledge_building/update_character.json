@@ -1,0 +1,29 @@
+{
+  "name": "update_character",
+  "description": "Update an existing character's information in the knowledge base. Use this to add new aliases, update the bio, or add new source URLs. This will fail if the character doesn't exist - use create_character instead.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Exact name of the existing character to update"
+      },
+      "add_aliases": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional list of new aliases to add (existing aliases are preserved)"
+      },
+      "bio": {
+        "type": "string",
+        "description": "Optional updated biography (replaces existing bio)"
+      },
+      "add_source_url": {
+        "type": "string",
+        "description": "Optional additional source URL to add to the character's sources"
+      }
+    },
+    "required": ["name"]
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "add_relationship_claim",
+  "description": "Add a specific claim with evidence to an existing relationship. IMPORTANT: Before calling this, use get_relationship to check existing evidence. Only add evidence if it provides NEW information not already covered by existing evidence. Multiple evidence entries can support the same claim if they come from different pages or provide different perspectives. Each claim should be a specific factual statement supported by evidence from the current page.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "character_a": {
+        "type": "string",
+        "description": "Name of the first character in the relationship"
+      },
+      "character_b": {
+        "type": "string",
+        "description": "Name of the second character in the relationship"
+      },
+      "claim": {
+        "type": "string",
+        "description": "Specific factual claim about the relationship (e.g., 'Aang and Katara married after the Hundred Year War')"
+      },
+      "evidence_url": {
+        "type": "string",
+        "description": "URL of the wiki page that supports this claim"
+      },
+      "evidence_text": {
+        "type": "string",
+        "description": "Relevant excerpt from the page that supports the claim (keep under 200 characters)"
+      }
+    },
+    "required": ["character_a", "character_b", "claim", "evidence_url", "evidence_text"]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "create_character",
+  "description": "Create a new character entry in the knowledge base. This will fail if a character with this name already exists - use update_character instead to modify existing entries. Always use search_characters first to avoid creating duplicates.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "description": "Primary name of the character (e.g., 'Aang', 'Katara')"
+      },
+      "aliases": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional list of alternate names or titles (e.g., ['Avatar Aang', 'The Last Airbender'])"
+      },
+      "bio": {
+        "type": "string",
+        "description": "Optional brief biography or description of the character"
+      },
+      "source_url": {
+        "type": "string",
+        "description": "URL of the wiki page where this character was discovered"
+      }
+    },
+    "required": ["name", "source_url"]
+  }
+}

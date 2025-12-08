@@ -1,0 +1,18 @@
+{
+  "name": "verify_relationship",
+  "description": "Verify if a relationship exists between two characters and measure evidence strength. Use this tool to validate and measure the strength of relationship claims. The tool searches for evidence of the relationship in wiki content, counts how many sources mention the relationship, calculates a confidence score (0.0-1.0), and provides a brief summary. When to use: after finding a potential relationship via search_wiki, to validate important relationships before including in profile, to prioritize relationships by evidence strength (focus on high-confidence ones), and to filter out weak or speculative relationships. Returns: relationship_exists (true if evidence found), confidence (0.0-1.0 score where 0.8+ = strong, 0.5-0.8 = moderate, <0.5 = weak), evidence_count (number of citations supporting the relationship), and summary (brief description). Confidence scoring: 5+ citations = 1.0 (very strong evidence), 3-4 citations = 0.6-0.8 (moderate evidence), 1-2 citations = 0.2-0.4 (weak evidence), 0 citations = 0.0 (no evidence).",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "character_a": {
+        "type": "string",
+        "description": "First character's name (e.g., 'Aang')"
+      },
+      "character_b": {
+        "type": "string",
+        "description": "Second character's name (e.g., 'Katara')"
+      }
+    },
+    "required": ["character_a", "character_b"]
+  }
+}

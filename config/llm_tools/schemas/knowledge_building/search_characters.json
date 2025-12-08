@@ -1,0 +1,14 @@
+{
+  "name": "search_characters",
+  "description": "Search for characters in the knowledge base using fuzzy matching. Use this to check if a character already exists before creating a new entry, or to find characters with similar names to avoid duplicates. Returns a list of matching character names and their aliases.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Character name or partial name to search for (e.g., 'Aang', 'Avatar', 'Katara')"
+      }
+    },
+    "required": ["query"]
+  }
+}

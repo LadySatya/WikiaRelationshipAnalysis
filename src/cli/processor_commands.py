@@ -111,144 +111,103 @@ def index_command(project_name: str):
 
 def discover_command(
     project_name: str,
-    min_mentions: int = 3,
-    confidence_threshold: float = 0.7
+    max_pages: Optional[int] = None,
+    save_frequency: int = 10
 ):
     """
-    Discover characters from indexed data.
+    Build knowledge base (characters + relationships) from indexed data.
+
+    This unified command replaces the old discover + build pipeline.
+    The LLM processes pages sequentially and builds a knowledge base
+    of all characters and their relationships.
 
     Args:
         project_name: Name of the project
-        min_mentions: Minimum mentions required to consider a character
-        confidence_threshold: Minimum confidence score (0.0-1.0)
+        max_pages: Maximum number of pages to process (None = all)
+        save_frequency: Save KB every N pages (default: 10)
     """
-    from processor.analysis.character_extractor import CharacterExtractor
-
-    # Validate project exists with crawled data
-    validate_project_exists(project_name, require_crawled=True)
-
-    # Setup logging
-    logger = setup_project_logging(project_name, "PHASE 3: CHARACTER DISCOVERY")
-
-    logger.info("Starting character discovery...")
-
-    # Create extractor
-    extractor = CharacterExtractor(
-        project_name=project_name,
-        min_mentions=min_mentions,
-        confidence_threshold=confidence_threshold
-    )
-
-    # Discover characters with auto-save
-    characters = extractor.discover_characters(save=True)
-
-    logger.info("")
-    logger.info(f"Discovered {len(characters)} characters")
-    logger.info("")
-    logger.info("Top characters by mentions:")
-
-    for i, char in enumerate(characters[:10], 1):
-        name = char.get('full_name', char['name'])
-        mentions = char.get('mentions', 0)
-        confidence = char.get('confidence', 0.0)
-        logger.info(f"   {i:2d}. {name:30s} : {mentions:3d} mentions, confidence {confidence:.2f}")
-
-    logger.info("")
-    logger.info("=" * 80)
-    logger.info("CHARACTER DISCOVERY COMPLETE")
-    logger.info("=" * 80)
-    logger.info("")
-    logger.info(f"[INFO] Next step: python main.py build {project_name}")
-
-
-def build_command(project_name: str, max_characters: Optional[int] = 5):
-    """
-    Build relationship profiles for discovered characters.
-
-    Args:
-        project_name: Name of the project
-        max_characters: Maximum number of characters to profile (default: 5)
-    """
-    from processor.analysis.profile_builder import ProfileBuilder
-    from processor.analysis.character_extractor import CharacterExtractor
+    from processor.analysis.knowledge_builder import CharacterKnowledgeBuilder
     import time
 
     # Validate project exists with crawled data
     validate_project_exists(project_name, require_crawled=True)
 
     # Setup logging
-    logger = setup_project_logging(project_name, "PHASE 4: RELATIONSHIP EXTRACTION")
+    logger = setup_project_logging(project_name, "PHASE 3: KNOWLEDGE BUILDING")
 
-    # Load discovered characters
-    characters = CharacterExtractor.load_discovered_characters(project_name)
-    all_characters = characters["characters"]
-
-    logger.info(f"Loaded {len(all_characters)} discovered characters")
-
-    # Limit to top N by mentions
-    top_characters = sorted(
-        all_characters,
-        key=lambda c: c.get("mentions", 0),
-        reverse=True
-    )[:max_characters]
-
+    logger.info("Starting unified knowledge building...")
+    logger.info("LLM will extract characters and relationships from all pages")
     logger.info("")
-    logger.info(f"Building profiles for top {len(top_characters)} characters:")
-    for char in top_characters:
-        logger.info(f"  - {char.get('full_name', char['name'])}")
 
-    logger.info("")
-    logger.info("Building profiles (this may take 10-20 minutes)...")
+    # Create knowledge builder
+    builder = CharacterKnowledgeBuilder(
+        project_name=project_name,
+        save_frequency=save_frequency
+    )
 
-    # Build profiles
-    builder = ProfileBuilder(project_name=project_name)
-
+    # Build knowledge base
     start_time = time.time()
-    profiles = builder.build_all_profiles(top_characters, save=True)
+    kb = builder.build_knowledge_base(max_pages=max_pages)
     duration = time.time() - start_time
 
     # Calculate statistics
-    total_relationships = sum(
-        len(profile.get("profile", {}).get("relationships", []))
-        for profile in profiles.values()
+    num_characters = len(kb["characters"])
+    num_relationships = len(kb["relationships"])
+
+    total_claims = sum(
+        len(rel.get("claims", []))
+        for rel in kb["relationships"].values()
     )
 
-    avg_relationships = total_relationships / len(profiles) if profiles else 0
+    avg_claims = total_claims / num_relationships if num_relationships else 0
 
     logger.info("")
     logger.info("=" * 80)
-    logger.info("RELATIONSHIP EXTRACTION COMPLETE - SUMMARY")
+    logger.info("KNOWLEDGE BUILDING COMPLETE - SUMMARY")
     logger.info("=" * 80)
-    logger.info(f"Characters profiled: {len(profiles)}")
-    logger.info(f"Total relationships: {total_relationships}")
-    logger.info(f"Avg relationships/character: {avg_relationships:.1f}")
-    logger.info(f"Time: {duration:.1f}s ({duration/len(profiles):.1f}s per character)")
+    logger.info(f"Characters discovered: {num_characters}")
+    logger.info(f"Relationships found: {num_relationships}")
+    logger.info(f"Total relationship claims: {total_claims}")
+    logger.info(f"Avg claims per relationship: {avg_claims:.1f}")
+    logger.info(f"Time: {duration:.1f}s")
+
+    # Show top characters by source count
+    logger.info("")
+    logger.info("Top characters by sources:")
+    top_chars = sorted(
+        kb["characters"].items(),
+        key=lambda x: len(x[1].get("source_urls", [])),
+        reverse=True
+    )[:10]
+
+    for i, (name, char_data) in enumerate(top_chars, 1):
+        sources = len(char_data.get("source_urls", []))
+        aliases = len(char_data.get("aliases", []))
+        logger.info(f"   {i:2d}. {name:30s} : {sources:3d} sources, {aliases} aliases")
 
     # Show sample relationship
-    if profiles:
-        first_char = list(profiles.keys())[0]
-        first_profile = profiles[first_char]
-        if first_profile.get("relationships"):
-            rel = first_profile["relationships"][0]
-            logger.info("")
-            logger.info(f"Sample relationship: {first_char} -> {rel['target']}")
-            logger.info(f"  Type: {rel['type']}")
-            logger.info(f"  Summary: {rel['summary'][:100]}...")
-            logger.info(f"  Evidence: {rel.get('total_evidence_count', 0)} citations")
-            logger.info(f"  Confidence: {rel.get('overall_confidence', 0.0):.2f}")
+    if kb["relationships"]:
+        logger.info("")
+        logger.info("Sample relationship:")
+        sample_key = list(kb["relationships"].keys())[0]
+        sample_rel = kb["relationships"][sample_key]
+        char_a, char_b = sample_key
 
-            # Show first claim
-            if rel.get("narrative", {}).get("claims_with_evidence"):
-                claims = rel["narrative"]["claims_with_evidence"]
-                claim = claims[0]
-                logger.info("")
-                logger.info(f"  First claim: \"{claim['claim']}\"")
-                logger.info(f"    Evidence: {len(claim.get('evidence', []))} citations, confidence {claim.get('confidence', 0.0):.2f}")
-                if claim.get('evidence'):
-                    evidence = claim['evidence'][0]
-                    cited_preview = evidence['cited_text'][:80] + "..." if len(evidence['cited_text']) > 80 else evidence['cited_text']
-                    logger.info(f"    Source: {evidence.get('title', 'Unknown')}")
-                    logger.info(f"    Cited: {cited_preview}")
+        logger.info(f"  {char_a} <-> {char_b}")
+        logger.info(f"  Type: {sample_rel.get('type', 'Unknown')}")
+        logger.info(f"  Summary: {sample_rel.get('summary', 'No summary')}")
+        logger.info(f"  Claims: {len(sample_rel.get('claims', []))}")
+
+        if sample_rel.get("claims"):
+            first_claim = sample_rel["claims"][0]
+            logger.info(f"    - \"{first_claim.get('claim', 'No claim text')}\"")
+            evidence_list = first_claim.get("evidence", [])
+            if evidence_list:
+                logger.info(f"      Evidence ({len(evidence_list)} sources):")
+                for i, evidence in enumerate(evidence_list[:2], 1):  # Show first 2
+                    logger.info(f"        {i}. {evidence.get('evidence_url', 'No URL')}")
+            else:
+                logger.info(f"      Evidence: None")
 
     # Show usage stats
     usage = builder.query_engine.get_usage_stats()
@@ -262,3 +221,50 @@ def build_command(project_name: str, max_characters: Optional[int] = 5):
     logger.info("=" * 80)
     logger.info("")
     logger.info(f"[INFO] Next step: python main.py validate {project_name}")
+
+
+def build_command(project_name: str, max_characters: Optional[int] = None):
+    """
+    DEPRECATED: Use 'discover' command instead.
+
+    The old two-phase pipeline (discover -> build) has been replaced
+    with a unified knowledge building approach. The 'discover' command
+    now handles both character discovery and relationship extraction.
+
+    Args:
+        project_name: Name of the project
+        max_characters: Ignored (kept for backwards compatibility)
+    """
+    from processor.config import ProcessorConfig
+
+    logger = setup_project_logging(project_name, "DEPRECATED COMMAND")
+
+    logger.info("")
+    logger.info("=" * 80)
+    logger.info("WARNING: 'build' command is deprecated")
+    logger.info("=" * 80)
+    logger.info("")
+    logger.info("The old two-phase pipeline has been replaced with unified knowledge building.")
+    logger.info("")
+    logger.info("Instead of:")
+    logger.info("  python main.py discover <project>")
+    logger.info("  python main.py build <project>")
+    logger.info("")
+    logger.info("Use:")
+    logger.info("  python main.py discover <project>")
+    logger.info("")
+    logger.info("This will extract both characters AND relationships in a single pass.")
+    logger.info("")
+    logger.info("=" * 80)
+    logger.info("")
+
+    # Ask if they want to run discover instead
+    print("Run 'discover' command instead? (y/n): ", end="", flush=True)
+    import sys
+    response = sys.stdin.readline().strip().lower()
+
+    if response == 'y':
+        logger.info("Running discover command...")
+        discover_command(project_name=project_name)
+    else:
+        logger.info("Cancelled.")

@@ -1,0 +1,14 @@
+{
+  "name": "get_page_excerpt",
+  "description": "Retrieves a brief excerpt (first 500 characters) from a wiki page's main content. Use this to get context about what the page is about before classifying it. This is useful for pages without clear infobox data.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "page_title": {
+        "type": "string",
+        "description": "The exact title of the wiki page to retrieve an excerpt from"
+      }
+    },
+    "required": ["page_title"]
+  }
+}

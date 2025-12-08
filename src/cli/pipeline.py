@@ -149,12 +149,12 @@ async def pipeline_command(
     Args:
         project_name: Name of the project
         wikia_url: Starting URL (required unless skip_crawl=True)
-        max_pages: Maximum pages to crawl
-        max_characters: Maximum characters to profile (default: 5)
+        max_pages: Maximum pages to crawl (for both crawling and knowledge building)
+        max_characters: DEPRECATED (ignored, kept for backwards compatibility)
         skip_crawl: Skip crawling phase (use existing data)
     """
     from .crawl_commands import crawl_command
-    from .processor_commands import index_command, discover_command, build_command
+    from .processor_commands import index_command, discover_command
 
     # Setup logging
     setup_logging(project_name, log_level="INFO")
@@ -183,14 +183,9 @@ async def pipeline_command(
     index_command(project_name)
     logger.info("")
 
-    # Phase 2b: Discover
-    logger.info("[PHASE 2b] Discovering characters...")
-    discover_command(project_name, min_mentions=3, confidence_threshold=0.7)
-    logger.info("")
-
-    # Phase 2c: Build profiles
-    logger.info("[PHASE 2c] Building relationship profiles...")
-    build_command(project_name, max_characters=max_characters)
+    # Phase 2b: Build Knowledge Base (unified discovery + relationship extraction)
+    logger.info("[PHASE 2b] Building knowledge base (characters + relationships)...")
+    discover_command(project_name, max_pages=max_pages)
     logger.info("")
 
     # Phase 3: Validate
@@ -204,5 +199,5 @@ async def pipeline_command(
     logger.info("")
     logger.info(f"Results saved to: data/projects/{project_name}/")
     logger.info(f"  - Characters: data/projects/{project_name}/characters/")
-    logger.info(f"  - Relationships: data/projects/{project_name}/relationships/graph.json")
+    logger.info(f"  - Relationships: data/projects/{project_name}/relationships/")
     logger.info(f"  - Logs: data/projects/{project_name}/logs/")

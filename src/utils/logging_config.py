@@ -54,6 +54,7 @@ LOGGERS = {
     "processor": "wikia.processor",
     "processor.discovery": "wikia.processor.discovery",
     "processor.profiles": "wikia.processor.profiles",
+    "processor.knowledge_builder": "wikia.processor.knowledge_builder",
     "processor.rag": "wikia.processor.rag",
     "llm": "wikia.llm",
     "llm.prompts": "wikia.llm.prompts",
@@ -313,6 +314,12 @@ def _setup_module_handlers(
     _add_file_handler(
         LOGGERS["processor.profiles"],
         log_dir / "processor" / "profile_building.log",
+        level, formatter, max_bytes, backup_count
+    )
+
+    _add_file_handler(
+        LOGGERS["processor.knowledge_builder"],
+        log_dir / "processor" / "knowledge_building.log",
         level, formatter, max_bytes, backup_count
     )
 
