@@ -183,7 +183,6 @@ addopts = [
     "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
-    "--ignore=tests/test_processor/analysis/_deprecated",
 ]
 testpaths = ["tests"]
 pythonpath = ["."]
