@@ -1,0 +1,30 @@
+{
+  "name": "add_affiliation",
+  "description": "Add a group/organization affiliation to a character. Use this when a character belongs to, leads, or founded a group. This is for organizations like 'Kyoshi Warriors', 'Air Acolytes', 'Team Avatar' - NOT for relationships between individual characters. Returns the character's current affiliations so you can see what's already recorded and avoid duplicates.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "character_name": {
+        "type": "string",
+        "description": "Name of the character to add affiliation to (must already exist in knowledge base)"
+      },
+      "group": {
+        "type": "string",
+        "description": "Name of the organization/group (e.g., 'Kyoshi Warriors', 'Air Acolytes', 'White Lotus', 'Team Avatar')"
+      },
+      "role": {
+        "type": "string",
+        "description": "Optional role in the group (e.g., 'Leader', 'Founder', 'Member', 'Former Member', 'Co-founder')"
+      },
+      "evidence_url": {
+        "type": "string",
+        "description": "URL of the wiki page with evidence of this affiliation"
+      },
+      "evidence_text": {
+        "type": "string",
+        "description": "Quote from the page supporting this affiliation"
+      }
+    },
+    "required": ["character_name", "group", "evidence_url", "evidence_text"]
+  }
+}

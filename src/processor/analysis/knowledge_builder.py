@@ -304,6 +304,15 @@ Be thorough - extract all characters mentioned, not just the page subject.
                     max_results=tool_input.get("max_results", 5)
                 )
 
+            elif tool_name == "add_affiliation":
+                return self._tool_add_affiliation(
+                    character_name=tool_input.get("character_name", ""),
+                    group=tool_input.get("group", ""),
+                    role=tool_input.get("role"),
+                    evidence_url=tool_input.get("evidence_url", ""),
+                    evidence_text=tool_input.get("evidence_text", "")
+                )
+
             else:
                 return {"error": f"Unknown tool: {tool_name}", "success": False}
 
@@ -428,7 +437,21 @@ Be thorough - extract all characters mentioned, not just the page subject.
         relationship_type: str,
         summary: str
     ) -> Dict[str, Any]:
-        """Create a new relationship."""
+        """Create a new relationship between two existing characters."""
+        # Validate both characters exist
+        missing = []
+        if character_a not in self.knowledge_base["characters"]:
+            missing.append(character_a)
+        if character_b not in self.knowledge_base["characters"]:
+            missing.append(character_b)
+
+        if missing:
+            return {
+                "error": f"Character(s) not found: {', '.join(missing)}. Create them first with create_character().",
+                "success": False,
+                "hint": "If this is a group/organization (like 'Kyoshi Warriors' or 'Air Acolytes'), use add_affiliation() instead."
+            }
+
         key = self._normalize_relationship_key(character_a, character_b)
 
         if key in self.knowledge_base["relationships"]:
@@ -543,6 +566,74 @@ Be thorough - extract all characters mentioned, not just the page subject.
 
         except Exception as e:
             return {"error": str(e), "results": [], "count": 0}
+
+    def _tool_add_affiliation(
+        self,
+        character_name: str,
+        group: str,
+        evidence_url: str,
+        evidence_text: str,
+        role: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Add a group/organization affiliation to a character."""
+        if character_name not in self.knowledge_base["characters"]:
+            return {
+                "error": f"Character '{character_name}' not found. Create the character first with create_character().",
+                "success": False
+            }
+
+        char_data = self.knowledge_base["characters"][character_name]
+        affiliations = char_data.setdefault("affiliations", [])
+
+        # Check if this group affiliation already exists (case-insensitive)
+        existing = next(
+            (a for a in affiliations if a["group"].lower() == group.lower()),
+            None
+        )
+
+        if existing:
+            # Update role if provided and different
+            updated = False
+            if role and existing.get("role") != role:
+                existing["role"] = role
+                existing["evidence_url"] = evidence_url
+                existing["evidence_text"] = evidence_text[:200]
+                updated = True
+
+            return {
+                "success": True,
+                "message": f"Affiliation with '{group}' already exists" + (" (role updated)" if updated else ""),
+                "character_name": character_name,
+                "current_affiliations": [
+                    {"group": a["group"], "role": a.get("role")}
+                    for a in affiliations
+                ],
+                "affiliation_count": len(affiliations)
+            }
+
+        # Add new affiliation
+        new_affiliation = {
+            "group": group,
+            "evidence_url": evidence_url,
+            "evidence_text": evidence_text[:200]  # Truncate to 200 chars
+        }
+        if role:
+            new_affiliation["role"] = role
+
+        affiliations.append(new_affiliation)
+        char_data["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        logger.info(f"Added affiliation: {character_name} -> {group} ({role or 'Member'})")
+
+        return {
+            "success": True,
+            "character_name": character_name,
+            "current_affiliations": [
+                {"group": a["group"], "role": a.get("role")}
+                for a in affiliations
+            ],
+            "affiliation_count": len(affiliations)
+        }
 
     def _load_crawled_pages(self) -> List[Dict[str, Any]]:
         """Load all crawled pages from processed directory."""
