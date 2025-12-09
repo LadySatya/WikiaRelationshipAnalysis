@@ -74,10 +74,12 @@ class CharacterKnowledgeBuilder:
         self.characters_dir = self.project_dir / "characters"
         self.relationships_dir = self.project_dir / "relationships"
 
-        # In-memory knowledge base
+        # In-memory knowledge base (canon-aware)
+        # Structure: characters[canon][name] -> character data
+        #           relationships[canon][(char_a, char_b)] -> relationship data
         self.knowledge_base: Dict[str, Any] = {
-            "characters": {},  # name -> character data
-            "relationships": {},  # (char_a, char_b) -> relationship data
+            "characters": {},  # canon -> {name -> character data}
+            "relationships": {},  # canon -> {(char_a, char_b) -> relationship data}
             "metadata": {
                 "project_name": project_name,
                 "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -85,6 +87,9 @@ class CharacterKnowledgeBuilder:
                 "last_updated": None
             }
         }
+
+        # Track current page's canon (set by determine_canon tool)
+        self.current_page_canon: Optional[str] = None
 
         logger.info(f"CharacterKnowledgeBuilder initialized with {len(self.kb_tools)} tools")
         logger.info(f"Tools: {[t['name'] for t in self.kb_tools]}")
@@ -131,10 +136,11 @@ class CharacterKnowledgeBuilder:
         logger.info("Processing complete. Saving final KB...")
         self.save()
 
-        # Print summary
-        char_count = len(self.knowledge_base["characters"])
-        rel_count = len(self.knowledge_base["relationships"])
-        logger.info(f"Knowledge base complete: {char_count} characters, {rel_count} relationships")
+        # Print summary (count across all canons)
+        char_count = sum(len(chars) for chars in self.knowledge_base["characters"].values())
+        rel_count = sum(len(rels) for rels in self.knowledge_base["relationships"].values())
+        canon_count = len(self.knowledge_base["characters"])
+        logger.info(f"Knowledge base complete: {char_count} characters, {rel_count} relationships across {canon_count} canons")
 
         return self.knowledge_base
 
@@ -145,13 +151,17 @@ class CharacterKnowledgeBuilder:
         Args:
             page: Page dictionary with title, content, infobox, etc.
         """
+        # Reset canon state for new page
+        self.current_page_canon = None
+
         title = page.get("title", "Unknown")
         url = page.get("url", "")
         content = page.get("main_content", "")
         infobox = page.get("infobox_data", {})
+        categories = page.get("categories", [])
 
         # Build task prompt with page content
-        task_prompt = self._build_task_prompt(title, url, content, infobox)
+        task_prompt = self._build_task_prompt(title, url, content, infobox, categories)
 
         # Execute with tools
         def tool_executor(tool_name: str, **tool_input):
@@ -194,7 +204,8 @@ class CharacterKnowledgeBuilder:
         title: str,
         url: str,
         content: str,
-        infobox: Dict[str, Any]
+        infobox: Dict[str, Any],
+        categories: List[str]
     ) -> str:
         """
         Build task prompt with page content.
@@ -204,6 +215,7 @@ class CharacterKnowledgeBuilder:
             url: Page URL
             content: Main page content
             infobox: Infobox data
+            categories: Page categories
 
         Returns:
             Task prompt string
@@ -217,11 +229,15 @@ class CharacterKnowledgeBuilder:
             infobox_lines = [f"  - {k}: {v}" for k, v in list(infobox.items())[:10]]
             infobox_str = "\n".join(infobox_lines)
 
+        # Format categories
+        categories_str = ", ".join(categories[:15]) if categories else "(no categories)"
+
         prompt = f"""Process this wiki page and extract all characters and relationships.
 
 <page>
 Title: {title}
 URL: {url}
+Categories: {categories_str}
 
 Infobox:
 {infobox_str if infobox_str else "  (no infobox)"}
@@ -231,9 +247,10 @@ Content:
 </page>
 
 Use the available tools to:
-1. Check for existing characters (avoid duplicates)
-2. Create new character entries
-3. Extract and document relationships with evidence
+1. FIRST call determine_canon() to declare the canon for this page
+2. Check for existing characters (avoid duplicates)
+3. Create new character entries with the determined canon
+4. Extract and document relationships with evidence (within the same canon)
 
 Be thorough - extract all characters mentioned, not just the page subject.
 """
@@ -253,15 +270,28 @@ Be thorough - extract all characters mentioned, not just the page subject.
             Tool result dictionary
         """
         try:
-            if tool_name == "search_characters":
-                return self._tool_search_characters(tool_input.get("query", ""))
+            if tool_name == "determine_canon":
+                return self._tool_determine_canon(
+                    canon=tool_input.get("canon", "main"),
+                    reasoning=tool_input.get("reasoning", "")
+                )
+
+            elif tool_name == "search_characters":
+                return self._tool_search_characters(
+                    query=tool_input.get("query", ""),
+                    canon=tool_input.get("canon")  # Optional filter
+                )
 
             elif tool_name == "get_character":
-                return self._tool_get_character(tool_input.get("name", ""))
+                return self._tool_get_character(
+                    name=tool_input.get("name", ""),
+                    canon=tool_input.get("canon", "")
+                )
 
             elif tool_name == "create_character":
                 return self._tool_create_character(
                     name=tool_input.get("name", ""),
+                    canon=tool_input.get("canon", ""),
                     aliases=tool_input.get("aliases", []),
                     bio=tool_input.get("bio", ""),
                     source_url=tool_input.get("source_url", "")
@@ -270,6 +300,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
             elif tool_name == "update_character":
                 return self._tool_update_character(
                     name=tool_input.get("name", ""),
+                    canon=tool_input.get("canon", ""),
                     add_aliases=tool_input.get("add_aliases", []),
                     bio=tool_input.get("bio"),
                     add_source_url=tool_input.get("add_source_url")
@@ -278,13 +309,15 @@ Be thorough - extract all characters mentioned, not just the page subject.
             elif tool_name == "get_relationship":
                 return self._tool_get_relationship(
                     character_a=tool_input.get("character_a", ""),
-                    character_b=tool_input.get("character_b", "")
+                    character_b=tool_input.get("character_b", ""),
+                    canon=tool_input.get("canon", "")
                 )
 
             elif tool_name == "create_relationship":
                 return self._tool_create_relationship(
                     character_a=tool_input.get("character_a", ""),
                     character_b=tool_input.get("character_b", ""),
+                    canon=tool_input.get("canon", ""),
                     relationship_type=tool_input.get("relationship_type", ""),
                     summary=tool_input.get("summary", "")
                 )
@@ -293,6 +326,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
                 return self._tool_add_relationship_claim(
                     character_a=tool_input.get("character_a", ""),
                     character_b=tool_input.get("character_b", ""),
+                    canon=tool_input.get("canon", ""),
                     claim=tool_input.get("claim", ""),
                     evidence_url=tool_input.get("evidence_url", ""),
                     evidence_text=tool_input.get("evidence_text", "")
@@ -307,6 +341,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
             elif tool_name == "add_affiliation":
                 return self._tool_add_affiliation(
                     character_name=tool_input.get("character_name", ""),
+                    canon=tool_input.get("canon", ""),
                     group=tool_input.get("group", ""),
                     role=tool_input.get("role"),
                     evidence_url=tool_input.get("evidence_url", ""),
@@ -320,35 +355,70 @@ Be thorough - extract all characters mentioned, not just the page subject.
             logger.error(f"Tool '{tool_name}' failed: {e}")
             return {"error": str(e), "success": False}
 
-    def _tool_search_characters(self, query: str) -> Dict[str, Any]:
-        """Search for characters using fuzzy matching."""
+    def _tool_determine_canon(self, canon: str, reasoning: str) -> Dict[str, Any]:
+        """Set the canon for the current page being processed."""
+        if not canon:
+            canon = "main"
+
+        # Normalize canon to lowercase
+        canon = canon.lower().strip()
+
+        # Set the current page canon
+        self.current_page_canon = canon
+
+        # Ensure canon bucket exists in knowledge base
+        if canon not in self.knowledge_base["characters"]:
+            self.knowledge_base["characters"][canon] = {}
+        if canon not in self.knowledge_base["relationships"]:
+            self.knowledge_base["relationships"][canon] = {}
+
+        logger.info(f"Canon determined: {canon} - {reasoning}")
+
+        return {
+            "success": True,
+            "canon": canon,
+            "message": f"Canon set to '{canon}'. All subsequent characters and relationships will be stored in this canon."
+        }
+
+    def _tool_search_characters(self, query: str, canon: Optional[str] = None) -> Dict[str, Any]:
+        """Search for characters using fuzzy matching, optionally filtered by canon."""
         if not query:
             return {"matches": [], "count": 0}
 
         query_lower = query.lower()
         matches = []
 
-        for name, char_data in self.knowledge_base["characters"].items():
-            # Check name match
-            name_similarity = SequenceMatcher(None, query_lower, name.lower()).ratio()
-            if name_similarity > 0.6:
-                matches.append({
-                    "name": name,
-                    "aliases": char_data.get("aliases", []),
-                    "similarity": round(name_similarity, 2)
-                })
-                continue
+        # Determine which canons to search
+        if canon:
+            canons_to_search = [canon.lower()]
+        else:
+            canons_to_search = list(self.knowledge_base["characters"].keys())
 
-            # Check alias matches
-            for alias in char_data.get("aliases", []):
-                alias_similarity = SequenceMatcher(None, query_lower, alias.lower()).ratio()
-                if alias_similarity > 0.6:
+        for search_canon in canons_to_search:
+            canon_chars = self.knowledge_base["characters"].get(search_canon, {})
+            for name, char_data in canon_chars.items():
+                # Check name match
+                name_similarity = SequenceMatcher(None, query_lower, name.lower()).ratio()
+                if name_similarity > 0.6:
                     matches.append({
                         "name": name,
+                        "canon": search_canon,
                         "aliases": char_data.get("aliases", []),
-                        "similarity": round(alias_similarity, 2)
+                        "similarity": round(name_similarity, 2)
                     })
-                    break
+                    continue
+
+                # Check alias matches
+                for alias in char_data.get("aliases", []):
+                    alias_similarity = SequenceMatcher(None, query_lower, alias.lower()).ratio()
+                    if alias_similarity > 0.6:
+                        matches.append({
+                            "name": name,
+                            "canon": search_canon,
+                            "aliases": char_data.get("aliases", []),
+                            "similarity": round(alias_similarity, 2)
+                        })
+                        break
 
         # Sort by similarity
         matches.sort(key=lambda x: x["similarity"], reverse=True)
@@ -358,47 +428,70 @@ Be thorough - extract all characters mentioned, not just the page subject.
             "count": len(matches)
         }
 
-    def _tool_get_character(self, name: str) -> Optional[Dict[str, Any]]:
-        """Get character data by name."""
-        return self.knowledge_base["characters"].get(name)
+    def _tool_get_character(self, name: str, canon: str) -> Optional[Dict[str, Any]]:
+        """Get character data by name and canon."""
+        if not canon:
+            return {"error": "canon is required", "success": False}
+
+        canon = canon.lower()
+        canon_chars = self.knowledge_base["characters"].get(canon, {})
+        return canon_chars.get(name)
 
     def _tool_create_character(
         self,
         name: str,
+        canon: str,
         aliases: List[str],
         bio: str,
         source_url: str
     ) -> Dict[str, Any]:
-        """Create a new character entry."""
+        """Create a new character entry in the specified canon."""
         if not name:
             return {"error": "name is required", "success": False}
 
-        if name in self.knowledge_base["characters"]:
-            return {"error": f"Character '{name}' already exists", "success": False}
+        if not canon:
+            return {"error": "canon is required", "success": False}
 
-        self.knowledge_base["characters"][name] = {
+        canon = canon.lower()
+
+        # Ensure canon bucket exists
+        if canon not in self.knowledge_base["characters"]:
+            self.knowledge_base["characters"][canon] = {}
+
+        if name in self.knowledge_base["characters"][canon]:
+            return {"error": f"Character '{name}' already exists in canon '{canon}'", "success": False}
+
+        self.knowledge_base["characters"][canon][name] = {
             "name": name,
+            "canon": canon,
             "aliases": aliases,
             "bio": bio,
             "source_urls": [source_url] if source_url else [],
             "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         }
 
-        logger.info(f"Created character: {name}")
-        return {"success": True, "name": name}
+        logger.info(f"Created character: {name} (canon: {canon})")
+        return {"success": True, "name": name, "canon": canon}
 
     def _tool_update_character(
         self,
         name: str,
+        canon: str,
         add_aliases: Optional[List[str]] = None,
         bio: Optional[str] = None,
         add_source_url: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Update an existing character."""
-        if name not in self.knowledge_base["characters"]:
-            return {"error": f"Character '{name}' not found", "success": False}
+        """Update an existing character in the specified canon."""
+        if not canon:
+            return {"error": "canon is required", "success": False}
 
-        char_data = self.knowledge_base["characters"][name]
+        canon = canon.lower()
+        canon_chars = self.knowledge_base["characters"].get(canon, {})
+
+        if name not in canon_chars:
+            return {"error": f"Character '{name}' not found in canon '{canon}'", "success": False}
+
+        char_data = canon_chars[name]
 
         if add_aliases:
             existing = set(char_data.get("aliases", []))
@@ -417,6 +510,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
         return {
             "success": True,
             "name": name,
+            "canon": canon,
             "aliases": char_data.get("aliases", []),
             "source_url_count": len(char_data.get("source_urls", []))
         }
@@ -425,52 +519,70 @@ Be thorough - extract all characters mentioned, not just the page subject.
         """Normalize relationship key to alphabetical order."""
         return tuple(sorted([char_a, char_b]))
 
-    def _tool_get_relationship(self, character_a: str, character_b: str) -> Optional[Dict[str, Any]]:
-        """Get relationship data."""
+    def _tool_get_relationship(self, character_a: str, character_b: str, canon: str) -> Optional[Dict[str, Any]]:
+        """Get relationship data for a specific canon."""
+        if not canon:
+            return {"error": "canon is required", "success": False}
+
+        canon = canon.lower()
         key = self._normalize_relationship_key(character_a, character_b)
-        return self.knowledge_base["relationships"].get(key)
+        canon_rels = self.knowledge_base["relationships"].get(canon, {})
+        return canon_rels.get(key)
 
     def _tool_create_relationship(
         self,
         character_a: str,
         character_b: str,
+        canon: str,
         relationship_type: str,
         summary: str
     ) -> Dict[str, Any]:
-        """Create a new relationship between two existing characters."""
-        # Validate both characters exist
+        """Create a new relationship between two existing characters in the same canon."""
+        if not canon:
+            return {"error": "canon is required", "success": False}
+
+        canon = canon.lower()
+        canon_chars = self.knowledge_base["characters"].get(canon, {})
+
+        # Validate both characters exist in this canon
         missing = []
-        if character_a not in self.knowledge_base["characters"]:
+        if character_a not in canon_chars:
             missing.append(character_a)
-        if character_b not in self.knowledge_base["characters"]:
+        if character_b not in canon_chars:
             missing.append(character_b)
 
         if missing:
             return {
-                "error": f"Character(s) not found: {', '.join(missing)}. Create them first with create_character().",
+                "error": f"Character(s) not found in canon '{canon}': {', '.join(missing)}. Create them first with create_character().",
                 "success": False,
                 "hint": "If this is a group/organization (like 'Kyoshi Warriors' or 'Air Acolytes'), use add_affiliation() instead."
             }
 
         key = self._normalize_relationship_key(character_a, character_b)
 
-        if key in self.knowledge_base["relationships"]:
-            return {"error": f"Relationship between '{character_a}' and '{character_b}' already exists", "success": False}
+        # Ensure canon bucket exists for relationships
+        if canon not in self.knowledge_base["relationships"]:
+            self.knowledge_base["relationships"][canon] = {}
+
+        if key in self.knowledge_base["relationships"][canon]:
+            return {"error": f"Relationship between '{character_a}' and '{character_b}' already exists in canon '{canon}'", "success": False}
 
         new_rel = {
             "characters": list(key),
+            "canon": canon,
             "type": relationship_type,
             "summary": summary,
             "claims": [],
             "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         }
-        self.knowledge_base["relationships"][key] = new_rel
+        self.knowledge_base["relationships"][canon][key] = new_rel
 
-        logger.info(f"Created relationship: {character_a} <-> {character_b} ({relationship_type})")
+        logger.info(f"Created relationship: {character_a} <-> {character_b} ({relationship_type}) [canon: {canon}]")
         # Return relationship structure so LLM knows it starts with empty claims
         return {
             "success": True,
             "characters": list(key),
+            "canon": canon,
             "type": relationship_type,
             "claim_count": 0
         }
@@ -479,17 +591,23 @@ Be thorough - extract all characters mentioned, not just the page subject.
         self,
         character_a: str,
         character_b: str,
+        canon: str,
         claim: str,
         evidence_url: str,
         evidence_text: str
     ) -> Dict[str, Any]:
-        """Add a claim to an existing relationship."""
+        """Add a claim to an existing relationship in a specific canon."""
+        if not canon:
+            return {"error": "canon is required", "success": False}
+
+        canon = canon.lower()
         key = self._normalize_relationship_key(character_a, character_b)
+        canon_rels = self.knowledge_base["relationships"].get(canon, {})
 
-        if key not in self.knowledge_base["relationships"]:
-            return {"error": f"Relationship between '{character_a}' and '{character_b}' not found. Create it first.", "success": False}
+        if key not in canon_rels:
+            return {"error": f"Relationship between '{character_a}' and '{character_b}' not found in canon '{canon}'. Create it first.", "success": False}
 
-        rel_data = self.knowledge_base["relationships"][key]
+        rel_data = canon_rels[key]
 
         # Find or create claim
         claims_list = rel_data.setdefault("claims", [])
@@ -514,6 +632,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
             # Return the full updated claim so LLM can see all existing evidence
             return {
                 "success": True,
+                "canon": canon,
                 "claim_count": len(claims_list),
                 "evidence_count": len(evidence_list),
                 "updated_claim": {
@@ -532,6 +651,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
             # Return the new claim so LLM sees the structure
             return {
                 "success": True,
+                "canon": canon,
                 "claim_count": len(claims_list),
                 "evidence_count": 1,
                 "updated_claim": new_claim
@@ -570,19 +690,26 @@ Be thorough - extract all characters mentioned, not just the page subject.
     def _tool_add_affiliation(
         self,
         character_name: str,
+        canon: str,
         group: str,
         evidence_url: str,
         evidence_text: str,
         role: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Add a group/organization affiliation to a character."""
-        if character_name not in self.knowledge_base["characters"]:
+        """Add a group/organization affiliation to a character in a specific canon."""
+        if not canon:
+            return {"error": "canon is required", "success": False}
+
+        canon = canon.lower()
+        canon_chars = self.knowledge_base["characters"].get(canon, {})
+
+        if character_name not in canon_chars:
             return {
-                "error": f"Character '{character_name}' not found. Create the character first with create_character().",
+                "error": f"Character '{character_name}' not found in canon '{canon}'. Create the character first with create_character().",
                 "success": False
             }
 
-        char_data = self.knowledge_base["characters"][character_name]
+        char_data = canon_chars[character_name]
         affiliations = char_data.setdefault("affiliations", [])
 
         # Check if this group affiliation already exists (case-insensitive)
@@ -604,6 +731,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
                 "success": True,
                 "message": f"Affiliation with '{group}' already exists" + (" (role updated)" if updated else ""),
                 "character_name": character_name,
+                "canon": canon,
                 "current_affiliations": [
                     {"group": a["group"], "role": a.get("role")}
                     for a in affiliations
@@ -623,11 +751,12 @@ Be thorough - extract all characters mentioned, not just the page subject.
         affiliations.append(new_affiliation)
         char_data["updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-        logger.info(f"Added affiliation: {character_name} -> {group} ({role or 'Member'})")
+        logger.info(f"Added affiliation: {character_name} -> {group} ({role or 'Member'}) [canon: {canon}]")
 
         return {
             "success": True,
             "character_name": character_name,
+            "canon": canon,
             "current_affiliations": [
                 {"group": a["group"], "role": a.get("role")}
                 for a in affiliations
@@ -664,24 +793,36 @@ Be thorough - extract all characters mentioned, not just the page subject.
         self.characters_dir.mkdir(parents=True, exist_ok=True)
         self.relationships_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save individual character files
-        for char_name, char_data in self.knowledge_base["characters"].items():
-            safe_name = re.sub(r'[\\/:*?"<>|]', '_', char_name).replace(" ", "_")
-            filepath = self.characters_dir / f"{safe_name}.json"
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(char_data, f, indent=2, ensure_ascii=False)
+        # Count totals for logging
+        total_chars = 0
+        total_rels = 0
 
-        # Save individual relationship files
-        for (char_a, char_b), rel_data in self.knowledge_base["relationships"].items():
-            safe_a = re.sub(r'[\\/:*?"<>|]', '_', char_a).replace(" ", "_")
-            safe_b = re.sub(r'[\\/:*?"<>|]', '_', char_b).replace(" ", "_")
-            filepath = self.relationships_dir / f"{safe_a}_{safe_b}.json"
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(rel_data, f, indent=2, ensure_ascii=False)
+        # Save individual character files (canon-aware)
+        for canon, canon_chars in self.knowledge_base["characters"].items():
+            for char_name, char_data in canon_chars.items():
+                safe_name = re.sub(r'[\\/:*?"<>|]', '_', char_name).replace(" ", "_")
+                safe_canon = re.sub(r'[\\/:*?"<>|]', '_', canon).replace(" ", "_")
+                filepath = self.characters_dir / f"{safe_name}_{safe_canon}.json"
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(char_data, f, indent=2, ensure_ascii=False)
+                total_chars += 1
 
-        # Save metadata
+        # Save individual relationship files (canon-aware)
+        for canon, canon_rels in self.knowledge_base["relationships"].items():
+            for (char_a, char_b), rel_data in canon_rels.items():
+                safe_a = re.sub(r'[\\/:*?"<>|]', '_', char_a).replace(" ", "_")
+                safe_b = re.sub(r'[\\/:*?"<>|]', '_', char_b).replace(" ", "_")
+                safe_canon = re.sub(r'[\\/:*?"<>|]', '_', canon).replace(" ", "_")
+                filepath = self.relationships_dir / f"{safe_a}_{safe_b}_{safe_canon}.json"
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(rel_data, f, indent=2, ensure_ascii=False)
+                total_rels += 1
+
+        # Save metadata with canon information
+        metadata = self.knowledge_base["metadata"].copy()
+        metadata["canons"] = list(self.knowledge_base["characters"].keys())
         metadata_file = self.project_dir / "knowledge_base_metadata.json"
         with open(metadata_file, "w", encoding="utf-8") as f:
-            json.dump(self.knowledge_base["metadata"], f, indent=2, ensure_ascii=False)
+            json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-        logger.info(f"Saved {len(self.knowledge_base['characters'])} characters and {len(self.knowledge_base['relationships'])} relationships")
+        logger.info(f"Saved {total_chars} characters and {total_rels} relationships across {len(metadata['canons'])} canons")

@@ -1,12 +1,31 @@
 You are building a character knowledge base from wiki pages. Extract all characters, their relationships, and group affiliations.
 
+<canon_detection>
+FIRST, call determine_canon() to declare which canon this page belongs to. Analyze:
+- URL namespace: "Film:Aang" suggests film canon, "Legends:Luke" suggests legends
+- Categories: "Characters (film)" or "Characters (Netflix)" indicate non-main canons
+- Infobox fields: "Portrayed by" (live-action) vs "Voice actor" (animated)
+- Page content: References to specific adaptations or versions
+
+Common canons:
+- "main" - Primary/original canon (animated series, original games, manga, etc.)
+- "film" - Live-action film adaptations
+- "netflix" - Netflix adaptations
+- "legends" - Legacy/non-canon expanded universe (e.g., Star Wars Legends)
+
+If unsure, default to "main". Use lowercase, consistent naming.
+Characters and relationships exist ONLY within their own canon - a "film" character cannot have a relationship with a "main" character.
+</canon_detection>
+
 <workflow>
+0. determine_canon() FIRST - declares the canon for all extractions on this page
+
 For each CHARACTER on the page:
 1. search_characters() first to avoid duplicates (check name variations like "Aang" vs "Avatar Aang")
-2. create_character() if new, update_character() if existing
+2. create_character() if new, update_character() if existing - include the canon
 
-For each RELATIONSHIP between two individual characters:
-1. create_relationship() to establish the connection
+For each RELATIONSHIP between two individual characters (within the SAME canon):
+1. create_relationship() with the canon to establish the connection
 2. add_relationship_claim() with evidence from this page
 
 IMPORTANT - Extract ALL relationships, including between secondary characters:

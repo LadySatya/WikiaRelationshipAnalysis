@@ -1,6 +1,6 @@
 {
   "name": "create_relationship",
-  "description": "Create a new relationship between two characters in the knowledge base. This establishes the basic relationship type and summary with claim_count=0. After creating, use add_relationship_claim to add specific evidence. This will fail if a relationship already exists between these characters.",
+  "description": "Create a new relationship between two characters in the same canon. This establishes the basic relationship type and summary with claim_count=0. After creating, use add_relationship_claim to add specific evidence. This will fail if a relationship already exists between these characters in this canon.",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -12,6 +12,10 @@
         "type": "string",
         "description": "Name of the second character in the relationship"
       },
+      "canon": {
+        "type": "string",
+        "description": "Canon this relationship belongs to (e.g., 'main', 'film', 'legends'). Both characters must exist in this canon."
+      },
       "relationship_type": {
         "type": "string",
         "description": "Type of relationship (e.g., 'friend', 'enemy', 'romantic_partner', 'mentor', 'family', 'ally')"
@@ -21,6 +25,6 @@
         "description": "Brief one-sentence summary of the relationship"
       }
     },
-    "required": ["character_a", "character_b", "relationship_type", "summary"]
+    "required": ["character_a", "character_b", "canon", "relationship_type", "summary"]
   }
 }

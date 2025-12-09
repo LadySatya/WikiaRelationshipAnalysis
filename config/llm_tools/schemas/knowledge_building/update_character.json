@@ -1,12 +1,16 @@
 {
   "name": "update_character",
-  "description": "Update an existing character's information in the knowledge base. Use this to add new aliases, update the bio, or add new source URLs. The response shows the updated aliases and source_url_count so you can track what's been added. This will fail if the character doesn't exist - use create_character instead.",
+  "description": "Update an existing character's information in the knowledge base. Use this to add new aliases, update the bio, or add new source URLs. The response shows the updated aliases and source_url_count so you can track what's been added. This will fail if the character doesn't exist in the specified canon - use create_character instead.",
   "input_schema": {
     "type": "object",
     "properties": {
       "name": {
         "type": "string",
         "description": "Exact name of the existing character to update"
+      },
+      "canon": {
+        "type": "string",
+        "description": "Canon the character belongs to (e.g., 'main', 'film', 'legends')"
       },
       "add_aliases": {
         "type": "array",
@@ -24,6 +28,6 @@
         "description": "Optional additional source URL to add to the character's sources"
       }
     },
-    "required": ["name"]
+    "required": ["name", "canon"]
   }
 }

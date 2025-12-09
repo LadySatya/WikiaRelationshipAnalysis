@@ -1,6 +1,6 @@
 {
   "name": "get_relationship",
-  "description": "Retrieve information about a relationship between two characters. Returns the relationship type, summary, and ALL existing claims with their evidence arrays. Use this before adding new claims to: (1) see what evidence already exists, (2) decide if your new evidence truly adds value or is redundant, (3) avoid adding duplicate evidence. The evidence array for each claim shows all supporting evidence from different wiki pages. Returns null if no relationship exists.",
+  "description": "Retrieve information about a relationship between two characters in a specific canon. Returns the relationship type, summary, and ALL existing claims with their evidence arrays. Use this before adding new claims to: (1) see what evidence already exists, (2) decide if your new evidence truly adds value or is redundant, (3) avoid adding duplicate evidence. The evidence array for each claim shows all supporting evidence from different wiki pages. Returns null if no relationship exists in the specified canon.",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -11,8 +11,12 @@
       "character_b": {
         "type": "string",
         "description": "Name of the second character in the relationship"
+      },
+      "canon": {
+        "type": "string",
+        "description": "Canon to look up the relationship in (e.g., 'main', 'film', 'legends')"
       }
     },
-    "required": ["character_a", "character_b"]
+    "required": ["character_a", "character_b", "canon"]
   }
 }

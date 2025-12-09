@@ -1,0 +1,18 @@
+{
+  "name": "determine_canon",
+  "description": "Declare which canon this page belongs to based on URL, categories, infobox, and content. Call this FIRST before creating any characters or relationships. The canon will be used for all subsequent tool calls on this page.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "canon": {
+        "type": "string",
+        "description": "Canon identifier (e.g., 'main', 'film', 'legends', 'netflix'). Use lowercase, consistent naming."
+      },
+      "reasoning": {
+        "type": "string",
+        "description": "Brief explanation of how you determined this canon based on the page signals"
+      }
+    },
+    "required": ["canon", "reasoning"]
+  }
+}

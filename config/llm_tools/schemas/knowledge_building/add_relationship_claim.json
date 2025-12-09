@@ -12,6 +12,10 @@
         "type": "string",
         "description": "Name of the second character in the relationship"
       },
+      "canon": {
+        "type": "string",
+        "description": "Canon this relationship belongs to (e.g., 'main', 'film', 'legends')"
+      },
       "claim": {
         "type": "string",
         "description": "Specific factual claim about the relationship (e.g., 'Aang and Katara married after the Hundred Year War')"
@@ -25,6 +29,6 @@
         "description": "Relevant excerpt from the page that supports the claim (keep under 200 characters)"
       }
     },
-    "required": ["character_a", "character_b", "claim", "evidence_url", "evidence_text"]
+    "required": ["character_a", "character_b", "canon", "claim", "evidence_url", "evidence_text"]
   }
 }

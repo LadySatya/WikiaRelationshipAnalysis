@@ -1,14 +1,18 @@
 {
   "name": "get_character",
-  "description": "Retrieve detailed information about a character from the knowledge base. Returns the character's name, aliases, bio, and source URLs. Returns null if the character doesn't exist. Use this before updating a character or to check what information we already have.",
+  "description": "Retrieve detailed information about a character from the knowledge base in a specific canon. Returns the character's name, aliases, bio, and source URLs. Returns null if the character doesn't exist in the specified canon. Use this before updating a character or to check what information we already have.",
   "input_schema": {
     "type": "object",
     "properties": {
       "name": {
         "type": "string",
         "description": "Exact character name to look up (e.g., 'Aang', 'Katara')"
+      },
+      "canon": {
+        "type": "string",
+        "description": "Canon to look up the character in (e.g., 'main', 'film', 'legends')"
       }
     },
-    "required": ["name"]
+    "required": ["name", "canon"]
   }
 }
