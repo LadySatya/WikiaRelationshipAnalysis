@@ -37,11 +37,11 @@ def mock_llm_client():
         MockLLMClient instance
 
     Example:
-        def test_character_discovery(mock_llm_client):
+        def test_knowledge_building(mock_llm_client):
             # LLMClient is already patched with mock_llm_client
-            extractor = CharacterExtractor("test_project")
-            characters = extractor.discover_characters()
-            assert len(characters) > 0
+            builder = CharacterKnowledgeBuilder("test_project")
+            kb = builder.build_knowledge_base()
+            assert len(kb["characters"]) > 0
     """
     fixture_dir = Path(__file__).parent / "fixtures" / "llm_responses"
     return MockLLMClient(

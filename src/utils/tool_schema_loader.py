@@ -98,25 +98,3 @@ def load_system_prompt(prompt_name: str) -> str:
 
     with open(prompt_file, "r", encoding="utf-8") as f:
         return f.read()
-
-
-def get_available_tools(category: str) -> List[str]:
-    """
-    Get list of available tool names for a category.
-
-    Args:
-        category: Tool category
-
-    Returns:
-        List of tool names
-
-    Example:
-        >>> tools = get_available_tools("character_classification")
-        >>> # Returns: ["get_infobox_fields", "get_page_excerpt"]
-    """
-    schema_dir = Path("config/llm_tools/schemas") / category
-
-    if not schema_dir.exists():
-        return []
-
-    return [schema_file.stem for schema_file in sorted(schema_dir.glob("*.json"))]

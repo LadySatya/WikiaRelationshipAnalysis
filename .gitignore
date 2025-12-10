@@ -33,7 +33,7 @@ venv/
 *_temp.py
 rebuild_*.py
 test_*.py
-!tests/test_*.py
+!tests/**/test_*.py
 
 # Temporary documentation
 *_STATUS.md

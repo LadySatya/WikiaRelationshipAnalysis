@@ -1,9 +1,9 @@
 """
 Character analysis components for Phase 2b.
 
-This module provides character discovery and profiling functionality.
+This module provides unified knowledge building functionality.
 """
 
-from .character_extractor import CharacterExtractor
+from .knowledge_builder import CharacterKnowledgeBuilder
 
-__all__ = ["CharacterExtractor"]
+__all__ = ["CharacterKnowledgeBuilder"]

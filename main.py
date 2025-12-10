@@ -11,15 +11,14 @@ Phase 1 - Crawling:
 
 Phase 2 - Processing:
   index    Build vector database from crawled pages
-  discover Discover characters from indexed data
-  build    Build relationship profiles for characters
+  discover Build knowledge base (characters + relationships)
 
 Phase 3 - Validation & Visualization:
   validate  Show results and statistics
   visualize Generate interactive graph visualization
 
 Pipeline:
-  pipeline Run full pipeline (crawl -> index -> discover -> build -> validate)
+  pipeline Run full pipeline (crawl -> index -> discover -> validate)
 
 Meta:
   status   Show project status
@@ -44,7 +43,6 @@ from cli import (
     resume_command,
     index_command,
     discover_command,
-    build_command,
     validate_command,
     pipeline_command,
 )
@@ -211,15 +209,18 @@ def view_command(args):
 
 def visualize_command(project_name: str, open_browser: bool = True):
     """Start visualization server and open in browser."""
-    from visualizer.visualizer import start_visualization_server
+    from visualizer.server import start_server
+
+    # Verify project exists
+    project_path = Path(f"data/projects/{project_name}")
+    if not project_path.exists():
+        print(f"[ERROR] Project '{project_name}' not found")
+        sys.exit(1)
 
     try:
         print(f"\n[INFO] Starting visualization server for '{project_name}'...")
-        start_visualization_server(project_name, open_browser=open_browser)
+        start_server(open_browser=open_browser)
 
-    except FileNotFoundError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
     except Exception as e:
         print(f"[ERROR] Failed to start visualization: {e}")
         sys.exit(1)
@@ -276,12 +277,6 @@ Examples:
     discover_parser.add_argument("--save-frequency", type=int, default=10,
                                  help="Save KB every N pages (default: 10)")
 
-    # build command
-    build_parser = subparsers.add_parser("build", help="Build relationship profiles")
-    build_parser.add_argument("project_name", help="Project to build profiles for")
-    build_parser.add_argument("--max-characters", type=int, default=5,
-                              help="Maximum characters to profile (default: 5)")
-
     # ========== Phase 3: Validation ==========
 
     # validate command
@@ -334,8 +329,6 @@ Examples:
             index_command(args.project_name)
         elif args.command == "discover":
             discover_command(args.project_name, args.max_pages, args.save_frequency)
-        elif args.command == "build":
-            build_command(args.project_name, args.max_characters)
         elif args.command == "validate":
             validate_command(args.project_name)
         elif args.command == "visualize":

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, Any
 import yaml
 
-from src.utils.logging_config import setup_logging, get_logger, log_phase_start
+from src.utils.logging_config import setup_logging, get_logger
 
 
 def setup_project_logging(project_name: str, phase_name: str) -> logging.Logger:

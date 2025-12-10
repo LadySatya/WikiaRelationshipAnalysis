@@ -5,7 +5,8 @@
       "Bash(python -m pytest tests/test_crawler/rate_limiting/test_robots_parser.py -v)",
       "Bash(python -m pytest tests/test_crawler/core/test_crawler_init.py -v -k \"test_init_with_valid_parameters\")",
       "Bash(python -m pytest:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(sort:*)"
     ],
     "deny": [],
     "ask": []
