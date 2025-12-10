@@ -7,22 +7,98 @@ URL Structure:
     /<project>                - Relationship graph viewer
     /<project>/logs           - Log file browser
     /<project>/monitor        - Live log streaming
-    /api/<project>/relationships - List all relationship files
-    /api/<project>/characters    - List all character files
+    /api/<project>/relationships - List all relationship files (optional ?canon=<id>)
+    /api/<project>/characters    - List all character files (optional ?canon=<id>)
     /api/<project>/characters/<name> - Get single character data
     /api/<project>/relationships/<file> - Relationship details
+    /api/<project>/canons        - List available canons with counts
     /api/<project>/logs/stream - Server-Sent Events log stream
 """
-from flask import Flask, render_template_string, jsonify, Response, abort
+from flask import Flask, render_template_string, jsonify, Response, abort, request
 from pathlib import Path
 import json
 import time
-from typing import Dict, List
+import re
+from typing import Dict, List, Optional
 import webbrowser
 import threading
 
 app = Flask(__name__)
 PROJECT_DIR = Path("data/projects")
+
+
+# ============================================================================
+# CANON UTILITIES
+# ============================================================================
+
+def extract_canon_from_filename(filename: str) -> str:
+    """
+    Extract canon from a filename like 'Aang_film.json' -> 'film'.
+
+    Filename format: <name>_<canon>.json
+    If no underscore found or file predates canon support, returns 'main'.
+    """
+    # Remove .json extension
+    stem = filename.rsplit('.', 1)[0] if '.' in filename else filename
+
+    # Find last underscore (canon is always the last part)
+    if '_' in stem:
+        parts = stem.rsplit('_', 1)
+        # Check if the last part looks like a canon (lowercase, short)
+        potential_canon = parts[-1].lower()
+        if potential_canon in ('main', 'film', 'netflix', 'legends', 'comics', 'games'):
+            return potential_canon
+
+    return 'main'
+
+
+def get_project_canons(project: str) -> List[Dict]:
+    """
+    Get list of canons available in a project with counts.
+
+    Returns:
+        List of dicts with:
+        - id: canon identifier (e.g., 'main', 'film')
+        - name: display name (e.g., 'Main', 'Film')
+        - character_count: number of characters in this canon
+        - relationship_count: number of relationships in this canon
+    """
+    characters_dir = PROJECT_DIR / project / "characters"
+    relationships_dir = PROJECT_DIR / project / "relationships"
+
+    canon_stats: Dict[str, Dict[str, int]] = {}
+
+    # Count characters per canon
+    if characters_dir.exists():
+        for f in characters_dir.glob("*.json"):
+            if f.name.startswith("_"):
+                continue
+            canon = extract_canon_from_filename(f.name)
+            if canon not in canon_stats:
+                canon_stats[canon] = {"characters": 0, "relationships": 0}
+            canon_stats[canon]["characters"] += 1
+
+    # Count relationships per canon
+    if relationships_dir.exists():
+        for f in relationships_dir.glob("*.json"):
+            if f.name == "graph.json":
+                continue
+            canon = extract_canon_from_filename(f.name)
+            if canon not in canon_stats:
+                canon_stats[canon] = {"characters": 0, "relationships": 0}
+            canon_stats[canon]["relationships"] += 1
+
+    # Build result list
+    canons = []
+    for canon_id, stats in sorted(canon_stats.items()):
+        canons.append({
+            "id": canon_id,
+            "name": canon_id.title(),  # 'main' -> 'Main'
+            "character_count": stats["characters"],
+            "relationship_count": stats["relationships"]
+        })
+
+    return canons
 
 
 # ============================================================================
@@ -407,6 +483,48 @@ def _get_viewer_html(project: str) -> str:
             background: #7f8c8d;
         }}
 
+        .canon-filter {{
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }}
+
+        .canon-filter label {{
+            color: #bdc3c7;
+            font-size: 0.9rem;
+        }}
+
+        .canon-filter select {{
+            padding: 0.4rem 0.75rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            background: #34495e;
+            color: white;
+            cursor: pointer;
+        }}
+
+        .canon-filter select:hover {{
+            background: #3d566e;
+        }}
+
+        .canon-badge {{
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+            text-transform: uppercase;
+        }}
+
+        .canon-main {{ background: #3498db; color: white; }}
+        .canon-film {{ background: #e74c3c; color: white; }}
+        .canon-netflix {{ background: #e91e63; color: white; }}
+        .canon-legends {{ background: #9b59b6; color: white; }}
+        .canon-comics {{ background: #f39c12; color: white; }}
+        .canon-games {{ background: #27ae60; color: white; }}
+
         #container {{
             display: flex;
             height: calc(100vh - 60px);
@@ -581,6 +699,12 @@ def _get_viewer_html(project: str) -> str:
             <div class="stats" id="stats">Loading...</div>
         </div>
         <div class="header-actions">
+            <div class="canon-filter">
+                <label for="canon-select">Canon:</label>
+                <select id="canon-select">
+                    <option value="">All Canons</option>
+                </select>
+            </div>
             <a href="/{project}/logs" class="btn btn-secondary">Logs</a>
             <a href="/" class="btn btn-secondary">Projects</a>
         </div>
@@ -595,7 +719,7 @@ def _get_viewer_html(project: str) -> str:
         </div>
     </div>
 
-    <div class="legend">
+    <div class="legend" id="legend-relationships">
         <div class="legend-title">Relationship Types</div>
         <div class="legend-item">
             <div class="legend-color" style="background: #e74c3c;"></div>
@@ -623,12 +747,45 @@ def _get_viewer_html(project: str) -> str:
         </div>
     </div>
 
+    <div class="legend" id="legend-canons" style="top: 280px;">
+        <div class="legend-title">Canon (Node Borders)</div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #34495e; border-color: #3498db;"></div>
+            <span>Main</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #34495e; border-color: #e74c3c;"></div>
+            <span>Film</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #34495e; border-color: #e91e63;"></div>
+            <span>Netflix</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #34495e; border-color: #9b59b6;"></div>
+            <span>Legends</span>
+        </div>
+    </div>
+
     <script>
         const projectName = '{project}';
 
         // Global data
         let graphData = null;
         let characterCache = {{}};
+        let currentCanon = '';  // Empty = all canons
+        let availableCanons = [];
+
+        // Canon border colors (visual distinction)
+        const canonColors = {{
+            'main': '#3498db',
+            'film': '#e74c3c',
+            'netflix': '#e91e63',
+            'legends': '#9b59b6',
+            'comics': '#f39c12',
+            'games': '#27ae60',
+            'default': '#3498db'
+        }};
 
         // Color mapping for relationship types
         const typeColors = {{
@@ -651,17 +808,56 @@ def _get_viewer_html(project: str) -> str:
             'default': '#95a5a6'
         }};
 
-        // Initialize visualization
-        async function init() {{
+        // Load canon dropdown options
+        async function loadCanons() {{
             try {{
-                // Fetch list of all relationships
-                const relsResponse = await fetch(`/api/${{projectName}}/relationships`);
+                const response = await fetch(`/api/${{projectName}}/canons`);
+                if (response.ok) {{
+                    const data = await response.json();
+                    availableCanons = data.canons || [];
+
+                    const select = document.getElementById('canon-select');
+                    availableCanons.forEach(canon => {{
+                        const option = document.createElement('option');
+                        option.value = canon.id;
+                        option.textContent = `${{canon.name}} (${{canon.relationship_count}})`;
+                        select.appendChild(option);
+                    }});
+
+                    // Listen for changes
+                    select.addEventListener('change', (e) => {{
+                        currentCanon = e.target.value;
+                        loadRelationships();
+                    }});
+                }}
+            }} catch (e) {{
+                console.log('Could not load canons:', e);
+            }}
+        }}
+
+        // Load relationships (with optional canon filter)
+        async function loadRelationships() {{
+            try {{
+                document.getElementById('graph').innerHTML =
+                    '<div class="loading">Loading relationships...</div>';
+
+                // Build URL with optional canon filter
+                let url = `/api/${{projectName}}/relationships`;
+                if (currentCanon) {{
+                    url += `?canon=${{currentCanon}}`;
+                }}
+
+                const relsResponse = await fetch(url);
                 if (!relsResponse.ok) throw new Error('Failed to load relationships list');
                 const relsData = await relsResponse.json();
 
                 if (relsData.count === 0) {{
+                    const msg = currentCanon
+                        ? `No relationships found in "${{currentCanon}}" canon.`
+                        : 'No relationships found. Run discovery first.';
                     document.getElementById('graph').innerHTML =
-                        '<div class="error">No relationships found. Run discovery first.</div>';
+                        `<div class="error">${{msg}}</div>`;
+                    document.getElementById('stats').textContent = '0 characters, 0 relationships';
                     return;
                 }}
 
@@ -669,7 +865,7 @@ def _get_viewer_html(project: str) -> str:
                 const relPromises = relsData.files.map(file =>
                     fetch(`/api/${{projectName}}/relationships/${{file.filename}}`)
                         .then(r => r.json())
-                        .then(data => ({{...data, _filename: file.filename}}))
+                        .then(data => ({{...data, _filename: file.filename, _canon: file.canon}}))
                         .catch(err => {{
                             console.error(`Failed to load ${{file.filename}}:`, err);
                             return null;
@@ -682,8 +878,9 @@ def _get_viewer_html(project: str) -> str:
                 graphData = buildGraphFromRelationships(relationships);
 
                 // Update header stats
+                const canonLabel = currentCanon ? ` (${{currentCanon}})` : '';
                 document.getElementById('stats').textContent =
-                    `${{graphData.nodes.length}} characters, ${{graphData.edges.length}} relationships`;
+                    `${{graphData.nodes.length}} characters, ${{graphData.edges.length}} relationships${{canonLabel}}`;
 
                 // Build visualization
                 buildGraph();
@@ -695,28 +892,36 @@ def _get_viewer_html(project: str) -> str:
             }}
         }}
 
+        // Initialize visualization
+        async function init() {{
+            await loadCanons();
+            await loadRelationships();
+        }}
+
         function buildGraphFromRelationships(relationships) {{
-            // Extract unique characters from relationships
-            const characterSet = new Set();
+            // Extract unique characters from relationships (track canon for each)
+            const characterMap = {{}};  // name -> {{ canon, relCount }}
 
             relationships.forEach(rel => {{
                 if (rel.characters && Array.isArray(rel.characters)) {{
-                    rel.characters.forEach(char => characterSet.add(char));
+                    const canon = rel._canon || rel.canon || 'main';
+                    rel.characters.forEach(char => {{
+                        if (!characterMap[char]) {{
+                            characterMap[char] = {{ canon: canon, relCount: 0 }};
+                        }}
+                        characterMap[char].relCount++;
+                    }});
                 }}
             }});
 
             // Build nodes
-            const nodes = Array.from(characterSet).map(name => {{
-                // Count relationships for this character
-                const relCount = relationships.filter(rel =>
-                    rel.characters && rel.characters.includes(name)
-                ).length;
-
+            const nodes = Object.entries(characterMap).map(([name, data]) => {{
                 return {{
                     id: name,
                     label: name,
-                    title: `${{name}}\\n${{relCount}} relationship(s)`,
-                    total_relationships: relCount
+                    title: `${{name}}\\n${{data.relCount}} relationship(s)\\nCanon: ${{data.canon}}`,
+                    total_relationships: data.relCount,
+                    canon: data.canon
                 }};
             }});
 
@@ -751,26 +956,34 @@ def _get_viewer_html(project: str) -> str:
         }}
 
         function buildGraph() {{
-            // Prepare nodes for vis.js
-            const visNodes = graphData.nodes.map(node => ({{
-                id: node.id,
-                label: node.label,
-                title: node.title,
-                color: {{
-                    background: '#3498db',
-                    border: '#2980b9',
-                    highlight: {{
-                        background: '#2980b9',
-                        border: '#1f5f8b'
-                    }}
-                }},
-                font: {{
-                    color: '#fff',
-                    size: 14
-                }},
-                shape: 'box',
-                margin: 10
-            }}));
+            // Prepare nodes for vis.js with canon-based colors
+            const visNodes = graphData.nodes.map(node => {{
+                const borderColor = canonColors[node.canon] || canonColors.default;
+                // Darken border color for highlight
+                const highlightBorder = borderColor;
+
+                return {{
+                    id: node.id,
+                    label: node.label,
+                    title: node.title,
+                    color: {{
+                        background: '#34495e',
+                        border: borderColor,
+                        highlight: {{
+                            background: '#2c3e50',
+                            border: highlightBorder
+                        }}
+                    }},
+                    font: {{
+                        color: '#fff',
+                        size: 14
+                    }},
+                    shape: 'box',
+                    margin: 10,
+                    borderWidth: 3,
+                    borderWidthSelected: 5
+                }};
+            }});
 
             // Prepare edges for vis.js
             const visEdges = graphData.edges.map((edge, index) => ({{
@@ -986,8 +1199,13 @@ def _get_viewer_html(project: str) -> str:
 
 @app.route('/api/<project>/relationships')
 def api_list_relationships(project: str):
-    """Return list of all relationship files for a project."""
+    """Return list of all relationship files for a project.
+
+    Query params:
+        canon: Optional filter to show only relationships from a specific canon
+    """
     relationships_dir = PROJECT_DIR / project / "relationships"
+    canon_filter = request.args.get('canon')
 
     if not relationships_dir.exists():
         return jsonify({"error": "No relationships found", "files": [], "count": 0}), 404
@@ -997,21 +1215,34 @@ def api_list_relationships(project: str):
         # Skip old graph.json if it exists
         if f.name == "graph.json":
             continue
+
+        # Apply canon filter if specified
+        if canon_filter:
+            file_canon = extract_canon_from_filename(f.name)
+            if file_canon != canon_filter.lower():
+                continue
+
         files.append({
             "filename": f.name,
+            "canon": extract_canon_from_filename(f.name),
             "modified": f.stat().st_mtime
         })
 
     # Sort by filename for consistent ordering
     files.sort(key=lambda x: x["filename"])
 
-    return jsonify({"files": files, "count": len(files)})
+    return jsonify({"files": files, "count": len(files), "canon_filter": canon_filter})
 
 
 @app.route('/api/<project>/characters')
 def api_list_characters(project: str):
-    """Return list of all character files for a project."""
+    """Return list of all character files for a project.
+
+    Query params:
+        canon: Optional filter to show only characters from a specific canon
+    """
     characters_dir = PROJECT_DIR / project / "characters"
+    canon_filter = request.args.get('canon')
 
     if not characters_dir.exists():
         return jsonify({"error": "No characters found", "files": [], "count": 0}), 404
@@ -1021,16 +1252,34 @@ def api_list_characters(project: str):
         # Skip internal files
         if f.name.startswith("_"):
             continue
+
+        # Apply canon filter if specified
+        file_canon = extract_canon_from_filename(f.name)
+        if canon_filter and file_canon != canon_filter.lower():
+            continue
+
+        # Extract character name (remove canon suffix)
+        stem = f.stem
+        if '_' in stem:
+            parts = stem.rsplit('_', 1)
+            if parts[-1].lower() in ('main', 'film', 'netflix', 'legends', 'comics', 'games'):
+                char_name = parts[0]
+            else:
+                char_name = stem
+        else:
+            char_name = stem
+
         files.append({
             "filename": f.name,
-            "name": f.stem,
+            "name": char_name,
+            "canon": file_canon,
             "modified": f.stat().st_mtime
         })
 
     # Sort by name
     files.sort(key=lambda x: x["name"])
 
-    return jsonify({"files": files, "count": len(files)})
+    return jsonify({"files": files, "count": len(files), "canon_filter": canon_filter})
 
 
 @app.route('/api/<project>/characters/<name>')
@@ -1064,6 +1313,13 @@ def api_relationship(project: str, filename: str):
 
     with open(rel_path, 'r', encoding='utf-8') as f:
         return jsonify(json.load(f))
+
+
+@app.route('/api/<project>/canons')
+def api_list_canons(project: str):
+    """Return list of canons available in this project with counts."""
+    canons = get_project_canons(project)
+    return jsonify({"canons": canons, "count": len(canons)})
 
 
 # ============================================================================
