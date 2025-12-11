@@ -78,6 +78,8 @@ def auto_patch_llm_client(monkeypatch, mock_llm_client, request):
     # (they manually mock the Anthropic client for direct testing)
     if "test_llm_client.py" in str(request.fspath):
         return
+    if "test_llm_tool_loop.py" in str(request.fspath):
+        return
 
     # Patch LLMClient.__init__ to return our mock
     def mock_init(self, provider=None, model=None, api_key=None):
