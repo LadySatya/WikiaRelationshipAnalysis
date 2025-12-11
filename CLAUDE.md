@@ -168,9 +168,11 @@ Graph analysis, community detection, interactive visualizations.
 4. Add regression tests
 
 **Coverage Status:**
-- Overall: 626 unit tests, ~60% coverage
+- Overall: 685 unit tests, ~68% coverage
 - Phase 1 Crawler: 73-97% coverage ✅
-- Phase 2 Processor: RAG Components 90%+, CharacterKnowledgeBuilder 68% ✅
+- Phase 2 Processor: RAG 90%+, LLM Client 91%, KnowledgeBuilder 68% ✅
+- Visualizer: 55% coverage ✅
+- CLI Utils: 100% coverage ✅
 
 ## LLM Mocking (Cost Control)
 
