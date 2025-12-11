@@ -71,6 +71,7 @@ class CharacterKnowledgeBuilder:
         self.project_dir = Path("data") / "projects" / project_name
         self.characters_dir = self.project_dir / "characters"
         self.relationships_dir = self.project_dir / "relationships"
+        self.state_file = self.project_dir / "cache" / "discovery_state.json"
 
         # In-memory knowledge base (canon-aware)
         # Structure: characters[canon][name] -> character data
@@ -88,13 +89,89 @@ class CharacterKnowledgeBuilder:
             },
         }
 
+        # Track which pages have been fully processed (for resume support)
+        # Key: page URL, Value: timestamp of completion
+        self.processed_pages: Dict[str, str] = {}
+
         # Track current page's canon (set by determine_canon tool)
         self.current_page_canon: Optional[str] = None
+
+        # Load existing state if available (for resume)
+        self._load_existing_state()
 
         logger.info(
             f"CharacterKnowledgeBuilder initialized with {len(self.kb_tools)} tools"
         )
         logger.info(f"Tools: {[t['name'] for t in self.kb_tools]}")
+
+    def _load_existing_state(self) -> None:
+        """
+        Load existing discovery state and knowledge base for resume support.
+
+        This loads:
+        1. Processed pages list (to know what to skip)
+        2. Existing characters from disk into memory
+        3. Existing relationships from disk into memory
+        """
+        # Load processed pages state
+        if self.state_file.exists():
+            try:
+                with open(self.state_file, "r", encoding="utf-8") as f:
+                    state_data = json.load(f)
+                self.processed_pages = state_data.get("processed_pages", {})
+                logger.info(
+                    f"Loaded discovery state: {len(self.processed_pages)} pages "
+                    f"previously processed"
+                )
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"Failed to load discovery state: {e}")
+                self.processed_pages = {}
+
+        # Load existing characters into memory
+        if self.characters_dir.exists():
+            char_count = 0
+            for char_file in self.characters_dir.glob("*.json"):
+                try:
+                    with open(char_file, "r", encoding="utf-8") as f:
+                        char_data = json.load(f)
+                    canon = char_data.get("canon", "main")
+                    name = char_data.get("name", char_file.stem)
+
+                    if canon not in self.knowledge_base["characters"]:
+                        self.knowledge_base["characters"][canon] = {}
+                    self.knowledge_base["characters"][canon][name] = char_data
+                    char_count += 1
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to load character {char_file}: {e}")
+
+            if char_count > 0:
+                logger.info(f"Loaded {char_count} existing characters from disk")
+
+        # Load existing relationships into memory
+        if self.relationships_dir.exists():
+            rel_count = 0
+            for rel_file in self.relationships_dir.glob("*.json"):
+                # Skip legacy graph.json file
+                if rel_file.name == "graph.json":
+                    continue
+                try:
+                    with open(rel_file, "r", encoding="utf-8") as f:
+                        rel_data = json.load(f)
+                    canon = rel_data.get("canon", "main")
+                    chars = rel_data.get("characters", [])
+                    if len(chars) >= 2:
+                        # Normalize key order
+                        key = tuple(sorted([chars[0], chars[1]]))
+
+                        if canon not in self.knowledge_base["relationships"]:
+                            self.knowledge_base["relationships"][canon] = {}
+                        self.knowledge_base["relationships"][canon][key] = rel_data
+                        rel_count += 1
+                except (json.JSONDecodeError, KeyError) as e:
+                    logger.warning(f"Failed to load relationship {rel_file}: {e}")
+
+            if rel_count > 0:
+                logger.info(f"Loaded {rel_count} existing relationships from disk")
 
     def build_knowledge_base(self, max_pages: Optional[int] = None) -> Dict[str, Any]:
         """
@@ -115,28 +192,103 @@ class CharacterKnowledgeBuilder:
 
         logger.info(f"Processing {len(pages)} pages...")
 
+        # Track success/failure counts
+        success_count = 0
+        failure_count = 0
+        skipped_count = 0
+        consecutive_failures = 0
+        total_cost = 0.0
+
         for i, page in enumerate(pages, 1):
             page_title = page.get("title", "Unknown")
             page_url = page.get("url", "")
 
+            # Skip already-processed pages (resume support)
+            if page_url and page_url in self.processed_pages:
+                skipped_count += 1
+                if skipped_count <= 3 or skipped_count % 50 == 0:
+                    logger.info(
+                        f"[{i}/{len(pages)}] Skipping (already processed): {page_title}"
+                    )
+                continue
+
             logger.info(f"[{i}/{len(pages)}] Processing: {page_title}")
 
             try:
-                self._process_page(page)
-                self.knowledge_base["metadata"]["pages_processed"] = i
+                page_cost = self._process_page(page)
 
-                # Save periodically
-                if i % self.save_frequency == 0:
-                    logger.info(f"Saving KB (processed {i} pages)...")
+                # Mark page as successfully processed AFTER full completion
+                # This is critical for resume - partial processing won't be marked
+                if page_url:
+                    self.processed_pages[page_url] = (
+                        datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                    )
+
+                self.knowledge_base["metadata"]["pages_processed"] = i
+                success_count += 1
+                consecutive_failures = 0  # Reset on success
+                if page_cost:
+                    total_cost += page_cost
+
+                # Log running totals every 10 pages
+                if success_count % 10 == 0:
+                    logger.info(
+                        f"Progress: {success_count} pages succeeded, "
+                        f"{failure_count} failed, {skipped_count} skipped, "
+                        f"${total_cost:.4f} spent"
+                    )
+
+                # Save periodically (includes processed_pages state)
+                if success_count % self.save_frequency == 0:
+                    logger.info(f"Saving KB (processed {success_count} pages)...")
                     self.save()
 
             except Exception as e:
-                logger.error(f"Failed to process page '{page_title}': {e}")
+                failure_count += 1
+                consecutive_failures += 1
+                error_msg = str(e)
+
+                # Detect credit exhaustion specifically
+                if "credit balance is too low" in error_msg:
+                    logger.error(
+                        f"API CREDIT EXHAUSTED at page {i}/{len(pages)}. "
+                        f"Successfully processed: {success_count} pages. "
+                        f"Estimated cost: ${total_cost:.4f}"
+                    )
+                    logger.error("Add credits at https://console.anthropic.com/settings/billing")
+                    # Save what we have and stop
+                    logger.info("Saving partial results before stopping...")
+                    self.save()
+                    break
+                else:
+                    logger.error(f"Failed to process page '{page_title}': {e}")
+
+                # Stop if too many consecutive failures (likely systemic issue)
+                if consecutive_failures >= 5:
+                    logger.error(
+                        f"Stopping after {consecutive_failures} consecutive failures. "
+                        f"Last error: {error_msg}"
+                    )
+                    self.save()
+                    break
+
                 continue
 
-        # Final save
+        # Final save and summary
         logger.info("Processing complete. Saving final KB...")
         self.save()
+
+        # Clear summary of what happened
+        logger.info("=" * 60)
+        logger.info("DISCOVERY SUMMARY")
+        logger.info("=" * 60)
+        logger.info(f"Pages in corpus:  {len(pages)}")
+        logger.info(f"Pages skipped:    {skipped_count} (already processed)")
+        logger.info(f"Pages attempted:  {success_count + failure_count}")
+        logger.info(f"Pages succeeded:  {success_count}")
+        logger.info(f"Pages failed:     {failure_count}")
+        logger.info(f"Estimated cost:   ${total_cost:.4f}")
+        logger.info(f"Total processed:  {len(self.processed_pages)} (cumulative)")
 
         # Print summary (count across all canons)
         char_count = sum(
@@ -152,12 +304,15 @@ class CharacterKnowledgeBuilder:
 
         return self.knowledge_base
 
-    def _process_page(self, page: Dict[str, Any]) -> None:
+    def _process_page(self, page: Dict[str, Any]) -> Optional[float]:
         """
         Process a single page, extracting characters and relationships.
 
         Args:
             page: Page dictionary with title, content, infobox, etc.
+
+        Returns:
+            Estimated cost for this page, or None if unknown
         """
         # Reset canon state for new page
         self.current_page_canon = None
@@ -186,6 +341,11 @@ class CharacterKnowledgeBuilder:
             keep_last_n=10,
         )
 
+        # Calculate cost (Haiku pricing: $0.80/1M input, $4.00/1M output)
+        input_tokens = result["usage"].get("total_input_tokens", 0)
+        output_tokens = result["usage"].get("total_output_tokens", 0)
+        page_cost = (input_tokens * 0.80 / 1_000_000) + (output_tokens * 4.00 / 1_000_000)
+
         # Log the interaction
         self.llm_logger.log_prompt(
             prompt=task_prompt,
@@ -193,14 +353,15 @@ class CharacterKnowledgeBuilder:
             purpose=f"knowledge_building:{title}",
             response=result["final_response"],
             usage={
-                "input_tokens": result["usage"].get("total_input_tokens", 0),
-                "output_tokens": result["usage"].get("total_output_tokens", 0),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
             },
             metadata={
                 "page_title": title,
                 "page_url": url,
                 "tool_calls_made": len(result.get("tool_calls", [])),
                 "iterations": result["usage"].get("iterations", 0),
+                "estimated_cost": page_cost,
             },
         )
 
@@ -208,6 +369,8 @@ class CharacterKnowledgeBuilder:
         self.knowledge_base["metadata"]["last_updated"] = (
             datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         )
+
+        return page_cost
 
     def _build_task_prompt(
         self,
@@ -859,6 +1022,16 @@ Be thorough - extract all characters mentioned, not just the page subject.
         metadata_file = self.project_dir / "knowledge_base_metadata.json"
         with open(metadata_file, "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2, ensure_ascii=False)
+
+        # Save discovery state (processed pages list for resume support)
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_data = {
+            "processed_pages": self.processed_pages,
+            "last_saved": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "total_processed": len(self.processed_pages),
+        }
+        with open(self.state_file, "w", encoding="utf-8") as f:
+            json.dump(state_data, f, indent=2, ensure_ascii=False)
 
         logger.info(
             f"Saved {total_chars} characters and {total_rels} relationships across {len(metadata['canons'])} canons"

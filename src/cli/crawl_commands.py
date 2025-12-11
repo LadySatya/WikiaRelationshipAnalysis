@@ -90,16 +90,16 @@ async def resume_command(project_name: str, max_pages: Optional[int] = None):
         )
         return
 
-    # Check for saved state
-    state_file = project_path / "cache" / "crawl_state.json"
-    if not state_file.exists():
+    # Check for saved state (URL queue is the source of truth)
+    queue_file = project_path / "cache" / "url_queue.json"
+    visited_file = project_path / "cache" / "visited_urls.json"
+    if not queue_file.exists() and not visited_file.exists():
         logger.error(f"No saved crawl state found for project '{project_name}'")
         logger.error("Cannot resume - no previous crawl to continue")
         return
 
     logger.info(f"Resuming crawl for project '{project_name}'")
     logger.info(f"Max additional pages: {max_pages or 'unlimited'}")
-    logger.info(f"Loading saved state from: {state_file}")
 
     config = load_crawler_config()
 

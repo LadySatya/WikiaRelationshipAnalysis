@@ -3,6 +3,20 @@
 ## Project Overview
 A modular system to webcrawl wikia sites, extract character information, and use LLM analysis to discover and visualize relationships between characters.
 
+## Screenshots
+
+### Interactive Relationship Graph
+![Relationship Graph](docs/screenshots/graph-visualization.png)
+*Force-directed graph showing character relationships with evidence-backed connections*
+
+### Project Dashboard
+![Project Dashboard](docs/screenshots/project-dashboard.png)
+*Web dashboard showing all analyzed wikia projects with status cards*
+
+### Evidence Viewer
+![Evidence Viewer](docs/screenshots/evidence-viewer.png)
+*Click any relationship edge to view supporting citations from the wiki*
+
 ## Current Status
 
 ### ✅ All Phases Complete - Production-Ready System
