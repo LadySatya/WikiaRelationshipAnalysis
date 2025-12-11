@@ -4,12 +4,14 @@ HIGH-QUALITY tests for URLManager core logic.
 Tests queue management, deduplication, and priority logic.
 Uses real temp files to test persistence.
 """
-import pytest
-import tempfile
-import shutil
-from pathlib import Path
-from src.crawler.core.url_manager import URLManager
 
+import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from src.crawler.core.url_manager import URLManager
 
 pytestmark = pytest.mark.unit
 
@@ -176,7 +178,7 @@ class TestBatchOperations:
         urls = [
             "https://test.com/page1",
             "https://test.com/page2",
-            "https://test.com/page3"
+            "https://test.com/page3",
         ]
 
         count = manager.add_urls(urls)
@@ -191,7 +193,7 @@ class TestBatchOperations:
         urls = [
             "https://test.com/page1",
             "https://test.com/page1",  # Duplicate
-            "https://test.com/page2"
+            "https://test.com/page2",
         ]
 
         count = manager.add_urls(urls)
@@ -205,10 +207,7 @@ class TestBatchOperations:
 
         manager.mark_visited("https://test.com/page1")
 
-        urls = [
-            "https://test.com/page1",  # Already visited
-            "https://test.com/page2"
-        ]
+        urls = ["https://test.com/page1", "https://test.com/page2"]  # Already visited
 
         count = manager.add_urls(urls)
 

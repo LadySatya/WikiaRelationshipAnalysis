@@ -3,12 +3,13 @@ Tests for EmbeddingGenerator - generates vector embeddings from text chunks.
 
 Following TDD methodology: write tests first, then implement.
 """
-import pytest
-import numpy as np
+
 import sys
 from typing import List
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
+import numpy as np
+import pytest
 
 # Mark all tests in this file as unit tests
 pytestmark = pytest.mark.unit
@@ -16,7 +17,7 @@ pytestmark = pytest.mark.unit
 
 # Create a fake voyageai module for testing
 fake_voyageai = MagicMock()
-sys.modules['voyageai'] = fake_voyageai
+sys.modules["voyageai"] = fake_voyageai
 
 
 class TestEmbeddingGeneratorInitialization:
@@ -87,7 +88,9 @@ class TestEmbeddingGeneratorLocalEmbeddings:
             # Should return numpy array
             assert isinstance(embedding, np.ndarray)
             assert embedding.shape == (3,)
-            mock_model.encode.assert_called_once_with("Test text", convert_to_numpy=True)
+            mock_model.encode.assert_called_once_with(
+                "Test text", convert_to_numpy=True
+            )
 
     def test_generate_embeddings_batch(self):
         """EmbeddingGenerator should generate embeddings for multiple texts in batch."""
@@ -96,10 +99,9 @@ class TestEmbeddingGeneratorLocalEmbeddings:
         with patch("sentence_transformers.SentenceTransformer") as mock_st:
             # Mock the model to return fake embeddings
             mock_model = MagicMock()
-            mock_model.encode.return_value = np.array([
-                [0.1, 0.2, 0.3],
-                [0.4, 0.5, 0.6]
-            ])
+            mock_model.encode.return_value = np.array(
+                [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+            )
             mock_st.return_value = mock_model
 
             generator = EmbeddingGenerator(provider="local")
@@ -163,7 +165,9 @@ class TestEmbeddingGeneratorVoyageEmbeddings:
             mock_client.embed.return_value = mock_response
             mock_client_class.return_value = mock_client
 
-            generator = EmbeddingGenerator(provider="voyage", model_name="voyage-3-lite")
+            generator = EmbeddingGenerator(
+                provider="voyage", model_name="voyage-3-lite"
+            )
             embedding = generator.generate_embedding("Test text")
 
             # Should return numpy array from Voyage response
@@ -215,21 +219,20 @@ class TestEmbeddingGeneratorChunkProcessing:
         with patch("sentence_transformers.SentenceTransformer") as mock_st:
             mock_model = MagicMock()
             # Return different embeddings for each chunk
-            mock_model.encode.return_value = np.array([
-                [0.1, 0.2, 0.3],
-                [0.4, 0.5, 0.6]
-            ])
+            mock_model.encode.return_value = np.array(
+                [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
+            )
             mock_st.return_value = mock_model
 
             chunks = [
                 {
                     "text": "Aang is the Avatar.",
-                    "metadata": {"url": "https://example.com", "chunk_index": 0}
+                    "metadata": {"url": "https://example.com", "chunk_index": 0},
                 },
                 {
                     "text": "Katara is a waterbender.",
-                    "metadata": {"url": "https://example.com", "chunk_index": 1}
-                }
+                    "metadata": {"url": "https://example.com", "chunk_index": 1},
+                },
             ]
 
             generator = EmbeddingGenerator(provider="local")
@@ -248,16 +251,13 @@ class TestEmbeddingGeneratorChunkProcessing:
 
         with patch("sentence_transformers.SentenceTransformer") as mock_st:
             mock_model = MagicMock()
-            mock_model.encode.return_value = np.array([
-                [0.1, 0.2, 0.3],
-                [0.4, 0.5, 0.6],
-                [0.7, 0.8, 0.9]
-            ])
+            mock_model.encode.return_value = np.array(
+                [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
+            )
             mock_st.return_value = mock_model
 
             chunks = [
-                {"text": f"Text {i}", "metadata": {"chunk_index": i}}
-                for i in range(3)
+                {"text": f"Text {i}", "metadata": {"chunk_index": i}} for i in range(3)
             ]
 
             generator = EmbeddingGenerator(provider="local")
@@ -290,7 +290,9 @@ class TestEmbeddingGeneratorProperties:
             mock_model.get_sentence_embedding_dimension.return_value = 384
             mock_st.return_value = mock_model
 
-            generator = EmbeddingGenerator(provider="local", model_name="all-MiniLM-L6-v2")
+            generator = EmbeddingGenerator(
+                provider="local", model_name="all-MiniLM-L6-v2"
+            )
             dimension = generator.embedding_dimension
 
             # Should query the model for dimension
@@ -308,7 +310,9 @@ class TestEmbeddingGeneratorProperties:
             mock_client.embed.return_value = mock_response
             mock_client_class.return_value = mock_client
 
-            generator = EmbeddingGenerator(provider="voyage", model_name="voyage-3-lite")
+            generator = EmbeddingGenerator(
+                provider="voyage", model_name="voyage-3-lite"
+            )
             dimension = generator.embedding_dimension
 
             # Should discover dimension by generating test embedding

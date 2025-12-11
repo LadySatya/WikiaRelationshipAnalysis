@@ -5,12 +5,14 @@ This module provides the main interface for RAG queries. It combines semantic
 search (via RAGRetriever) with LLM generation (via LLMClient) to answer
 questions based on retrieved wiki content.
 """
-from typing import Dict, Any, Optional, List
-import logging
 
-from .retriever import RAGRetriever
-from ..llm.llm_client import LLMClient
+import logging
+from typing import Any, Dict, List, Optional
+
 from src.utils.logging_config import get_logger
+
+from ..llm.llm_client import LLMClient
+from .retriever import RAGRetriever
 
 logger = get_logger("processor.rag")
 
@@ -75,7 +77,7 @@ Guidelines:
         query: str,
         k: int = 10,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
     ) -> str:
         """
         Execute RAG query and return generated answer.
@@ -98,9 +100,7 @@ Guidelines:
 
         # Retrieve relevant chunks
         chunks = self.retriever.retrieve(
-            query=query.strip(),
-            k=k,
-            metadata_filter=metadata_filter
+            query=query.strip(), k=k, metadata_filter=metadata_filter
         )
 
         # Build context from chunks
@@ -118,7 +118,7 @@ Please answer the question based on the information provided above."""
             prompt=prompt,
             system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
             temperature=0.3,  # Lower temperature for more factual responses
-            max_tokens=1024
+            max_tokens=1024,
         )
 
         return answer
@@ -128,7 +128,7 @@ Please answer the question based on the information provided above."""
         query: str,
         k: int = 10,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        use_citations: bool = False
+        use_citations: bool = False,
     ) -> Dict[str, Any]:
         """
         Execute RAG query and return detailed response with metadata.
@@ -159,14 +159,14 @@ Please answer the question based on the information provided above."""
         """
         # Retrieve relevant chunks
         chunks = self.retriever.retrieve(
-            query=query.strip(),
-            k=k,
-            metadata_filter=metadata_filter
+            query=query.strip(), k=k, metadata_filter=metadata_filter
         )
 
         # Generate answer (with or without citations)
         if use_citations:
-            result = self.query_with_citations(query, k=k, metadata_filter=metadata_filter)
+            result = self.query_with_citations(
+                query, k=k, metadata_filter=metadata_filter
+            )
             answer = result["text"]
             evidence = result["evidence"]
         else:
@@ -181,7 +181,7 @@ Please answer the question based on the information provided above."""
             {
                 "text": chunk["text"],
                 "url": chunk["metadata"].get("url", "Unknown"),
-                "distance": chunk["distance"]
+                "distance": chunk["distance"],
             }
             for chunk in chunks
         ]
@@ -191,7 +191,7 @@ Please answer the question based on the information provided above."""
             "query": query,
             "answer": answer,
             "sources": sources,
-            "usage": usage
+            "usage": usage,
         }
 
         # Add evidence if citations were used
@@ -215,7 +215,7 @@ Please answer the question based on the information provided above."""
         k: int = 10,
         metadata_filter: Optional[Dict[str, Any]] = None,
         temperature: float = 0.3,
-        max_tokens: int = 1024
+        max_tokens: int = 1024,
     ) -> Dict[str, Any]:
         """
         Execute RAG query with automatic citation tracking.
@@ -261,17 +261,12 @@ Please answer the question based on the information provided above."""
 
         # Retrieve relevant chunks
         chunks = self.retriever.retrieve(
-            query=query.strip(),
-            k=k,
-            metadata_filter=metadata_filter
+            query=query.strip(), k=k, metadata_filter=metadata_filter
         )
 
         # If no chunks found, return empty result
         if not chunks:
-            return {
-                "text": "",
-                "evidence": []
-            }
+            return {"text": "", "evidence": []}
 
         # Build documents and metadata for citation-enabled query
         documents = [chunk["text"] for chunk in chunks]
@@ -290,7 +285,7 @@ Please provide a clear, concise answer based only on the information in the docu
             documents=documents,
             document_metadata=document_metadata,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
         )
 
         return result

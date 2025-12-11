@@ -18,9 +18,7 @@ from src.utils.logging_config import get_logger
 class RobotsParser:
     """Handles robots.txt parsing, caching, and compliance checking."""
 
-    def __init__(
-            self, user_agent: str, cache_dir: Path, cache_ttl_hours: int = 24
-    ):
+    def __init__(self, user_agent: str, cache_dir: Path, cache_ttl_hours: int = 24):
         """Initialize robots parser with user agent and cache
         settings."""
         if user_agent is None:
@@ -196,9 +194,7 @@ class RobotsParser:
                         return None
 
         except aiohttp.ClientError as e:
-            self.logger.warning(
-                f"Network error fetching robots.txt from {domain}: {e}"
-            )
+            self.logger.warning(f"Network error fetching robots.txt from {domain}: {e}")
             return None
         except Exception as e:
             self.logger.error(f"Error fetching robots.txt from {domain}: {e}")
@@ -215,9 +211,7 @@ class RobotsParser:
                 f.write(content)
             self.logger.debug(f"Saved robots.txt for {domain} to cache")
         except Exception as e:
-            self.logger.error(
-                f"Error saving robots.txt to cache for {domain}: {e}"
-            )
+            self.logger.error(f"Error saving robots.txt to cache for {domain}: {e}")
 
     def _load_from_cache(self, domain: str) -> Optional[str]:
         """Load robots.txt content from cache."""
@@ -229,9 +223,7 @@ class RobotsParser:
                 self.logger.debug(f"Loaded robots.txt for {domain} from cache")
                 return content
         except Exception as e:
-            self.logger.error(
-                f"Error loading robots.txt from cache for {domain}: {e}"
-            )
+            self.logger.error(f"Error loading robots.txt from cache for {domain}: {e}")
 
         return None
 

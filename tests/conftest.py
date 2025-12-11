@@ -5,10 +5,11 @@ This file automatically patches LLMClient to use MockLLMClient by default,
 preventing accidental API calls and enabling cost-free testing.
 """
 
-import pytest
+import sys
 from pathlib import Path
 from unittest.mock import Mock
-import sys
+
+import pytest
 
 # Add tests directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -20,9 +21,15 @@ from mocks.mock_llm_client import MockLLMClient
 def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line("markers", "unit: Unit tests (mocked, no real I/O)")
-    config.addinivalue_line("markers", "integration: Integration tests (may use fixtures)")
-    config.addinivalue_line("markers", "realapi: Tests that use real Anthropic API (opt-in only)")
-    config.addinivalue_line("markers", "expensive: Tests that consume significant API quota")
+    config.addinivalue_line(
+        "markers", "integration: Integration tests (may use fixtures)"
+    )
+    config.addinivalue_line(
+        "markers", "realapi: Tests that use real Anthropic API (opt-in only)"
+    )
+    config.addinivalue_line(
+        "markers", "expensive: Tests that consume significant API quota"
+    )
 
 
 @pytest.fixture
@@ -44,10 +51,7 @@ def mock_llm_client():
             assert len(kb["characters"]) > 0
     """
     fixture_dir = Path(__file__).parent / "fixtures" / "llm_responses"
-    return MockLLMClient(
-        fixture_dir=fixture_dir,
-        use_fixtures=True
-    )
+    return MockLLMClient(fixture_dir=fixture_dir, use_fixtures=True)
 
 
 @pytest.fixture(autouse=True)
@@ -79,7 +83,11 @@ def auto_patch_llm_client(monkeypatch, mock_llm_client, request):
     def mock_init(self, provider=None, model=None, api_key=None):
         """Replace LLMClient init with mock fields."""
         # Copy mock client fields to real instance
-        self.provider = mock_llm_client.provider if hasattr(mock_llm_client, 'provider') else "anthropic"
+        self.provider = (
+            mock_llm_client.provider
+            if hasattr(mock_llm_client, "provider")
+            else "anthropic"
+        )
         self.model = mock_llm_client.model
         self.total_input_tokens = 0
         self.total_output_tokens = 0
@@ -108,10 +116,19 @@ def auto_patch_llm_client(monkeypatch, mock_llm_client, request):
 
     # Apply patches
     monkeypatch.setattr("src.processor.llm.llm_client.LLMClient.__init__", mock_init)
-    monkeypatch.setattr("src.processor.llm.llm_client.LLMClient.generate", mock_generate)
-    monkeypatch.setattr("src.processor.llm.llm_client.LLMClient.get_usage_stats", mock_get_usage_stats)
-    monkeypatch.setattr("src.processor.llm.llm_client.LLMClient.estimate_cost", mock_estimate_cost)
-    monkeypatch.setattr("src.processor.llm.llm_client.LLMClient.reset_usage_stats", mock_reset_usage_stats)
+    monkeypatch.setattr(
+        "src.processor.llm.llm_client.LLMClient.generate", mock_generate
+    )
+    monkeypatch.setattr(
+        "src.processor.llm.llm_client.LLMClient.get_usage_stats", mock_get_usage_stats
+    )
+    monkeypatch.setattr(
+        "src.processor.llm.llm_client.LLMClient.estimate_cost", mock_estimate_cost
+    )
+    monkeypatch.setattr(
+        "src.processor.llm.llm_client.LLMClient.reset_usage_stats",
+        mock_reset_usage_stats,
+    )
 
 
 @pytest.fixture
@@ -124,7 +141,9 @@ def mock_query_engine(mock_llm_client):
     """
     mock_engine = Mock()
     mock_engine.llm_client = mock_llm_client
-    mock_engine.query.side_effect = lambda query, **kwargs: mock_llm_client.generate(query)
+    mock_engine.query.side_effect = lambda query, **kwargs: mock_llm_client.generate(
+        query
+    )
     mock_engine.get_usage_stats.side_effect = lambda: mock_llm_client.get_usage_stats()
     return mock_engine
 

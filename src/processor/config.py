@@ -3,8 +3,10 @@ Configuration loader for RAG processor components.
 
 Centralized config management - all components load config through this module.
 """
-from typing import Dict, Any, Optional
+
 from pathlib import Path
+from typing import Any, Dict, Optional
+
 import yaml
 
 
@@ -56,7 +58,7 @@ class ProcessorConfig:
             # Return empty config if file doesn't exist (will use hardcoded defaults)
             return {}
 
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             return yaml.safe_load(f) or {}
 
     def get(self, *keys: str, default: Any = None) -> Any:
@@ -118,7 +120,9 @@ class ProcessorConfig:
     @property
     def vector_store_path(self) -> str:
         """Get vector store path."""
-        return self.get("processor", "rag", "vector_store_path", default="data/vector_stores")
+        return self.get(
+            "processor", "rag", "vector_store_path", default="data/vector_stores"
+        )
 
     @property
     def default_k(self) -> int:
@@ -133,7 +137,9 @@ class ProcessorConfig:
     @property
     def llm_model(self) -> str:
         """Get LLM model name."""
-        return self.get("processor", "rag", "llm_model", default="claude-3-5-haiku-20241022")
+        return self.get(
+            "processor", "rag", "llm_model", default="claude-3-5-haiku-20241022"
+        )
 
     @property
     def character_discovery_min_mentions(self) -> int:
@@ -143,7 +149,9 @@ class ProcessorConfig:
     @property
     def character_discovery_confidence_threshold(self) -> float:
         """Get confidence threshold for character discovery."""
-        return self.get("processor", "character_discovery", "confidence_threshold", default=0.7)
+        return self.get(
+            "processor", "character_discovery", "confidence_threshold", default=0.7
+        )
 
 
 # Convenience function for quick access

@@ -34,9 +34,7 @@ class URLUtils:
                 query = ""
 
             # Remove fragment
-            normalized = urlunparse(
-                (scheme, netloc, path, parsed.params, query, "")
-            )
+            normalized = urlunparse((scheme, netloc, path, parsed.params, query, ""))
 
             return normalized
 
@@ -124,9 +122,7 @@ class URLUtils:
 
             # Add path segments
             if parsed.path and parsed.path != "/":
-                path_parts = [
-                    p for p in parsed.path.strip("/").split("/") if p
-                ]
+                path_parts = [p for p in parsed.path.strip("/").split("/") if p]
                 parts.extend(path_parts)
 
             # Add query parameters
@@ -194,8 +190,7 @@ class URLUtils:
                 "auth.fandom.com",
             }
 
-            if (domain1 in fandom_meta_domains or
-                    domain2 in fandom_meta_domains):
+            if domain1 in fandom_meta_domains or domain2 in fandom_meta_domains:
                 return False
 
             # Exact domain match
@@ -203,8 +198,9 @@ class URLUtils:
                 return True
 
                 # Check if both are wikia/fandom domains
-            if (URLUtils._is_wikia_domain_helper(domain1) and
-                    URLUtils._is_wikia_domain_helper(domain2)):
+            if URLUtils._is_wikia_domain_helper(
+                domain1
+            ) and URLUtils._is_wikia_domain_helper(domain2):
                 wikia1 = URLUtils._extract_wikia_subdomain_helper(domain1)
                 wikia2 = URLUtils._extract_wikia_subdomain_helper(domain2)
                 return wikia1 == wikia2

@@ -41,8 +41,7 @@ class RateLimiter:
             # Not the first request - always wait the configured delay
             delay = self._domain_delays.get(domain, self.default_delay)
             self.logger.info(
-                f"[RATE LIMIT] Waiting {delay:.2f}s before request to "
-                f"{domain}"
+                f"[RATE LIMIT] Waiting {delay:.2f}s before request to " f"{domain}"
             )
             await asyncio.sleep(delay)
             self.logger.debug(f"[RATE LIMIT] Wait complete for {domain}")
@@ -79,9 +78,7 @@ class RateLimiter:
         return {
             "request_count": len(requests),
             "last_request_time": requests[-1] if requests else None,
-            "delay_seconds": self._domain_delays.get(
-                domain, self.default_delay
-            ),
+            "delay_seconds": self._domain_delays.get(domain, self.default_delay),
         }
 
     def _get_domain(self, url: str) -> str:

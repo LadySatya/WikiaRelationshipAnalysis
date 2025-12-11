@@ -8,10 +8,11 @@ This module tests the RAGRetriever class which handles:
 - Metadata filtering and result ranking
 - Context retrieval for LLM queries
 """
-import pytest
-import numpy as np
-from unittest.mock import Mock, MagicMock, patch
 
+from unittest.mock import MagicMock, Mock, patch
+
+import numpy as np
+import pytest
 
 # Mark all tests in this file as unit tests
 pytestmark = pytest.mark.unit
@@ -24,8 +25,10 @@ class TestRAGRetrieverInitialization:
         """RAGRetriever should initialize with project name."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore"), \
-             patch("src.processor.rag.retriever.EmbeddingGenerator"):
+        with (
+            patch("src.processor.rag.retriever.VectorStore"),
+            patch("src.processor.rag.retriever.EmbeddingGenerator"),
+        ):
 
             retriever = RAGRetriever(project_name="naruto_wiki")
 
@@ -35,8 +38,10 @@ class TestRAGRetrieverInitialization:
         """RAGRetriever should create VectorStore for project."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore") as mock_vs_class, \
-             patch("src.processor.rag.retriever.EmbeddingGenerator"):
+        with (
+            patch("src.processor.rag.retriever.VectorStore") as mock_vs_class,
+            patch("src.processor.rag.retriever.EmbeddingGenerator"),
+        ):
 
             retriever = RAGRetriever(project_name="test_wiki")
 
@@ -47,8 +52,10 @@ class TestRAGRetrieverInitialization:
         """RAGRetriever should create EmbeddingGenerator."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore"), \
-             patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class:
+        with (
+            patch("src.processor.rag.retriever.VectorStore"),
+            patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class,
+        ):
 
             retriever = RAGRetriever(project_name="test_wiki")
 
@@ -63,8 +70,10 @@ class TestRAGRetrieverSearch:
         """RAGRetriever should retrieve relevant chunks for query."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore") as mock_vs_class, \
-             patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class:
+        with (
+            patch("src.processor.rag.retriever.VectorStore") as mock_vs_class,
+            patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class,
+        ):
 
             # Mock embedding generator
             mock_eg = MagicMock()
@@ -78,7 +87,7 @@ class TestRAGRetrieverSearch:
                     "id": "doc1",
                     "text": "Naruto is a ninja",
                     "metadata": {"url": "https://example.com/naruto"},
-                    "distance": 0.1
+                    "distance": 0.1,
                 }
             ]
             mock_vs_class.return_value = mock_vs
@@ -100,8 +109,10 @@ class TestRAGRetrieverSearch:
         """RAGRetriever should support custom k parameter."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore") as mock_vs_class, \
-             patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class:
+        with (
+            patch("src.processor.rag.retriever.VectorStore") as mock_vs_class,
+            patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class,
+        ):
 
             mock_eg = MagicMock()
             mock_eg.generate_embedding.return_value = np.array([0.1, 0.2, 0.3])
@@ -122,8 +133,10 @@ class TestRAGRetrieverSearch:
         """RAGRetriever should support metadata filtering."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore") as mock_vs_class, \
-             patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class:
+        with (
+            patch("src.processor.rag.retriever.VectorStore") as mock_vs_class,
+            patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class,
+        ):
 
             mock_eg = MagicMock()
             mock_eg.generate_embedding.return_value = np.array([0.1, 0.2, 0.3])
@@ -145,8 +158,10 @@ class TestRAGRetrieverSearch:
         """RAGRetriever should format results with chunks and metadata."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore") as mock_vs_class, \
-             patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class:
+        with (
+            patch("src.processor.rag.retriever.VectorStore") as mock_vs_class,
+            patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class,
+        ):
 
             mock_eg = MagicMock()
             mock_eg.generate_embedding.return_value = np.array([0.1, 0.2, 0.3])
@@ -160,9 +175,9 @@ class TestRAGRetrieverSearch:
                     "metadata": {
                         "url": "https://example.com/aang",
                         "chunk_index": 0,
-                        "page_title": "Aang"
+                        "page_title": "Aang",
                     },
-                    "distance": 0.05
+                    "distance": 0.05,
                 },
                 {
                     "id": "chunk2",
@@ -170,10 +185,10 @@ class TestRAGRetrieverSearch:
                     "metadata": {
                         "url": "https://example.com/katara",
                         "chunk_index": 1,
-                        "page_title": "Katara"
+                        "page_title": "Katara",
                     },
-                    "distance": 0.10
-                }
+                    "distance": 0.10,
+                },
             ]
             mock_vs_class.return_value = mock_vs
 
@@ -196,8 +211,10 @@ class TestRAGRetrieverContextBuilding:
         """RAGRetriever should build formatted context from retrieved chunks."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore"), \
-             patch("src.processor.rag.retriever.EmbeddingGenerator"):
+        with (
+            patch("src.processor.rag.retriever.VectorStore"),
+            patch("src.processor.rag.retriever.EmbeddingGenerator"),
+        ):
 
             retriever = RAGRetriever(project_name="test_wiki")
 
@@ -206,14 +223,14 @@ class TestRAGRetrieverContextBuilding:
                     "id": "chunk1",
                     "text": "Aang is the Avatar and last airbender.",
                     "metadata": {"url": "https://example.com/aang", "chunk_index": 0},
-                    "distance": 0.05
+                    "distance": 0.05,
                 },
                 {
                     "id": "chunk2",
                     "text": "He was found frozen in an iceberg.",
                     "metadata": {"url": "https://example.com/aang", "chunk_index": 1},
-                    "distance": 0.08
-                }
+                    "distance": 0.08,
+                },
             ]
 
             context = retriever.build_context(chunks)
@@ -227,8 +244,10 @@ class TestRAGRetrieverContextBuilding:
         """RAGRetriever should include source URLs in context."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore"), \
-             patch("src.processor.rag.retriever.EmbeddingGenerator"):
+        with (
+            patch("src.processor.rag.retriever.VectorStore"),
+            patch("src.processor.rag.retriever.EmbeddingGenerator"),
+        ):
 
             retriever = RAGRetriever(project_name="test_wiki")
 
@@ -237,7 +256,7 @@ class TestRAGRetrieverContextBuilding:
                     "id": "chunk1",
                     "text": "Test content",
                     "metadata": {"url": "https://example.com/page1"},
-                    "distance": 0.1
+                    "distance": 0.1,
                 }
             ]
 
@@ -254,8 +273,10 @@ class TestRAGRetrieverEdgeCases:
         """RAGRetriever should handle empty queries."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore"), \
-             patch("src.processor.rag.retriever.EmbeddingGenerator"):
+        with (
+            patch("src.processor.rag.retriever.VectorStore"),
+            patch("src.processor.rag.retriever.EmbeddingGenerator"),
+        ):
 
             retriever = RAGRetriever(project_name="test_wiki")
 
@@ -266,8 +287,10 @@ class TestRAGRetrieverEdgeCases:
         """RAGRetriever should handle no results gracefully."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore") as mock_vs_class, \
-             patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class:
+        with (
+            patch("src.processor.rag.retriever.VectorStore") as mock_vs_class,
+            patch("src.processor.rag.retriever.EmbeddingGenerator") as mock_eg_class,
+        ):
 
             mock_eg = MagicMock()
             mock_eg.generate_embedding.return_value = np.array([0.1, 0.2, 0.3])
@@ -286,8 +309,10 @@ class TestRAGRetrieverEdgeCases:
         """RAGRetriever should handle empty chunk list."""
         from src.processor.rag.retriever import RAGRetriever
 
-        with patch("src.processor.rag.retriever.VectorStore"), \
-             patch("src.processor.rag.retriever.EmbeddingGenerator"):
+        with (
+            patch("src.processor.rag.retriever.VectorStore"),
+            patch("src.processor.rag.retriever.EmbeddingGenerator"),
+        ):
 
             retriever = RAGRetriever(project_name="test_wiki")
             context = retriever.build_context([])

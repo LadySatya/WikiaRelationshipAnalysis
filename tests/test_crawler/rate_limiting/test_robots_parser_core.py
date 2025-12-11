@@ -3,15 +3,17 @@ HIGH-QUALITY tests for RobotsParser.
 
 Tests robots.txt parsing, caching, and compliance checking.
 """
-import pytest
-import tempfile
-import shutil
+
 import asyncio
+import shutil
+import tempfile
 import time
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
-from src.crawler.rate_limiting.robots_parser import RobotsParser
+from unittest.mock import AsyncMock, Mock, patch
 
+import pytest
+
+from src.crawler.rate_limiting.robots_parser import RobotsParser
 
 pytestmark = pytest.mark.unit
 
@@ -28,10 +30,7 @@ class TestRobotsParserInitialization:
 
     def test_init_with_valid_user_agent(self, temp_cache_dir):
         """Should initialize with valid user agent."""
-        parser = RobotsParser(
-            user_agent="TestBot/1.0",
-            cache_dir=temp_cache_dir
-        )
+        parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
         assert parser.user_agent == "TestBot/1.0"
         assert parser.cache_dir == temp_cache_dir
@@ -55,10 +54,7 @@ class TestRobotsParserInitialization:
         """Should create cache directory if it doesn't exist."""
         cache_path = temp_cache_dir / "robots_cache"
 
-        parser = RobotsParser(
-            user_agent="TestBot/1.0",
-            cache_dir=cache_path
-        )
+        parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=cache_path)
 
         assert cache_path.exists()
         assert cache_path.is_dir()
@@ -66,9 +62,7 @@ class TestRobotsParserInitialization:
     def test_init_accepts_custom_cache_ttl(self, temp_cache_dir):
         """Should accept custom cache TTL."""
         parser = RobotsParser(
-            user_agent="TestBot/1.0",
-            cache_dir=temp_cache_dir,
-            cache_ttl_hours=48
+            user_agent="TestBot/1.0", cache_dir=temp_cache_dir, cache_ttl_hours=48
         )
 
         assert parser.cache_ttl_hours == 48
@@ -130,7 +124,9 @@ class TestRobotsTxtParsing:
         parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
         # Mock _fetch_robots_txt to return None (404)
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = None
 
             result = await parser.can_fetch("https://example.com/page")
@@ -148,7 +144,9 @@ Disallow: /admin/
 Disallow: /private/
 """
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             # Should disallow /admin/ paths
@@ -172,7 +170,9 @@ User-agent: *
 Disallow: /admin/
 """
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             # TestBot should be blocked from /secret/ but not /admin/
@@ -189,7 +189,9 @@ Disallow: /admin/
 
         robots_content = ""
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             result = await parser.can_fetch("https://example.com/anything")
@@ -211,7 +213,9 @@ class TestCrawlDelay:
         """Should return None when robots.txt doesn't exist."""
         parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = None
 
             delay = await parser.get_crawl_delay("https://example.com/page")
@@ -228,7 +232,9 @@ User-agent: *
 Crawl-delay: 2
 """
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             delay = await parser.get_crawl_delay("https://example.com/page")
@@ -236,7 +242,9 @@ Crawl-delay: 2
             assert delay == 2.0
 
     @pytest.mark.asyncio
-    async def test_get_crawl_delay_respects_user_agent_specific_delay(self, temp_cache_dir):
+    async def test_get_crawl_delay_respects_user_agent_specific_delay(
+        self, temp_cache_dir
+    ):
         """Should use user-agent specific crawl delay."""
         parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
@@ -248,7 +256,9 @@ User-agent: *
 Crawl-delay: 2
 """
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             delay = await parser.get_crawl_delay("https://example.com/page")
@@ -292,7 +302,9 @@ class TestCaching:
 
         robots_content = "User-agent: *\nDisallow: /admin/"
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             # First call - should fetch
@@ -310,12 +322,14 @@ class TestCaching:
         parser = RobotsParser(
             user_agent="TestBot/1.0",
             cache_dir=temp_cache_dir,
-            cache_ttl_hours=0.0001  # ~0.36 seconds
+            cache_ttl_hours=0.0001,  # ~0.36 seconds
         )
 
         robots_content = "User-agent: *\nDisallow: /admin/"
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             # First call - should fetch
@@ -325,7 +339,10 @@ class TestCaching:
             # Manually expire both in-memory and file cache
             if "example.com" in parser._robots_cache:
                 robots_parser, _ = parser._robots_cache["example.com"]
-                parser._robots_cache["example.com"] = (robots_parser, time.time() - 7200)  # 2 hours ago
+                parser._robots_cache["example.com"] = (
+                    robots_parser,
+                    time.time() - 7200,
+                )  # 2 hours ago
 
             # Also delete file cache to force refetch
             cache_path = parser._get_cache_path("example.com")
@@ -343,7 +360,9 @@ class TestCaching:
 
         robots_content = "User-agent: *\nDisallow: /admin/"
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             await parser.can_fetch("https://example.com/page")
@@ -360,14 +379,18 @@ class TestCaching:
         # First parser - fetch and cache
         parser1 = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
-        with patch.object(parser1, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser1, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
             await parser1.can_fetch("https://example.com/page")
 
         # Second parser - should load from file cache
         parser2 = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
-        with patch.object(parser2, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch2:
+        with patch.object(
+            parser2, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch2:
             mock_fetch2.return_value = robots_content
 
             # Should use file cache, not fetch
@@ -396,7 +419,9 @@ class TestCachePathGeneration:
 
         assert path1 == path2
 
-    def test_get_cache_path_generates_different_paths_for_different_domains(self, temp_cache_dir):
+    def test_get_cache_path_generates_different_paths_for_different_domains(
+        self, temp_cache_dir
+    ):
         """Should generate different paths for different domains."""
         parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
@@ -433,7 +458,9 @@ class TestCacheClearance:
 
         robots_content = "User-agent: *\nDisallow: /admin/"
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             # Fetch and cache
@@ -453,7 +480,9 @@ class TestCacheClearance:
 
         robots_content = "User-agent: *\nDisallow: /admin/"
 
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.return_value = robots_content
 
             # Fetch and cache
@@ -485,7 +514,9 @@ class TestErrorHandling:
         parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
         # Mock fetch to raise exception
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.side_effect = Exception("Network error")
 
             result = await parser.can_fetch("https://example.com/page")
@@ -499,7 +530,9 @@ class TestErrorHandling:
         parser = RobotsParser(user_agent="TestBot/1.0", cache_dir=temp_cache_dir)
 
         # Mock fetch to raise exception
-        with patch.object(parser, '_fetch_robots_txt', new_callable=AsyncMock) as mock_fetch:
+        with patch.object(
+            parser, "_fetch_robots_txt", new_callable=AsyncMock
+        ) as mock_fetch:
             mock_fetch.side_effect = Exception("Network error")
 
             delay = await parser.get_crawl_delay("https://example.com/page")

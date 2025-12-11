@@ -5,15 +5,16 @@ These tests verify end-to-end functionality with actual ChromaDB persistence,
 embedding storage, and semantic similarity search. They are slower than unit
 tests but provide high confidence in real-world behavior.
 """
-import pytest
-import numpy as np
-import tempfile
+
 import shutil
+import tempfile
 from pathlib import Path
 
-from src.processor.rag.vector_store import VectorStore
-from src.processor.rag.embeddings import EmbeddingGenerator
+import numpy as np
+import pytest
 
+from src.processor.rag.embeddings import EmbeddingGenerator
+from src.processor.rag.vector_store import VectorStore
 
 # Mark all tests in this file as integration tests
 pytestmark = pytest.mark.integration
@@ -34,21 +35,26 @@ class TestVectorStoreIntegrationBasic:
 
         # Create store and add documents
         store1 = VectorStore(
-            project_name=project_name,
-            persist_directory=temp_vector_store_dir
+            project_name=project_name, persist_directory=temp_vector_store_dir
         )
 
         chunks = [
             {
                 "text": "Aang is the Avatar and last airbender",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"url": "https://example.com/aang", "namespace": "Character"}
+                "metadata": {
+                    "url": "https://example.com/aang",
+                    "namespace": "Character",
+                },
             },
             {
                 "text": "Katara is a waterbender from the Southern Water Tribe",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"url": "https://example.com/katara", "namespace": "Character"}
-            }
+                "metadata": {
+                    "url": "https://example.com/katara",
+                    "namespace": "Character",
+                },
+            },
         ]
 
         doc_ids = store1.add_documents(chunks)
@@ -56,8 +62,7 @@ class TestVectorStoreIntegrationBasic:
 
         # Create new store instance pointing to same directory
         store2 = VectorStore(
-            project_name=project_name,
-            persist_directory=temp_vector_store_dir
+            project_name=project_name, persist_directory=temp_vector_store_dir
         )
 
         # Should have persisted data
@@ -67,30 +72,31 @@ class TestVectorStoreIntegrationBasic:
     def test_add_and_search_documents(self, temp_vector_store_dir):
         """VectorStore should add documents and retrieve them via similarity search."""
         store = VectorStore(
-            project_name="test_search",
-            persist_directory=temp_vector_store_dir
+            project_name="test_search", persist_directory=temp_vector_store_dir
         )
 
         # Create embeddings that are similar
         base_embedding = np.array([0.5] * 384, dtype=np.float32)
-        similar_embedding = base_embedding + np.random.rand(384).astype(np.float32) * 0.1
+        similar_embedding = (
+            base_embedding + np.random.rand(384).astype(np.float32) * 0.1
+        )
 
         chunks = [
             {
                 "text": "Fire is hot and burns",
                 "embedding": base_embedding,
-                "metadata": {"topic": "fire"}
+                "metadata": {"topic": "fire"},
             },
             {
                 "text": "Flames are a form of fire",
                 "embedding": similar_embedding,
-                "metadata": {"topic": "fire"}
+                "metadata": {"topic": "fire"},
             },
             {
                 "text": "Water is cold and wet",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"topic": "water"}
-            }
+                "metadata": {"topic": "water"},
+            },
         ]
 
         store.add_documents(chunks)
@@ -106,26 +112,34 @@ class TestVectorStoreIntegrationBasic:
     def test_metadata_filtering(self, temp_vector_store_dir):
         """VectorStore should filter search results by metadata."""
         store = VectorStore(
-            project_name="test_filtering",
-            persist_directory=temp_vector_store_dir
+            project_name="test_filtering", persist_directory=temp_vector_store_dir
         )
 
         chunks = [
             {
                 "text": "Character page about Aang",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"namespace": "Character", "url": "https://example.com/aang"}
+                "metadata": {
+                    "namespace": "Character",
+                    "url": "https://example.com/aang",
+                },
             },
             {
                 "text": "Location page about Ba Sing Se",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"namespace": "Location", "url": "https://example.com/ba_sing_se"}
+                "metadata": {
+                    "namespace": "Location",
+                    "url": "https://example.com/ba_sing_se",
+                },
             },
             {
                 "text": "Character page about Katara",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"namespace": "Character", "url": "https://example.com/katara"}
-            }
+                "metadata": {
+                    "namespace": "Character",
+                    "url": "https://example.com/katara",
+                },
+            },
         ]
 
         store.add_documents(chunks)
@@ -133,9 +147,7 @@ class TestVectorStoreIntegrationBasic:
         # Search with namespace filter
         query_embedding = np.random.rand(384).astype(np.float32)
         results = store.similarity_search(
-            query_embedding,
-            k=10,
-            metadata_filter={"namespace": "Character"}
+            query_embedding, k=10, metadata_filter={"namespace": "Character"}
         )
 
         # Should only return Character pages
@@ -145,8 +157,7 @@ class TestVectorStoreIntegrationBasic:
     def test_clear_collection(self, temp_vector_store_dir):
         """VectorStore should clear all documents from collection."""
         store = VectorStore(
-            project_name="test_clear",
-            persist_directory=temp_vector_store_dir
+            project_name="test_clear", persist_directory=temp_vector_store_dir
         )
 
         # Add documents
@@ -154,7 +165,7 @@ class TestVectorStoreIntegrationBasic:
             {
                 "text": f"Document {i}",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"index": i}
+                "metadata": {"index": i},
             }
             for i in range(5)
         ]
@@ -177,24 +188,23 @@ class TestVectorStoreIntegrationWithEmbeddings:
         # Initialize components
         generator = EmbeddingGenerator(provider="local")
         store = VectorStore(
-            project_name="test_pipeline",
-            persist_directory=temp_vector_store_dir
+            project_name="test_pipeline", persist_directory=temp_vector_store_dir
         )
 
         # Create text chunks
         raw_chunks = [
             {
                 "text": "The Avatar is the bridge between the spirit world and human world.",
-                "metadata": {"source": "Avatar Lore", "chunk_index": 0}
+                "metadata": {"source": "Avatar Lore", "chunk_index": 0},
             },
             {
                 "text": "Waterbending is the art of manipulating water.",
-                "metadata": {"source": "Bending Arts", "chunk_index": 0}
+                "metadata": {"source": "Bending Arts", "chunk_index": 0},
             },
             {
                 "text": "The Fire Nation attacked and started the war.",
-                "metadata": {"source": "History", "chunk_index": 0}
-            }
+                "metadata": {"source": "History", "chunk_index": 0},
+            },
         ]
 
         # Generate embeddings
@@ -220,13 +230,11 @@ class TestVectorStoreIntegrationWithEmbeddings:
         """VectorStore should isolate different projects in separate collections."""
         # Create two separate projects
         store_naruto = VectorStore(
-            project_name="naruto_wiki",
-            persist_directory=temp_vector_store_dir
+            project_name="naruto_wiki", persist_directory=temp_vector_store_dir
         )
 
         store_avatar = VectorStore(
-            project_name="avatar_wiki",
-            persist_directory=temp_vector_store_dir
+            project_name="avatar_wiki", persist_directory=temp_vector_store_dir
         )
 
         # Add different documents to each
@@ -234,7 +242,7 @@ class TestVectorStoreIntegrationWithEmbeddings:
             {
                 "text": "Naruto Uzumaki is a ninja",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"series": "Naruto"}
+                "metadata": {"series": "Naruto"},
             }
         ]
 
@@ -242,7 +250,7 @@ class TestVectorStoreIntegrationWithEmbeddings:
             {
                 "text": "Aang is the Avatar",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"series": "Avatar"}
+                "metadata": {"series": "Avatar"},
             }
         ]
 
@@ -255,8 +263,7 @@ class TestVectorStoreIntegrationWithEmbeddings:
 
         # Search in naruto should only return naruto docs
         results = store_naruto.similarity_search(
-            np.random.rand(384).astype(np.float32),
-            k=10
+            np.random.rand(384).astype(np.float32), k=10
         )
         assert len(results) == 1
         assert "Naruto" in results[0]["text"]
@@ -268,8 +275,7 @@ class TestVectorStoreIntegrationEdgeCases:
     def test_large_batch_addition(self, temp_vector_store_dir):
         """VectorStore should handle large batches of documents efficiently."""
         store = VectorStore(
-            project_name="test_large_batch",
-            persist_directory=temp_vector_store_dir
+            project_name="test_large_batch", persist_directory=temp_vector_store_dir
         )
 
         # Create 100 documents
@@ -277,7 +283,7 @@ class TestVectorStoreIntegrationEdgeCases:
             {
                 "text": f"Document number {i} with some content",
                 "embedding": np.random.rand(384).astype(np.float32),
-                "metadata": {"index": i, "batch": "large"}
+                "metadata": {"index": i, "batch": "large"},
             }
             for i in range(100)
         ]
@@ -291,8 +297,7 @@ class TestVectorStoreIntegrationEdgeCases:
     def test_unicode_and_special_characters(self, temp_vector_store_dir):
         """VectorStore should handle Unicode and special characters correctly."""
         store = VectorStore(
-            project_name="test_unicode",
-            persist_directory=temp_vector_store_dir
+            project_name="test_unicode", persist_directory=temp_vector_store_dir
         )
 
         chunks = [
@@ -301,8 +306,8 @@ class TestVectorStoreIntegrationEdgeCases:
                 "embedding": np.random.rand(384).astype(np.float32),
                 "metadata": {
                     "title": "Avatar™: The Last Airbender®",
-                    "url": "https://example.com/氣"
-                }
+                    "url": "https://example.com/氣",
+                },
             }
         ]
 
@@ -310,10 +315,7 @@ class TestVectorStoreIntegrationEdgeCases:
         assert len(doc_ids) == 1
 
         # Should be able to retrieve and preserve Unicode
-        results = store.similarity_search(
-            np.random.rand(384).astype(np.float32),
-            k=1
-        )
+        results = store.similarity_search(np.random.rand(384).astype(np.float32), k=1)
 
         assert len(results) == 1
         assert "氣" in results[0]["metadata"]["url"] or "气" in results[0]["text"]
@@ -321,15 +323,11 @@ class TestVectorStoreIntegrationEdgeCases:
     def test_empty_collection_search(self, temp_vector_store_dir):
         """VectorStore should handle search on empty collection gracefully."""
         store = VectorStore(
-            project_name="test_empty",
-            persist_directory=temp_vector_store_dir
+            project_name="test_empty", persist_directory=temp_vector_store_dir
         )
 
         # Search on empty collection
-        results = store.similarity_search(
-            np.random.rand(384).astype(np.float32),
-            k=10
-        )
+        results = store.similarity_search(np.random.rand(384).astype(np.float32), k=10)
 
         assert results == []
         assert store.has_documents() is False

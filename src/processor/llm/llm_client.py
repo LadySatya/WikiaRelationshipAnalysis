@@ -4,13 +4,15 @@ LLMClient - Anthropic Claude API wrapper for RAG queries.
 This module provides a simple interface to Claude for text generation in RAG
 workflows. Supports token counting, cost estimation, and conversation context.
 """
-from typing import Optional, List, Dict, Any, TYPE_CHECKING, cast
-import os
+
 import logging
+import os
 import time
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+
+from src.utils.logging_config import get_llm_logger, get_logger
 
 from ..config import get_config
-from src.utils.logging_config import get_logger, get_llm_logger
 
 if TYPE_CHECKING:
     from anthropic import Anthropic
@@ -53,12 +55,12 @@ class LLMClient:
     # Pricing per 1M tokens (as of 2024-10-16)
     PRICING = {
         "claude-3-5-haiku-20241022": {
-            "input": 1.00,   # $1 per 1M input tokens
+            "input": 1.00,  # $1 per 1M input tokens
             "output": 5.00,  # $5 per 1M output tokens
         },
         "claude-3-5-sonnet-20241022": {
-            "input": 3.00,   # $3 per 1M input tokens
-            "output": 15.00, # $15 per 1M output tokens
+            "input": 3.00,  # $3 per 1M input tokens
+            "output": 15.00,  # $15 per 1M output tokens
         },
     }
 
@@ -66,7 +68,7 @@ class LLMClient:
         self,
         provider: Optional[str] = None,
         model: Optional[str] = None,
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
     ) -> None:
         """
         Initialize LLMClient with specified provider and model.
@@ -114,6 +116,7 @@ class LLMClient:
         """Initialize Anthropic client (lazy loading)."""
         if self._client is None:
             import anthropic
+
             self._client = anthropic.Anthropic(api_key=self.api_key)
 
     def _ensure_llm_logger(self):
@@ -134,7 +137,7 @@ class LLMClient:
         system_prompt: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
-        context: Optional[List[Dict[str, str]]] = None
+        context: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
         Generate text using Claude API.
@@ -175,7 +178,9 @@ class LLMClient:
             messages.extend(cast(List["MessageParam"], context))
 
         # Add current prompt
-        messages.append(cast("MessageParam", {"role": "user", "content": prompt.strip()}))
+        messages.append(
+            cast("MessageParam", {"role": "user", "content": prompt.strip()})
+        )
 
         # Call Claude API with explicit parameters (not **kwargs unpacking)
         # The Anthropic SDK requires explicit named parameters for type safety
@@ -191,33 +196,33 @@ class LLMClient:
                         messages=messages,
                         temperature=temperature,
                         max_tokens=max_tokens,
-                        system=system_prompt
+                        system=system_prompt,
                     )
                 else:
                     response = self._client.messages.create(
                         model=self.model,
                         messages=messages,
                         temperature=temperature,
-                        max_tokens=max_tokens
+                        max_tokens=max_tokens,
                     )
                 break  # Success, exit retry loop
 
             except Exception as e:
                 error_str = str(e)
-                is_last_attempt = (attempt == max_retries - 1)
+                is_last_attempt = attempt == max_retries - 1
 
                 # Check if this is a retryable error (529 overload, rate limits, network)
                 is_retryable = (
-                    "overloaded" in error_str.lower() or
-                    "529" in error_str or
-                    "rate_limit" in error_str.lower() or
-                    "timeout" in error_str.lower() or
-                    "connection" in error_str.lower()
+                    "overloaded" in error_str.lower()
+                    or "529" in error_str
+                    or "rate_limit" in error_str.lower()
+                    or "timeout" in error_str.lower()
+                    or "connection" in error_str.lower()
                 )
 
                 if is_retryable and not is_last_attempt:
                     # Exponential backoff: 2s, 4s, 8s
-                    delay = base_delay * (2 ** attempt)
+                    delay = base_delay * (2**attempt)
                     self.logger.warning(
                         f"API call failed (attempt {attempt + 1}/{max_retries}): {error_str}. "
                         f"Retrying in {delay:.1f}s..."
@@ -234,7 +239,9 @@ class LLMClient:
         if hasattr(content_block, "text"):
             text: str = cast("TextBlock", content_block).text
         else:
-            raise Exception(f"Unexpected content block type: {type(content_block).__name__}")
+            raise Exception(
+                f"Unexpected content block type: {type(content_block).__name__}"
+            )
 
         # Track token usage
         self.total_input_tokens += response.usage.input_tokens
@@ -249,13 +256,12 @@ class LLMClient:
                 response=text,
                 usage={
                     "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens
+                    "output_tokens": response.usage.output_tokens,
                 },
                 cost=self._calculate_cost(
-                    response.usage.input_tokens,
-                    response.usage.output_tokens
+                    response.usage.input_tokens, response.usage.output_tokens
                 ),
-                metadata={"has_context": context is not None}
+                metadata={"has_context": context is not None},
             )
 
         return text
@@ -297,8 +303,7 @@ class LLMClient:
         """
         # Get pricing for current model (default to Haiku if unknown)
         pricing = self.PRICING.get(
-            self.model,
-            self.PRICING["claude-3-5-haiku-20241022"]
+            self.model, self.PRICING["claude-3-5-haiku-20241022"]
         )
 
         # Calculate cost (pricing is per 1M tokens)
@@ -318,7 +323,7 @@ class LLMClient:
         documents: List[str],
         document_metadata: List[Dict[str, Any]],
         temperature: float = 0.7,
-        max_tokens: int = 1024
+        max_tokens: int = 1024,
     ) -> Dict[str, Any]:
         """
         Query Claude with documents and get automatic citation tracking.
@@ -395,28 +400,24 @@ class LLMClient:
         content_blocks: List[Dict[str, Any]] = []
 
         for doc_text in documents:
-            content_blocks.append({
-                "type": "document",
-                "source": {
-                    "type": "text",
-                    "media_type": "text/plain",
-                    "data": doc_text
-                },
-                "citations": {"enabled": True}
-            })
+            content_blocks.append(
+                {
+                    "type": "document",
+                    "source": {
+                        "type": "text",
+                        "media_type": "text/plain",
+                        "data": doc_text,
+                    },
+                    "citations": {"enabled": True},
+                }
+            )
 
         # Add text query at the end
-        content_blocks.append({
-            "type": "text",
-            "text": query.strip()
-        })
+        content_blocks.append({"type": "text", "text": query.strip()})
 
         # Build message with mixed content
         messages: List["MessageParam"] = [
-            cast("MessageParam", {
-                "role": "user",
-                "content": content_blocks
-            })
+            cast("MessageParam", {"role": "user", "content": content_blocks})
         ]
 
         # Call Claude API
@@ -425,7 +426,7 @@ class LLMClient:
                 model=self.model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
             )
         except Exception as e:
             raise Exception(f"Claude API call failed: {str(e)}") from e
@@ -450,16 +451,20 @@ class LLMClient:
                         # Build evidence entry with all metadata fields
                         # citation has: cited_text, document_index, and a location object
                         # location is a CitationCharLocation with start and end attributes
-                        location_dict = {
-                            "start": citation.location.start,
-                            "end": citation.location.end
-                        } if hasattr(citation, "location") and citation.location else None
+                        location_dict = (
+                            {
+                                "start": citation.location.start,
+                                "end": citation.location.end,
+                            }
+                            if hasattr(citation, "location") and citation.location
+                            else None
+                        )
 
                         evidence_entry = {
                             "cited_text": citation.cited_text,
                             "document_index": doc_idx,
                             "location": location_dict,
-                            **metadata  # Include all metadata fields
+                            **metadata,  # Include all metadata fields
                         }
 
                         evidence.append(evidence_entry)
@@ -468,10 +473,7 @@ class LLMClient:
         self.total_input_tokens += response.usage.input_tokens
         self.total_output_tokens += response.usage.output_tokens
 
-        return {
-            "text": result_text,
-            "evidence": evidence
-        }
+        return {"text": result_text, "evidence": evidence}
 
     def generate_with_tools(
         self,
@@ -483,7 +485,7 @@ class LLMClient:
         temperature: float = 0.3,
         max_tokens: int = 4096,
         prune_history: bool = True,
-        keep_last_n: int = 3
+        keep_last_n: int = 3,
     ) -> Dict[str, Any]:
         """
         Generate response with tool calling capability.
@@ -583,7 +585,7 @@ class LLMClient:
                         tools=tools,
                         system=system_prompt,
                         temperature=temperature,
-                        max_tokens=max_tokens
+                        max_tokens=max_tokens,
                     )
                 else:
                     response = self._client.messages.create(
@@ -591,7 +593,7 @@ class LLMClient:
                         messages=conversation,
                         tools=tools,
                         temperature=temperature,
-                        max_tokens=max_tokens
+                        max_tokens=max_tokens,
                     )
             except Exception as e:
                 raise RuntimeError(f"LLM API call failed: {e}") from e
@@ -619,40 +621,38 @@ class LLMClient:
                             tool_result = tool_executor(tool_name, **tool_input)
                         except Exception as e:
                             # Return error to Claude so it can handle it
-                            tool_result = {
-                                "error": str(e),
-                                "success": False
-                            }
+                            tool_result = {"error": str(e), "success": False}
                             self.logger.error(f"Tool execution failed: {e}")
 
                         self.logger.info(f"Tool result: {tool_result}")
 
                         # Track tool call
-                        all_tool_calls.append({
-                            "tool": tool_name,
-                            "input": tool_input,
-                            "result": tool_result
-                        })
+                        all_tool_calls.append(
+                            {
+                                "tool": tool_name,
+                                "input": tool_input,
+                                "result": tool_result,
+                            }
+                        )
 
                         # Prepare tool result for Claude
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": json.dumps(tool_result)
-                        })
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": json.dumps(tool_result),
+                            }
+                        )
 
                 # Add assistant response and tool results to conversation
                 conversation.append(
-                    cast("MessageParam", {
-                        "role": "assistant",
-                        "content": response.content
-                    })
+                    cast(
+                        "MessageParam",
+                        {"role": "assistant", "content": response.content},
+                    )
                 )
                 conversation.append(
-                    cast("MessageParam", {
-                        "role": "user",
-                        "content": tool_results
-                    })
+                    cast("MessageParam", {"role": "user", "content": tool_results})
                 )
 
                 # Continue loop to let Claude process results
@@ -673,7 +673,9 @@ class LLMClient:
                 self.total_output_tokens += iteration_output_tokens
 
                 # Calculate cost
-                estimated_cost = self.estimate_cost(iteration_input_tokens, iteration_output_tokens)
+                estimated_cost = self.estimate_cost(
+                    iteration_input_tokens, iteration_output_tokens
+                )
 
                 self._ensure_llm_logger()
                 if self.llm_logger:
@@ -684,13 +686,13 @@ class LLMClient:
                         response=final_text,
                         usage={
                             "input_tokens": iteration_input_tokens,
-                            "output_tokens": iteration_output_tokens
+                            "output_tokens": iteration_output_tokens,
                         },
                         cost=estimated_cost,
                         metadata={
                             "iterations": iteration + 1,
-                            "tool_calls_count": len(all_tool_calls)
-                        }
+                            "tool_calls_count": len(all_tool_calls),
+                        },
                     )
 
                     for tool_call in all_tool_calls:
@@ -698,7 +700,7 @@ class LLMClient:
                             tool_name=tool_call["tool"],
                             tool_input=tool_call["input"],
                             result=tool_call.get("result"),
-                            error=tool_call.get("error")
+                            error=tool_call.get("error"),
                         )
 
                 return {
@@ -708,8 +710,8 @@ class LLMClient:
                         "total_input_tokens": iteration_input_tokens,
                         "total_output_tokens": iteration_output_tokens,
                         "estimated_cost_usd": estimated_cost,
-                        "iterations": iteration + 1
-                    }
+                        "iterations": iteration + 1,
+                    },
                 }
 
             else:
@@ -724,9 +726,7 @@ class LLMClient:
         )
 
     def _prune_conversation(
-        self,
-        messages: List["MessageParam"],
-        keep_last_n: int = 3
+        self, messages: List["MessageParam"], keep_last_n: int = 3
     ) -> List["MessageParam"]:
         """
         Prune conversation to keep only recent exchanges.
@@ -764,7 +764,7 @@ class LLMClient:
 
         # Keep last N exchanges (each exchange = 2 messages: assistant + user)
         # Last N exchanges = last (N * 2) messages
-        recent_exchanges = messages[-(keep_last_n * 2):]
+        recent_exchanges = messages[-(keep_last_n * 2) :]
 
         # Rebuild conversation: task + recent exchanges
         pruned = [task_message] + recent_exchanges

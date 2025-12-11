@@ -12,10 +12,12 @@ NOTE: All tools now require a 'canon' parameter to support multi-canon wikis.
 The default canon used in tests is 'main'.
 """
 
-import pytest
 import json
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, mock_open
+from unittest.mock import MagicMock, Mock, mock_open, patch
+
+import pytest
+
 from src.processor.analysis.knowledge_builder import CharacterKnowledgeBuilder
 
 # Default test canon
@@ -25,9 +27,15 @@ TEST_CANON = "main"
 @pytest.fixture
 def mock_builder():
     """Create a mocked CharacterKnowledgeBuilder for testing."""
-    with patch("src.processor.analysis.knowledge_builder.QueryEngine"), \
-         patch("src.processor.analysis.knowledge_builder.load_system_prompt") as mock_prompt, \
-         patch("src.processor.analysis.knowledge_builder.load_tool_schemas") as mock_schemas:
+    with (
+        patch("src.processor.analysis.knowledge_builder.QueryEngine"),
+        patch(
+            "src.processor.analysis.knowledge_builder.load_system_prompt"
+        ) as mock_prompt,
+        patch(
+            "src.processor.analysis.knowledge_builder.load_tool_schemas"
+        ) as mock_schemas,
+    ):
 
         mock_prompt.return_value = "Test prompt"
         mock_schemas.return_value = []
@@ -63,14 +71,14 @@ class TestKnowledgeBaseSave:
                 "name": "Aang",
                 "aliases": ["Avatar Aang"],
                 "bio": "The last airbender",
-                "source_urls": ["https://example.com"]
+                "source_urls": ["https://example.com"],
             },
             "Katara": {
                 "name": "Katara",
                 "aliases": [],
                 "bio": "Waterbender",
-                "source_urls": []
-            }
+                "source_urls": [],
+            },
         }
 
         mock_builder.save()
@@ -98,7 +106,7 @@ class TestKnowledgeBaseSave:
                 "name": "Test: Character / Name",
                 "aliases": [],
                 "bio": "Test",
-                "source_urls": []
+                "source_urls": [],
             }
         }
 
@@ -120,7 +128,7 @@ class TestKnowledgeBaseSave:
                 "characters": ["Aang", "Katara"],
                 "type": "friend",
                 "summary": "Friends",
-                "claims": []
+                "claims": [],
             }
         }
 
@@ -156,8 +164,20 @@ class TestLoadCrawledPages:
         processed_dir.mkdir()
 
         # Create test files
-        page1 = {"content": {"url": "https://example.com/1", "title": "Page 1", "main_content": "Content 1"}}
-        page2 = {"content": {"url": "https://example.com/2", "title": "Page 2", "main_content": "Content 2"}}
+        page1 = {
+            "content": {
+                "url": "https://example.com/1",
+                "title": "Page 1",
+                "main_content": "Content 1",
+            }
+        }
+        page2 = {
+            "content": {
+                "url": "https://example.com/2",
+                "title": "Page 2",
+                "main_content": "Content 2",
+            }
+        }
 
         (processed_dir / "page1.json").write_text(json.dumps(page1))
         (processed_dir / "page2.json").write_text(json.dumps(page2))
@@ -183,7 +203,9 @@ class TestLoadCrawledPages:
         processed_dir.mkdir()
 
         # Valid file
-        (processed_dir / "page1.json").write_text(json.dumps({"content": {"url": "test"}}))
+        (processed_dir / "page1.json").write_text(
+            json.dumps({"content": {"url": "test"}})
+        )
         # Invalid JSON
         (processed_dir / "page2.json").write_text("invalid json {")
 
@@ -200,7 +222,7 @@ class TestLoadCrawledPages:
 
         page = {
             "url": "https://example.com/page",
-            "content": {"title": "Page", "main_content": "Content"}
+            "content": {"title": "Page", "main_content": "Content"},
         }
         (processed_dir / "page.json").write_text(json.dumps(page))
 
@@ -245,7 +267,7 @@ class TestPeriodicSave:
             "name": "Test",
             "aliases": [],
             "bio": "Test",
-            "source_urls": []
+            "source_urls": [],
         }
 
         # Process 3 pages (should save at page 2)

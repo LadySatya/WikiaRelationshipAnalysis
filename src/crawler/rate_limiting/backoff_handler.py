@@ -14,10 +14,7 @@ class BackoffHandler:
     """Handles exponential backoff for failed requests and error recovery."""
 
     def __init__(
-        self,
-        base_delay: float = 1.0,
-        max_delay: float = 300.0,
-        max_retries: int = 3
+        self, base_delay: float = 1.0, max_delay: float = 300.0, max_retries: int = 3
     ):
         """Initialize backoff handler with timing parameters."""
         if base_delay <= 0:
@@ -52,9 +49,7 @@ class BackoffHandler:
             f"[BACKOFF] Backoff wait complete for attempt {attempt} ({domain})"
         )
 
-    def should_retry(
-            self, url: str, status_code: int, attempt: int
-    ) -> bool:
+    def should_retry(self, url: str, status_code: int, attempt: int) -> bool:
         """Determine if request should be retried based on status and
         attempts."""
         # Check if we've exceeded max retries

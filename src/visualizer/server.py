@@ -14,14 +14,15 @@ URL Structure:
     /api/<project>/canons        - List available canons with counts
     /api/<project>/logs/stream - Server-Sent Events log stream
 """
-from flask import Flask, render_template_string, jsonify, Response, abort, request
-from pathlib import Path
 import json
-import time
 import re
-from typing import Dict, List, Optional
-import webbrowser
 import threading
+import time
+import webbrowser
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from flask import Flask, Response, abort, jsonify, render_template_string, request
 
 app = Flask(__name__)
 PROJECT_DIR = Path("data/projects")
@@ -31,6 +32,7 @@ PROJECT_DIR = Path("data/projects")
 # CANON UTILITIES
 # ============================================================================
 
+
 def extract_canon_from_filename(filename: str) -> str:
     """
     Extract canon from a filename like 'Aang_film.json' -> 'film'.
@@ -39,17 +41,17 @@ def extract_canon_from_filename(filename: str) -> str:
     If no underscore found or file predates canon support, returns 'main'.
     """
     # Remove .json extension
-    stem = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
 
     # Find last underscore (canon is always the last part)
-    if '_' in stem:
-        parts = stem.rsplit('_', 1)
+    if "_" in stem:
+        parts = stem.rsplit("_", 1)
         # Check if the last part looks like a canon (lowercase, short)
         potential_canon = parts[-1].lower()
-        if potential_canon in ('main', 'film', 'netflix', 'legends', 'comics', 'games'):
+        if potential_canon in ("main", "film", "netflix", "legends", "comics", "games"):
             return potential_canon
 
-    return 'main'
+    return "main"
 
 
 def get_project_canons(project: str) -> List[Dict]:
@@ -91,12 +93,14 @@ def get_project_canons(project: str) -> List[Dict]:
     # Build result list
     canons = []
     for canon_id, stats in sorted(canon_stats.items()):
-        canons.append({
-            "id": canon_id,
-            "name": canon_id.title(),  # 'main' -> 'Main'
-            "character_count": stats["characters"],
-            "relationship_count": stats["relationships"]
-        })
+        canons.append(
+            {
+                "id": canon_id,
+                "name": canon_id.title(),  # 'main' -> 'Main'
+                "character_count": stats["characters"],
+                "relationship_count": stats["relationships"],
+            }
+        )
 
     return canons
 
@@ -104,6 +108,7 @@ def get_project_canons(project: str) -> List[Dict]:
 # ============================================================================
 # PROJECT LISTING
 # ============================================================================
+
 
 def get_all_projects() -> List[Dict]:
     """
@@ -134,43 +139,41 @@ def get_all_projects() -> List[Dict]:
         # Count relationship files (exclude graph.json if it exists from old system)
         relationship_count = 0
         if relationships_dir.exists():
-            relationship_count = len([
-                f for f in relationships_dir.glob("*.json")
-                if f.name != "graph.json"
-            ])
+            relationship_count = len(
+                [f for f in relationships_dir.glob("*.json") if f.name != "graph.json"]
+            )
 
         # Count character files
         character_count = 0
         if chars_dir.exists():
-            character_count = len([
-                f for f in chars_dir.glob("*.json")
-                if f.name != "_discovered.json"
-            ])
+            character_count = len(
+                [f for f in chars_dir.glob("*.json") if f.name != "_discovered.json"]
+            )
 
         # Find latest log file (search recursively in subdirectories)
         latest_log = None
         if logs_dir.exists():
             log_files = sorted(
-                logs_dir.rglob("*.log"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True
+                logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True
             )
             if log_files:
                 latest_log = str(log_files[0].relative_to(PROJECT_DIR))
 
-        projects.append({
-            "name": name,
-            "has_relationships": relationship_count > 0,
-            "has_characters": chars_dir.exists() and character_count > 0,
-            "character_count": character_count,
-            "relationship_count": relationship_count,
-            "latest_log": latest_log
-        })
+        projects.append(
+            {
+                "name": name,
+                "has_relationships": relationship_count > 0,
+                "has_characters": chars_dir.exists() and character_count > 0,
+                "character_count": character_count,
+                "relationship_count": relationship_count,
+                "latest_log": latest_log,
+            }
+        )
 
     return sorted(projects, key=lambda p: p["name"])
 
 
-@app.route('/')
+@app.route("/")
 def index():
     """Project listing homepage."""
     projects = get_all_projects()
@@ -394,7 +397,8 @@ def index():
 # GRAPH VIEWER
 # ============================================================================
 
-@app.route('/<project>')
+
+@app.route("/<project>")
 def view_graph(project: str):
     """Relationship graph viewer for a project."""
     relationships_dir = PROJECT_DIR / project / "relationships"
@@ -405,7 +409,10 @@ def view_graph(project: str):
 
     rel_files = [f for f in relationships_dir.glob("*.json") if f.name != "graph.json"]
     if not rel_files:
-        abort(404, f"Project '{project}' has no relationships. Run 'python main.py discover {project}' first.")
+        abort(
+            404,
+            f"Project '{project}' has no relationships. Run 'python main.py discover {project}' first.",
+        )
 
     # Serve the embedded viewer with client-side graph building
     html = _get_viewer_html(project)
@@ -414,7 +421,7 @@ def view_graph(project: str):
 
 def _get_viewer_html(project: str) -> str:
     """Generate the viewer HTML with client-side graph building."""
-    return f'''<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1190,14 +1197,15 @@ def _get_viewer_html(project: str) -> str:
         init();
     </script>
 </body>
-</html>'''
+</html>"""
 
 
 # ============================================================================
 # API ENDPOINTS
 # ============================================================================
 
-@app.route('/api/<project>/relationships')
+
+@app.route("/api/<project>/relationships")
 def api_list_relationships(project: str):
     """Return list of all relationship files for a project.
 
@@ -1205,10 +1213,13 @@ def api_list_relationships(project: str):
         canon: Optional filter to show only relationships from a specific canon
     """
     relationships_dir = PROJECT_DIR / project / "relationships"
-    canon_filter = request.args.get('canon')
+    canon_filter = request.args.get("canon")
 
     if not relationships_dir.exists():
-        return jsonify({"error": "No relationships found", "files": [], "count": 0}), 404
+        return (
+            jsonify({"error": "No relationships found", "files": [], "count": 0}),
+            404,
+        )
 
     files = []
     for f in relationships_dir.glob("*.json"):
@@ -1222,11 +1233,13 @@ def api_list_relationships(project: str):
             if file_canon != canon_filter.lower():
                 continue
 
-        files.append({
-            "filename": f.name,
-            "canon": extract_canon_from_filename(f.name),
-            "modified": f.stat().st_mtime
-        })
+        files.append(
+            {
+                "filename": f.name,
+                "canon": extract_canon_from_filename(f.name),
+                "modified": f.stat().st_mtime,
+            }
+        )
 
     # Sort by filename for consistent ordering
     files.sort(key=lambda x: x["filename"])
@@ -1234,7 +1247,7 @@ def api_list_relationships(project: str):
     return jsonify({"files": files, "count": len(files), "canon_filter": canon_filter})
 
 
-@app.route('/api/<project>/characters')
+@app.route("/api/<project>/characters")
 def api_list_characters(project: str):
     """Return list of all character files for a project.
 
@@ -1242,7 +1255,7 @@ def api_list_characters(project: str):
         canon: Optional filter to show only characters from a specific canon
     """
     characters_dir = PROJECT_DIR / project / "characters"
-    canon_filter = request.args.get('canon')
+    canon_filter = request.args.get("canon")
 
     if not characters_dir.exists():
         return jsonify({"error": "No characters found", "files": [], "count": 0}), 404
@@ -1260,21 +1273,30 @@ def api_list_characters(project: str):
 
         # Extract character name (remove canon suffix)
         stem = f.stem
-        if '_' in stem:
-            parts = stem.rsplit('_', 1)
-            if parts[-1].lower() in ('main', 'film', 'netflix', 'legends', 'comics', 'games'):
+        if "_" in stem:
+            parts = stem.rsplit("_", 1)
+            if parts[-1].lower() in (
+                "main",
+                "film",
+                "netflix",
+                "legends",
+                "comics",
+                "games",
+            ):
                 char_name = parts[0]
             else:
                 char_name = stem
         else:
             char_name = stem
 
-        files.append({
-            "filename": f.name,
-            "name": char_name,
-            "canon": file_canon,
-            "modified": f.stat().st_mtime
-        })
+        files.append(
+            {
+                "filename": f.name,
+                "name": char_name,
+                "canon": file_canon,
+                "modified": f.stat().st_mtime,
+            }
+        )
 
     # Sort by name
     files.sort(key=lambda x: x["name"])
@@ -1282,7 +1304,7 @@ def api_list_characters(project: str):
     return jsonify({"files": files, "count": len(files), "canon_filter": canon_filter})
 
 
-@app.route('/api/<project>/characters/<name>')
+@app.route("/api/<project>/characters/<name>")
 def api_get_character(project: str, name: str):
     """Return single character data."""
     characters_dir = PROJECT_DIR / project / "characters"
@@ -1293,17 +1315,18 @@ def api_get_character(project: str, name: str):
     if not char_file.exists():
         # Try URL-decoded name
         import urllib.parse
+
         decoded_name = urllib.parse.unquote(name)
         char_file = characters_dir / f"{decoded_name}.json"
 
     if not char_file.exists():
         return jsonify({"error": f"Character not found: {name}"}), 404
 
-    with open(char_file, 'r', encoding='utf-8') as f:
+    with open(char_file, "r", encoding="utf-8") as f:
         return jsonify(json.load(f))
 
 
-@app.route('/api/<project>/relationships/<filename>')
+@app.route("/api/<project>/relationships/<filename>")
 def api_relationship(project: str, filename: str):
     """Serve relationship detail JSON."""
     rel_path = PROJECT_DIR / project / "relationships" / filename
@@ -1311,11 +1334,11 @@ def api_relationship(project: str, filename: str):
     if not rel_path.exists():
         return jsonify({"error": f"Relationship file not found: {filename}"}), 404
 
-    with open(rel_path, 'r', encoding='utf-8') as f:
+    with open(rel_path, "r", encoding="utf-8") as f:
         return jsonify(json.load(f))
 
 
-@app.route('/api/<project>/canons')
+@app.route("/api/<project>/canons")
 def api_list_canons(project: str):
     """Return list of canons available in this project with counts."""
     canons = get_project_canons(project)
@@ -1326,7 +1349,8 @@ def api_list_canons(project: str):
 # LOG MONITORING & BROWSING
 # ============================================================================
 
-@app.route('/<project>/logs')
+
+@app.route("/<project>/logs")
 def browse_logs(project: str):
     """Browse all log files for a project."""
     logs_dir = PROJECT_DIR / project / "logs"
@@ -1336,9 +1360,7 @@ def browse_logs(project: str):
 
     # Get all log files recursively, sorted by modification time (newest first)
     log_files = sorted(
-        logs_dir.rglob("*.log"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True
+        logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True
     )
 
     # Build log file list with metadata
@@ -1346,12 +1368,16 @@ def browse_logs(project: str):
     for log_file in log_files:
         stat = log_file.stat()
         rel_path = log_file.relative_to(logs_dir)
-        logs.append({
-            "name": str(rel_path).replace('\\', '/'),
-            "size": stat.st_size,
-            "modified": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat.st_mtime)),
-            "modified_ts": stat.st_mtime
-        })
+        logs.append(
+            {
+                "name": str(rel_path).replace("\\", "/"),
+                "size": stat.st_size,
+                "modified": time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)
+                ),
+                "modified_ts": stat.st_mtime,
+            }
+        )
 
     html = """
 <!DOCTYPE html>
@@ -1457,7 +1483,7 @@ def browse_logs(project: str):
     return render_template_string(html, project=project, logs=logs)
 
 
-@app.route('/<project>/monitor')
+@app.route("/<project>/monitor")
 def monitor(project: str):
     """Live log monitoring page."""
     from flask import request
@@ -1468,21 +1494,19 @@ def monitor(project: str):
         abort(404, f"No logs found for project '{project}'")
 
     # Get log file from query param or use most recent
-    log_name = request.args.get('log')
+    log_name = request.args.get("log")
     if log_name:
         log_file = logs_dir / log_name
         if not log_file.exists():
             abort(404, f"Log file not found: {log_name}")
     else:
         log_files = sorted(
-            logs_dir.rglob("*.log"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True
+            logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True
         )
         if not log_files:
             abort(404, f"No log files found for project '{project}'")
         log_file = log_files[0]
-        log_name = str(log_file.relative_to(logs_dir)).replace('\\', '/')
+        log_name = str(log_file.relative_to(logs_dir)).replace("\\", "/")
 
     html = """
 <!DOCTYPE html>
@@ -1613,7 +1637,7 @@ def monitor(project: str):
     return render_template_string(html, project=project, log_name=log_name)
 
 
-@app.route('/api/<project>/logs/<path:filename>')
+@app.route("/api/<project>/logs/<path:filename>")
 def serve_log_file(project: str, filename: str):
     """Serve complete log file."""
     logs_dir = PROJECT_DIR / project / "logs"
@@ -1631,13 +1655,13 @@ def serve_log_file(project: str, filename: str):
     if not log_file.exists():
         abort(404, f"Log file not found: {filename}")
 
-    with open(log_file, 'r', encoding='utf-8') as f:
+    with open(log_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    return Response(content, mimetype='text/plain')
+    return Response(content, mimetype="text/plain")
 
 
-@app.route('/api/<project>/logs/stream')
+@app.route("/api/<project>/logs/stream")
 def stream_logs(project: str):
     """Server-Sent Events endpoint for streaming logs."""
     from flask import request
@@ -1647,28 +1671,28 @@ def stream_logs(project: str):
     if not logs_dir.exists():
         abort(404, f"No logs directory for project '{project}'")
 
-    log_name = request.args.get('log')
+    log_name = request.args.get("log")
     if log_name:
         log_file = logs_dir / log_name
         if not log_file.exists():
             abort(404, f"Log file not found: {log_name}")
     else:
         log_files = sorted(
-            logs_dir.rglob("*.log"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True
+            logs_dir.rglob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True
         )
         if not log_files:
+
             def generate():
                 yield "data: [INFO] Waiting for logs...\n\n"
                 while True:
                     time.sleep(1)
-            return Response(generate(), mimetype='text/event-stream')
+
+            return Response(generate(), mimetype="text/event-stream")
         log_file = log_files[0]
 
     def generate():
         """Show existing content, then tail for new lines."""
-        with open(log_file, 'r', encoding='utf-8') as f:
+        with open(log_file, "r", encoding="utf-8") as f:
             for line in f:
                 yield f"data: {line.rstrip()}\n\n"
             while True:
@@ -1678,16 +1702,18 @@ def stream_logs(project: str):
                 else:
                     time.sleep(0.5)
 
-    return Response(generate(), mimetype='text/event-stream')
+    return Response(generate(), mimetype="text/event-stream")
 
 
 # ============================================================================
 # SERVER STARTUP
 # ============================================================================
 
+
 def start_server(port: int = 8000, open_browser: bool = True):
     """Start the Flask server."""
     if open_browser:
+
         def open_browser_delayed():
             time.sleep(1)
             webbrowser.open(f"http://localhost:{port}/")
@@ -1698,10 +1724,11 @@ def start_server(port: int = 8000, open_browser: bool = True):
     print(f"[INFO] WikiaAnalysis server starting at http://localhost:{port}/")
     print(f"[INFO] Press Ctrl+C to stop")
 
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
     import sys
+
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     start_server(port=port)

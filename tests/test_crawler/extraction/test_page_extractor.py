@@ -278,7 +278,9 @@ class TestPageExtractorNamespaceDetection:
 
         for url in test_cases:
             namespace = page_extractor.get_namespace(url)
-            assert "character" in namespace.lower(), f"Expected Character namespace for {url}"
+            assert (
+                "character" in namespace.lower()
+            ), f"Expected Character namespace for {url}"
 
     def test_get_namespace_location_namespace(self, page_extractor):
         """Test detection of Location namespace."""
@@ -289,7 +291,9 @@ class TestPageExtractorNamespaceDetection:
 
         for url in test_cases:
             namespace = page_extractor.get_namespace(url)
-            assert "location" in namespace.lower(), f"Expected Location namespace for {url}"
+            assert (
+                "location" in namespace.lower()
+            ), f"Expected Location namespace for {url}"
 
     def test_get_namespace_excluded_pages_return_none(self, page_extractor):
         """Test that excluded pages (Template, User, etc.) return None."""
@@ -315,7 +319,9 @@ class TestPageExtractorNamespaceDetection:
 
         for url, expected_namespace in test_cases:
             namespace = page_extractor.get_namespace(url)
-            assert namespace == expected_namespace, f"Expected {expected_namespace} for {url}"
+            assert (
+                namespace == expected_namespace
+            ), f"Expected {expected_namespace} for {url}"
 
     def test_get_namespace_empty_url(self, page_extractor):
         """Test that empty URL returns None."""

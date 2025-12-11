@@ -96,9 +96,7 @@ class CrawlState:
 
                 # Extract metadata
                 checkpoint_info = {
-                    "checkpoint_id": data.get(
-                        "checkpoint_id", checkpoint_file.stem
-                    ),
+                    "checkpoint_id": data.get("checkpoint_id", checkpoint_file.stem),
                     "timestamp": data.get("checkpoint_timestamp", ""),
                     "pages_crawled": data.get("pages_crawled", 0),
                     "file_path": str(checkpoint_file),
@@ -112,9 +110,7 @@ class CrawlState:
 
         return checkpoints
 
-    def restore_from_checkpoint(
-            self, checkpoint_id: str
-    ) -> Optional[Dict[str, Any]]:
+    def restore_from_checkpoint(self, checkpoint_id: str) -> Optional[Dict[str, Any]]:
         """Restore state from specific checkpoint."""
         if not checkpoint_id:
             return None

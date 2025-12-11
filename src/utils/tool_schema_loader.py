@@ -15,9 +15,10 @@ Usage:
     >>> prompt = load_system_prompt("character_classification_system")
     >>> # Returns: "You are a character classifier..."
 """
-from pathlib import Path
-from typing import List, Dict, Any
+
 import json
+from pathlib import Path
+from typing import Any, Dict, List
 
 
 def load_tool_schemas(category: str) -> List[Dict[str, Any]]:

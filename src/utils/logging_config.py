@@ -37,13 +37,12 @@ Usage:
     llm_logger.log_prompt(prompt="...", model="claude-sonnet-4")
 """
 
-import logging
 import json
-from pathlib import Path
-from typing import Optional, Dict, Any
+import logging
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 # Module-specific logger names
 LOGGERS = {
@@ -86,7 +85,7 @@ class LLMLogger:
         usage: Optional[Dict[str, int]] = None,
         cost: Optional[float] = None,
         error: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """
         Log an LLM prompt with structured data.
@@ -108,11 +107,15 @@ class LLMLogger:
             "prompt_length": len(prompt),
             "prompt_preview": prompt[:200] + "..." if len(prompt) > 200 else prompt,
             "response_length": len(response) if response else 0,
-            "response_preview": (response[:200] + "...") if response and len(response) > 200 else response,
+            "response_preview": (
+                (response[:200] + "...")
+                if response and len(response) > 200
+                else response
+            ),
             "usage": usage,
             "cost_usd": cost,
             "error": error,
-            "metadata": metadata or {}
+            "metadata": metadata or {},
         }
 
         # Write structured log entry
@@ -125,7 +128,11 @@ class LLMLogger:
                 f"LLM call failed [{purpose}] model={model} error={error}"
             )
         else:
-            tokens_str = f"tokens={usage['input_tokens']}+{usage['output_tokens']}" if usage else "tokens=unknown"
+            tokens_str = (
+                f"tokens={usage['input_tokens']}+{usage['output_tokens']}"
+                if usage
+                else "tokens=unknown"
+            )
             cost_str = f"${cost:.4f}" if cost else "$?.??"
             self.logger.info(
                 f"LLM call [{purpose}] model={model} {tokens_str} cost={cost_str}"
@@ -137,7 +144,7 @@ class LLMLogger:
         tool_input: Dict[str, Any],
         result: Optional[Dict[str, Any]] = None,
         error: Optional[str] = None,
-        execution_time_ms: Optional[float] = None
+        execution_time_ms: Optional[float] = None,
     ):
         """
         Log a tool call made by the LLM.
@@ -155,7 +162,7 @@ class LLMLogger:
             "input": tool_input,
             "result_summary": str(result)[:500] if result else None,
             "error": error,
-            "execution_time_ms": execution_time_ms
+            "execution_time_ms": execution_time_ms,
         }
 
         # Write structured log entry
@@ -179,7 +186,7 @@ def setup_logging(
     log_level: str = "INFO",
     console_level: Optional[str] = None,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
-    backup_count: int = 5
+    backup_count: int = 5,
 ) -> Path:
     """
     Setup logging configuration for a project.
@@ -210,12 +217,10 @@ def setup_logging(
     # Create formatters
     detailed_formatter = logging.Formatter(
         "%(asctime)s | %(name)-30s | %(levelname)-8s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    console_formatter = logging.Formatter(
-        "%(levelname)-8s | %(name)-20s | %(message)s"
-    )
+    console_formatter = logging.Formatter("%(levelname)-8s | %(name)-20s | %(message)s")
 
     # Configure root logger
     root_logger = logging.getLogger()
@@ -226,7 +231,9 @@ def setup_logging(
 
     # Quiet down noisy third-party libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)  # Only show HTTP errors
-    logging.getLogger("httpcore").setLevel(logging.WARNING)  # Only show connection errors
+    logging.getLogger("httpcore").setLevel(
+        logging.WARNING
+    )  # Only show connection errors
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
 
@@ -238,9 +245,7 @@ def setup_logging(
 
     # Main application log (everything)
     main_handler = RotatingFileHandler(
-        log_dir / "main.log",
-        maxBytes=max_bytes,
-        backupCount=backup_count
+        log_dir / "main.log", maxBytes=max_bytes, backupCount=backup_count
     )
     main_handler.setLevel(file_level)
     main_handler.setFormatter(detailed_formatter)
@@ -248,23 +253,25 @@ def setup_logging(
 
     # Errors log (errors only, across all modules)
     error_handler = RotatingFileHandler(
-        log_dir / "errors.log",
-        maxBytes=max_bytes,
-        backupCount=backup_count
+        log_dir / "errors.log", maxBytes=max_bytes, backupCount=backup_count
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(detailed_formatter)
     root_logger.addHandler(error_handler)
 
     # Module-specific handlers
-    _setup_module_handlers(log_dir, file_level, detailed_formatter, max_bytes, backup_count)
+    _setup_module_handlers(
+        log_dir, file_level, detailed_formatter, max_bytes, backup_count
+    )
 
     # Log startup
     logger = logging.getLogger(LOGGERS["main"])
     logger.info("=" * 80)
     logger.info(f"Logging initialized for project: {project_name}")
     logger.info(f"Log directory: {log_dir.absolute()}")
-    logger.info(f"File log level: {log_level}, Console log level: {console_level or log_level}")
+    logger.info(
+        f"File log level: {log_level}, Console log level: {console_level or log_level}"
+    )
     logger.info("=" * 80)
 
     return log_dir
@@ -275,7 +282,7 @@ def _setup_module_handlers(
     level: int,
     formatter: logging.Formatter,
     max_bytes: int,
-    backup_count: int
+    backup_count: int,
 ):
     """Setup file handlers for each module."""
 
@@ -283,57 +290,84 @@ def _setup_module_handlers(
     _add_file_handler(
         LOGGERS["crawler"],
         log_dir / "crawler" / "crawler.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     _add_file_handler(
         LOGGERS["crawler.rate_limiting"],
         log_dir / "crawler" / "rate_limiting.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     _add_file_handler(
         LOGGERS["crawler.extraction"],
         log_dir / "crawler" / "extraction.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     # Processor logs
     _add_file_handler(
         LOGGERS["processor"],
         log_dir / "processor" / "processor.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     _add_file_handler(
         LOGGERS["processor.discovery"],
         log_dir / "processor" / "character_discovery.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     _add_file_handler(
         LOGGERS["processor.profiles"],
         log_dir / "processor" / "profile_building.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     _add_file_handler(
         LOGGERS["processor.knowledge_builder"],
         log_dir / "processor" / "knowledge_building.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     _add_file_handler(
         LOGGERS["processor.rag"],
         log_dir / "processor" / "rag.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
     # LLM logs
     _add_file_handler(
         LOGGERS["llm"],
         log_dir / "llm" / "llm_calls.log",
-        level, formatter, max_bytes, backup_count
+        level,
+        formatter,
+        max_bytes,
+        backup_count,
     )
 
 
@@ -343,16 +377,14 @@ def _add_file_handler(
     level: int,
     formatter: logging.Formatter,
     max_bytes: int,
-    backup_count: int
+    backup_count: int,
 ):
     """Add a rotating file handler to a logger."""
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.DEBUG)  # Logger captures everything, handler filters
 
     handler = RotatingFileHandler(
-        file_path,
-        maxBytes=max_bytes,
-        backupCount=backup_count
+        file_path, maxBytes=max_bytes, backupCount=backup_count
     )
     handler.setLevel(level)
     handler.setFormatter(formatter)
@@ -376,8 +408,7 @@ def get_logger(module: str) -> logging.Logger:
     logger_name = LOGGERS.get(module)
     if not logger_name:
         raise ValueError(
-            f"Unknown module: {module}. "
-            f"Valid modules: {list(LOGGERS.keys())}"
+            f"Unknown module: {module}. " f"Valid modules: {list(LOGGERS.keys())}"
         )
     return logging.getLogger(logger_name)
 

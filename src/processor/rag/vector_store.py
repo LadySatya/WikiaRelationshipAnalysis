@@ -4,18 +4,20 @@ VectorStore - ChromaDB-based vector database for semantic search.
 This module handles persistent storage of embeddings in ChromaDB for efficient
 semantic similarity search. Each wikia project gets its own isolated collection.
 """
-from typing import List, Dict, Any, Optional
-import numpy as np
-from pathlib import Path
-import uuid
-import re
+
 import logging
+import re
+import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import chromadb
+import numpy as np
 from chromadb.config import Settings
 
-from ..config import get_config
 from src.utils.logging_config import get_logger
+
+from ..config import get_config
 
 logger = get_logger("processor.rag")
 
@@ -51,9 +53,7 @@ class VectorStore:
     """
 
     def __init__(
-        self,
-        project_name: str,
-        persist_directory: Optional[str] = None
+        self, project_name: str, persist_directory: Optional[str] = None
     ) -> None:
         """
         Initialize VectorStore with project-specific collection.
@@ -70,7 +70,7 @@ class VectorStore:
 
         # SECURITY: Prevent path traversal attacks
         # Only allow alphanumeric, underscore, and hyphen characters
-        if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", project_name):
             raise ValueError(
                 f"Invalid project_name '{project_name}'. "
                 "Only alphanumeric characters, underscores, and hyphens are allowed."
@@ -99,16 +99,14 @@ class VectorStore:
 
         # Initialize ChromaDB persistent client
         self._client = chromadb.PersistentClient(
-            path=str(persist_path),
-            settings=Settings(anonymized_telemetry=False)
+            path=str(persist_path), settings=Settings(anonymized_telemetry=False)
         )
 
         # Create or get project-specific collection
         # Collection name is based on project name
         collection_name = f"{self.project_name}_collection"
         self._collection = self._client.get_or_create_collection(
-            name=collection_name,
-            metadata={"project": self.project_name}
+            name=collection_name, metadata={"project": self.project_name}
         )
 
     def _validate_embedding(
@@ -221,9 +219,7 @@ class VectorStore:
         for i, chunk in enumerate(chunks):
             # Validate chunk has embedding
             if "embedding" not in chunk:
-                raise ValueError(
-                    f"Chunk at index {i} missing 'embedding' field"
-                )
+                raise ValueError(f"Chunk at index {i} missing 'embedding' field")
 
             # Validate and get embedding dimension
             dim = self._validate_embedding(chunk["embedding"], i, expected_dim)
@@ -253,7 +249,7 @@ class VectorStore:
                 ids=doc_ids,
                 documents=texts,
                 embeddings=validated_embeddings,
-                metadatas=metadatas
+                metadatas=metadatas,
             )
         except Exception as e:
             raise Exception(
@@ -266,7 +262,7 @@ class VectorStore:
         self,
         query_embedding: np.ndarray,
         k: int = 10,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for documents similar to the query embedding.
@@ -297,10 +293,7 @@ class VectorStore:
             query_embedding = query_embedding.tolist()
 
         # Build query parameters
-        query_params = {
-            "query_embeddings": [query_embedding],
-            "n_results": k
-        }
+        query_params = {"query_embeddings": [query_embedding], "n_results": k}
 
         # Add metadata filter if provided
         if metadata_filter is not None:
@@ -332,13 +325,12 @@ class VectorStore:
                 f"metadatas={len(metadatas)}, distances={len(distances)}"
             )
 
-        for doc_id, text, metadata, distance in zip(ids, documents, metadatas, distances):
-            formatted_results.append({
-                "id": doc_id,
-                "text": text,
-                "metadata": metadata,
-                "distance": distance
-            })
+        for doc_id, text, metadata, distance in zip(
+            ids, documents, metadatas, distances
+        ):
+            formatted_results.append(
+                {"id": doc_id, "text": text, "metadata": metadata, "distance": distance}
+            )
 
         return formatted_results
 
@@ -357,7 +349,7 @@ class VectorStore:
         return {
             "name": self._collection.name,
             "count": self._collection.count(),
-            "metadata": self._collection.metadata
+            "metadata": self._collection.metadata,
         }
 
     def clear(self) -> None:
@@ -378,8 +370,7 @@ class VectorStore:
 
             # Recreate empty collection
             self._collection = self._client.get_or_create_collection(
-                name=collection_name,
-                metadata=collection_metadata
+                name=collection_name, metadata=collection_metadata
             )
         except Exception as e:
             raise Exception(

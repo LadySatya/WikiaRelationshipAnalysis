@@ -9,9 +9,11 @@ Tests verify:
 - QueryEngine integration
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
 from src.processor.analysis.knowledge_builder import CharacterKnowledgeBuilder
 
 
@@ -22,12 +24,14 @@ class TestKnowledgeBuilderInitialization:
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_with_valid_project_name(self, mock_load_schemas, mock_load_prompt, mock_qe):
+    def test_init_with_valid_project_name(
+        self, mock_load_schemas, mock_load_prompt, mock_qe
+    ):
         """Should initialize with valid project name."""
         mock_load_prompt.return_value = "Test system prompt"
         mock_load_schemas.return_value = [
             {"name": "search_characters"},
-            {"name": "create_character"}
+            {"name": "create_character"},
         ]
 
         builder = CharacterKnowledgeBuilder(project_name="test_project")
@@ -39,7 +43,9 @@ class TestKnowledgeBuilderInitialization:
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_with_custom_save_frequency(self, mock_load_schemas, mock_load_prompt, mock_qe):
+    def test_init_with_custom_save_frequency(
+        self, mock_load_schemas, mock_load_prompt, mock_qe
+    ):
         """Should accept custom save frequency."""
         mock_load_prompt.return_value = "Test system prompt"
         mock_load_schemas.return_value = []
@@ -51,7 +57,9 @@ class TestKnowledgeBuilderInitialization:
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_creates_directory_paths(self, mock_load_schemas, mock_load_prompt, mock_qe):
+    def test_init_creates_directory_paths(
+        self, mock_load_schemas, mock_load_prompt, mock_qe
+    ):
         """Should set up correct directory paths."""
         mock_load_prompt.return_value = "Test system prompt"
         mock_load_schemas.return_value = []
@@ -64,7 +72,9 @@ class TestKnowledgeBuilderInitialization:
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_loads_system_prompt(self, mock_load_schemas, mock_load_prompt, mock_qe):
+    def test_init_loads_system_prompt(
+        self, mock_load_schemas, mock_load_prompt, mock_qe
+    ):
         """Should load knowledge building system prompt."""
         mock_load_prompt.return_value = "Test system prompt"
         mock_load_schemas.return_value = []
@@ -77,7 +87,9 @@ class TestKnowledgeBuilderInitialization:
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_loads_tool_schemas(self, mock_load_schemas, mock_load_prompt, mock_qe):
+    def test_init_loads_tool_schemas(
+        self, mock_load_schemas, mock_load_prompt, mock_qe
+    ):
         """Should load all tool schemas from knowledge_building directory."""
         mock_load_prompt.return_value = "Test system prompt"
         expected_tools = [
@@ -88,7 +100,7 @@ class TestKnowledgeBuilderInitialization:
             {"name": "create_relationship"},
             {"name": "add_relationship_claim"},
             {"name": "get_character"},
-            {"name": "search_wiki"}
+            {"name": "search_wiki"},
         ]
         mock_load_schemas.return_value = expected_tools
 
@@ -97,12 +109,26 @@ class TestKnowledgeBuilderInitialization:
         mock_load_schemas.assert_called_once_with("knowledge_building")
         assert len(builder.kb_tools) == 8
         tool_names = [t["name"] for t in builder.kb_tools]
-        assert all(tool in tool_names for tool in ["search_characters", "create_character", "update_character", "get_relationship", "create_relationship", "add_relationship_claim", "get_character", "search_wiki"])
+        assert all(
+            tool in tool_names
+            for tool in [
+                "search_characters",
+                "create_character",
+                "update_character",
+                "get_relationship",
+                "create_relationship",
+                "add_relationship_claim",
+                "get_character",
+                "search_wiki",
+            ]
+        )
 
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_creates_query_engine(self, mock_load_schemas, mock_load_prompt, mock_qe_class):
+    def test_init_creates_query_engine(
+        self, mock_load_schemas, mock_load_prompt, mock_qe_class
+    ):
         """Should create QueryEngine instance."""
         mock_load_prompt.return_value = "Test system prompt"
         mock_load_schemas.return_value = []
@@ -117,7 +143,9 @@ class TestKnowledgeBuilderInitialization:
     @patch("src.processor.analysis.knowledge_builder.QueryEngine")
     @patch("src.processor.analysis.knowledge_builder.load_system_prompt")
     @patch("src.processor.analysis.knowledge_builder.load_tool_schemas")
-    def test_init_creates_empty_knowledge_base(self, mock_load_schemas, mock_load_prompt, mock_qe):
+    def test_init_creates_empty_knowledge_base(
+        self, mock_load_schemas, mock_load_prompt, mock_qe
+    ):
         """Should initialize empty knowledge base structure."""
         mock_load_prompt.return_value = "Test system prompt"
         mock_load_schemas.return_value = []

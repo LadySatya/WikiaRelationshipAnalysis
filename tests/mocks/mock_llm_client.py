@@ -6,10 +6,10 @@ and enabling offline development. Responses are loaded from fixture files or
 generated based on query patterns.
 """
 
-from typing import Optional, List, Dict, Any
-from pathlib import Path
 import json
 import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 
 class MockLLMClient:
@@ -38,7 +38,7 @@ class MockLLMClient:
         "single_classification_yes": "yes",
         "single_classification_no": "no",
         "batch_classification": "Unknown: yes",  # Fallback for batch classification
-        "default": "Mako: yes"
+        "default": "Mako: yes",
     }
 
     # Pricing per 1M tokens (same as real Haiku)
@@ -53,7 +53,7 @@ class MockLLMClient:
         self,
         fixture_dir: Optional[Path] = None,
         use_fixtures: bool = True,
-        model: str = "claude-3-5-haiku-20241022"
+        model: str = "claude-3-5-haiku-20241022",
     ):
         """
         Initialize mock LLM client.
@@ -81,7 +81,7 @@ class MockLLMClient:
         """Load all fixture files from fixture directory."""
         for fixture_file in self.fixture_dir.rglob("*.json"):
             try:
-                with open(fixture_file, 'r', encoding='utf-8') as f:
+                with open(fixture_file, "r", encoding="utf-8") as f:
                     fixture_data = json.load(f)
                     # Store by fixture name
                     fixture_name = fixture_file.stem
@@ -95,7 +95,7 @@ class MockLLMClient:
         system_prompt: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 1024,
-        context: Optional[List[Dict[str, str]]] = None
+        context: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
         Generate mock response based on prompt.
@@ -116,7 +116,9 @@ class MockLLMClient:
         response = self._get_response(prompt, system_prompt)
 
         # Estimate token usage
-        estimated_input = len(prompt.split()) + (len(system_prompt.split()) if system_prompt else 0)
+        estimated_input = len(prompt.split()) + (
+            len(system_prompt.split()) if system_prompt else 0
+        )
         estimated_output = len(response.split())
 
         self.total_input_tokens += estimated_input
@@ -188,7 +190,10 @@ class MockLLMClient:
         # Single page classification
         if "is this wiki page about a character" in prompt.lower():
             # Simple heuristic: if title contains common character words, yes
-            if any(word in prompt.lower() for word in ["korra", "aang", "zuko", "mako", "bolin", "toph"]):
+            if any(
+                word in prompt.lower()
+                for word in ["korra", "aang", "zuko", "mako", "bolin", "toph"]
+            ):
                 return self.SYNTHETIC_RESPONSES["single_classification_yes"]
             return self.SYNTHETIC_RESPONSES["single_classification_no"]
 
@@ -205,8 +210,27 @@ class MockLLMClient:
         titles = [line.strip() for line in titles_section.split("\n") if line.strip()]
 
         # Simple heuristic: classify based on common patterns
-        character_keywords = ["korra", "aang", "zuko", "mako", "bolin", "bumi", "asami", "tenzin", "katara", "sokka", "toph"]
-        non_character_keywords = ["city", "state", "nation", "team", "avatar state", "episode"]
+        character_keywords = [
+            "korra",
+            "aang",
+            "zuko",
+            "mako",
+            "bolin",
+            "bumi",
+            "asami",
+            "tenzin",
+            "katara",
+            "sokka",
+            "toph",
+        ]
+        non_character_keywords = [
+            "city",
+            "state",
+            "nation",
+            "team",
+            "avatar state",
+            "episode",
+        ]
 
         response_lines = []
         for title in titles:
@@ -240,7 +264,7 @@ class MockLLMClient:
             "estimated_cost_usd": cost,
             "model": self.model,
             "call_count": self.call_count,
-            "mode": "MOCK"
+            "mode": "MOCK",
         }
 
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
@@ -255,8 +279,7 @@ class MockLLMClient:
             Estimated cost in USD
         """
         pricing = self.PRICING.get(
-            self.model,
-            self.PRICING["claude-3-5-haiku-20241022"]
+            self.model, self.PRICING["claude-3-5-haiku-20241022"]
         )
 
         input_cost = (input_tokens / 1_000_000) * pricing["input"]

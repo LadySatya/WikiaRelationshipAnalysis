@@ -5,13 +5,15 @@ This module provides semantic search functionality by combining EmbeddingGenerat
 and VectorStore. It retrieves relevant document chunks for RAG queries and formats
 them for LLM consumption.
 """
-from typing import List, Dict, Any, Optional
-import logging
 
+import logging
+from typing import Any, Dict, List, Optional
+
+from src.utils.logging_config import get_logger
+
+from ..config import get_config
 from .embeddings import EmbeddingGenerator
 from .vector_store import VectorStore
-from ..config import get_config
-from src.utils.logging_config import get_logger
 
 logger = get_logger("processor.rag")
 
@@ -39,9 +41,7 @@ class RAGRetriever:
     """
 
     def __init__(
-        self,
-        project_name: str,
-        vector_store_path: Optional[str] = None
+        self, project_name: str, vector_store_path: Optional[str] = None
     ) -> None:
         """
         Initialize RAGRetriever with project-specific components.
@@ -61,17 +61,13 @@ class RAGRetriever:
         # Initialize vector store for this project
         if vector_store_path:
             self.vector_store = VectorStore(
-                project_name=project_name,
-                persist_directory=vector_store_path
+                project_name=project_name, persist_directory=vector_store_path
             )
         else:
             self.vector_store = VectorStore(project_name=project_name)
 
     def retrieve(
-        self,
-        query: str,
-        k: int = 10,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        self, query: str, k: int = 10, metadata_filter: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """
         Retrieve relevant chunks for a query using semantic search.
@@ -102,9 +98,7 @@ class RAGRetriever:
 
         # Search vector store
         results = self.vector_store.similarity_search(
-            query_embedding=query_embedding,
-            k=k,
-            metadata_filter=metadata_filter
+            query_embedding=query_embedding, k=k, metadata_filter=metadata_filter
         )
 
         return results

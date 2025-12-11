@@ -5,14 +5,17 @@ This module handles converting text into dense vector representations (embedding
 that can be stored in a vector database for semantic search. Supports both local
 models (sentence-transformers) and cloud providers (Voyage AI).
 """
-from typing import List, Dict, Any, Optional, Union
-import numpy as np
-from pathlib import Path
-import os
+
 import logging
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+import numpy as np
+
+from src.utils.logging_config import get_logger
 
 from ..config import get_config
-from src.utils.logging_config import get_logger
 
 logger = get_logger("processor.rag")
 
@@ -46,7 +49,7 @@ class EmbeddingGenerator:
         self,
         provider: Optional[str] = None,
         model_name: Optional[str] = None,
-        api_key: Optional[str] = None
+        api_key: Optional[str] = None,
     ) -> None:
         """
         Initialize EmbeddingGenerator with specified provider and model.
@@ -88,12 +91,14 @@ class EmbeddingGenerator:
         """Load sentence-transformers model for local embedding generation."""
         if self._model is None:
             from sentence_transformers import SentenceTransformer
+
             self._model = SentenceTransformer(self.model_name)
 
     def _init_voyage_client(self) -> None:
         """Initialize Voyage AI client for cloud-based embeddings."""
         if self._client is None:
             import voyageai
+
             self._client = voyageai.Client(api_key=self.api_key)
 
     def generate_embedding(self, text: str) -> np.ndarray:
@@ -188,7 +193,7 @@ class EmbeddingGenerator:
             embedded_chunk = {
                 "text": chunk["text"],
                 "metadata": chunk["metadata"],
-                "embedding": embedding
+                "embedding": embedding,
             }
             embedded_chunks.append(embedded_chunk)
 
@@ -222,4 +227,6 @@ class EmbeddingGenerator:
             self._cached_dimension = len(test_embedding)
             return self._cached_dimension
 
-        raise ValueError(f"Cannot determine embedding dimension for provider '{self.provider}'")
+        raise ValueError(
+            f"Cannot determine embedding dimension for provider '{self.provider}'"
+        )

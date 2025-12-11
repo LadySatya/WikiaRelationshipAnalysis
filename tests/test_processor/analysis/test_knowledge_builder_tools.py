@@ -16,9 +16,11 @@ NOTE: All tools now require a 'canon' parameter to support multi-canon wikis.
 The default canon used in tests is 'main'.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
+
 from src.processor.analysis.knowledge_builder import CharacterKnowledgeBuilder
 
 # Default test canon
@@ -28,9 +30,15 @@ TEST_CANON = "main"
 @pytest.fixture
 def mock_builder():
     """Create a mocked CharacterKnowledgeBuilder for testing."""
-    with patch("src.processor.analysis.knowledge_builder.QueryEngine"), \
-         patch("src.processor.analysis.knowledge_builder.load_system_prompt") as mock_prompt, \
-         patch("src.processor.analysis.knowledge_builder.load_tool_schemas") as mock_schemas:
+    with (
+        patch("src.processor.analysis.knowledge_builder.QueryEngine"),
+        patch(
+            "src.processor.analysis.knowledge_builder.load_system_prompt"
+        ) as mock_prompt,
+        patch(
+            "src.processor.analysis.knowledge_builder.load_tool_schemas"
+        ) as mock_schemas,
+    ):
 
         mock_prompt.return_value = "Test prompt"
         mock_schemas.return_value = []
@@ -64,7 +72,9 @@ class TestSearchCharactersTool:
             "Katara": {"name": "Katara", "aliases": []}
         }
 
-        result = mock_builder._tool_search_characters("Katare", canon=TEST_CANON)  # Small typo
+        result = mock_builder._tool_search_characters(
+            "Katare", canon=TEST_CANON
+        )  # Small typo
 
         assert result["count"] == 1
         assert result["matches"][0]["name"] == "Katara"
@@ -76,7 +86,9 @@ class TestSearchCharactersTool:
             "Aang": {"name": "Aang", "aliases": ["The Last Airbender", "Avatar"]}
         }
 
-        result = mock_builder._tool_search_characters("Last Airbender", canon=TEST_CANON)
+        result = mock_builder._tool_search_characters(
+            "Last Airbender", canon=TEST_CANON
+        )
 
         assert result["count"] == 1
         assert result["matches"][0]["name"] == "Aang"
@@ -85,7 +97,7 @@ class TestSearchCharactersTool:
         """Should return all matches above threshold."""
         mock_builder.knowledge_base["characters"][TEST_CANON] = {
             "Aang": {"name": "Aang", "aliases": ["Avatar Aang"]},
-            "Avatar Korra": {"name": "Avatar Korra", "aliases": []}
+            "Avatar Korra": {"name": "Avatar Korra", "aliases": []},
         }
 
         result = mock_builder._tool_search_characters("Avatar", canon=TEST_CANON)
@@ -122,7 +134,7 @@ class TestCreateCharacterTool:
             canon=TEST_CANON,
             aliases=["Avatar Aang"],
             bio="The last airbender",
-            source_url="https://example.com/aang"
+            source_url="https://example.com/aang",
         )
 
         assert result["success"] is True
@@ -136,7 +148,7 @@ class TestCreateCharacterTool:
             canon=TEST_CANON,
             aliases=["Avatar Aang", "The Last Airbender"],
             bio="Test bio",
-            source_url="https://example.com"
+            source_url="https://example.com",
         )
 
         char = mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"]
@@ -153,7 +165,7 @@ class TestCreateCharacterTool:
             canon=TEST_CANON,
             aliases=[],
             bio="Test",
-            source_url="https://example.com"
+            source_url="https://example.com",
         )
 
         result = mock_builder._tool_create_character(
@@ -161,7 +173,7 @@ class TestCreateCharacterTool:
             canon=TEST_CANON,
             aliases=[],
             bio="Test2",
-            source_url="https://example.com"
+            source_url="https://example.com",
         )
 
         assert result["success"] is False
@@ -174,7 +186,7 @@ class TestCreateCharacterTool:
             canon=TEST_CANON,
             aliases=[],
             bio="Test",
-            source_url="https://example.com"
+            source_url="https://example.com",
         )
 
         assert result["success"] is False
@@ -190,13 +202,11 @@ class TestUpdateCharacterTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {
             "name": "Aang",
             "aliases": [],
-            "source_urls": ["https://example.com/1"]
+            "source_urls": ["https://example.com/1"],
         }
 
         result = mock_builder._tool_update_character(
-            name="Aang",
-            canon=TEST_CANON,
-            add_source_url="https://example.com/2"
+            name="Aang", canon=TEST_CANON, add_source_url="https://example.com/2"
         )
 
         assert result["success"] is True
@@ -209,13 +219,11 @@ class TestUpdateCharacterTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {
             "name": "Aang",
             "aliases": ["Avatar Aang"],
-            "source_urls": []
+            "source_urls": [],
         }
 
         result = mock_builder._tool_update_character(
-            name="Aang",
-            canon=TEST_CANON,
-            add_aliases=["The Last Airbender"]
+            name="Aang", canon=TEST_CANON, add_aliases=["The Last Airbender"]
         )
 
         assert result["success"] is True
@@ -230,13 +238,11 @@ class TestUpdateCharacterTool:
             "name": "Aang",
             "aliases": [],
             "bio": "Old bio",
-            "source_urls": []
+            "source_urls": [],
         }
 
         result = mock_builder._tool_update_character(
-            name="Aang",
-            canon=TEST_CANON,
-            bio="New bio"
+            name="Aang", canon=TEST_CANON, bio="New bio"
         )
 
         assert result["success"] is True
@@ -248,13 +254,11 @@ class TestUpdateCharacterTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {
             "name": "Aang",
             "aliases": [],
-            "source_urls": ["https://example.com"]
+            "source_urls": ["https://example.com"],
         }
 
         result = mock_builder._tool_update_character(
-            name="Aang",
-            canon=TEST_CANON,
-            add_source_url="https://example.com"
+            name="Aang", canon=TEST_CANON, add_source_url="https://example.com"
         )
 
         assert result["source_url_count"] == 1  # No duplicate
@@ -262,9 +266,7 @@ class TestUpdateCharacterTool:
     def test_update_returns_error_for_nonexistent(self, mock_builder):
         """Should return error for nonexistent character."""
         result = mock_builder._tool_update_character(
-            name="Nonexistent",
-            canon=TEST_CANON,
-            bio="Test"
+            name="Nonexistent", canon=TEST_CANON, bio="Test"
         )
 
         assert result["success"] is False
@@ -281,7 +283,7 @@ class TestGetCharacterTool:
             "name": "Aang",
             "aliases": ["Avatar Aang"],
             "bio": "The last airbender",
-            "source_urls": ["https://example.com"]
+            "source_urls": ["https://example.com"],
         }
 
         result = mock_builder._tool_get_character("Aang", canon=TEST_CANON)
@@ -305,14 +307,16 @@ class TestCreateRelationshipTool:
         """Should create new relationship successfully when both characters exist."""
         # Setup: characters must exist first
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {"name": "Aang"}
-        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {"name": "Katara"}
+        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {
+            "name": "Katara"
+        }
 
         result = mock_builder._tool_create_relationship(
             character_a="Aang",
             character_b="Katara",
             canon=TEST_CANON,
             relationship_type="friend",
-            summary="They are friends"
+            summary="They are friends",
         )
 
         assert result["success"] is True
@@ -330,7 +334,7 @@ class TestCreateRelationshipTool:
             character_b="Aang",
             canon=TEST_CANON,
             relationship_type="enemy",
-            summary="Enemies"
+            summary="Enemies",
         )
 
         # Should be stored as (Aang, Zuko) due to alphabetical order
@@ -340,14 +344,16 @@ class TestCreateRelationshipTool:
     def test_create_relationship_stores_data(self, mock_builder):
         """Should store all relationship data."""
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {"name": "Aang"}
-        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {"name": "Katara"}
+        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {
+            "name": "Katara"
+        }
 
         mock_builder._tool_create_relationship(
             character_a="Aang",
             character_b="Katara",
             canon=TEST_CANON,
             relationship_type="friend",
-            summary="Best friends"
+            summary="Best friends",
         )
 
         key = ("Aang", "Katara")
@@ -360,14 +366,16 @@ class TestCreateRelationshipTool:
     def test_create_relationship_rejects_duplicate(self, mock_builder):
         """Should reject duplicate relationship."""
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {"name": "Aang"}
-        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {"name": "Katara"}
+        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {
+            "name": "Katara"
+        }
 
         mock_builder._tool_create_relationship(
             character_a="Aang",
             character_b="Katara",
             canon=TEST_CANON,
             relationship_type="friend",
-            summary="Test"
+            summary="Test",
         )
 
         result = mock_builder._tool_create_relationship(
@@ -375,7 +383,7 @@ class TestCreateRelationshipTool:
             character_b="Katara",
             canon=TEST_CANON,
             relationship_type="ally",
-            summary="Test2"
+            summary="Test2",
         )
 
         assert result["success"] is False
@@ -383,14 +391,16 @@ class TestCreateRelationshipTool:
 
     def test_create_relationship_fails_if_character_a_missing(self, mock_builder):
         """Should fail if character_a doesn't exist."""
-        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {"name": "Katara"}
+        mock_builder.knowledge_base["characters"][TEST_CANON]["Katara"] = {
+            "name": "Katara"
+        }
 
         result = mock_builder._tool_create_relationship(
             character_a="NonexistentPerson",
             character_b="Katara",
             canon=TEST_CANON,
             relationship_type="friend",
-            summary="Test"
+            summary="Test",
         )
 
         assert result["success"] is False
@@ -407,7 +417,7 @@ class TestCreateRelationshipTool:
             character_b="Kyoshi Warriors",  # This is a group, not a character
             canon=TEST_CANON,
             relationship_type="member",
-            summary="Test"
+            summary="Test",
         )
 
         assert result["success"] is False
@@ -422,7 +432,7 @@ class TestCreateRelationshipTool:
             character_b="AlsoNobody",
             canon=TEST_CANON,
             relationship_type="friend",
-            summary="Test"
+            summary="Test",
         )
 
         assert result["success"] is False
@@ -440,7 +450,7 @@ class TestAddRelationshipClaimTool:
             "characters": ["Aang", "Katara"],
             "type": "friend",
             "summary": "Friends",
-            "claims": []
+            "claims": [],
         }
 
         result = mock_builder._tool_add_relationship_claim(
@@ -449,7 +459,7 @@ class TestAddRelationshipClaimTool:
             canon=TEST_CANON,
             claim="They met in an iceberg",
             evidence_url="https://example.com",
-            evidence_text="Katara found Aang in an iceberg"
+            evidence_text="Katara found Aang in an iceberg",
         )
 
         assert result["success"] is True
@@ -463,7 +473,7 @@ class TestAddRelationshipClaimTool:
         mock_builder.knowledge_base["relationships"][TEST_CANON][("Aang", "Katara")] = {
             "characters": ["Aang", "Katara"],
             "type": "friend",
-            "claims": []
+            "claims": [],
         }
 
         mock_builder._tool_add_relationship_claim(
@@ -472,7 +482,7 @@ class TestAddRelationshipClaimTool:
             canon=TEST_CANON,
             claim="Test claim",
             evidence_url="https://example.com",
-            evidence_text="Test evidence"
+            evidence_text="Test evidence",
         )
 
         key = ("Aang", "Katara")
@@ -493,11 +503,11 @@ class TestAddRelationshipClaimTool:
                         {
                             "evidence_url": "https://example.com/1",
                             "evidence_text": "First evidence",
-                            "added_at": "2025-01-01T00:00:00Z"
+                            "added_at": "2025-01-01T00:00:00Z",
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         }
 
         result = mock_builder._tool_add_relationship_claim(
@@ -506,7 +516,7 @@ class TestAddRelationshipClaimTool:
             canon=TEST_CANON,
             claim="They met in an iceberg",
             evidence_url="https://example.com/2",
-            evidence_text="Second evidence"
+            evidence_text="Second evidence",
         )
 
         assert result["success"] is True
@@ -518,7 +528,7 @@ class TestAddRelationshipClaimTool:
         mock_builder.knowledge_base["relationships"][TEST_CANON][("Aang", "Katara")] = {
             "characters": ["Aang", "Katara"],
             "type": "friend",
-            "claims": []
+            "claims": [],
         }
 
         long_text = "x" * 300
@@ -529,11 +539,13 @@ class TestAddRelationshipClaimTool:
             canon=TEST_CANON,
             claim="Test",
             evidence_url="https://example.com",
-            evidence_text=long_text
+            evidence_text=long_text,
         )
 
         key = ("Aang", "Katara")
-        evidence = mock_builder.knowledge_base["relationships"][TEST_CANON][key]["claims"][0]["evidence"][0]
+        evidence = mock_builder.knowledge_base["relationships"][TEST_CANON][key][
+            "claims"
+        ][0]["evidence"][0]
         assert len(evidence["evidence_text"]) == 200
 
     def test_add_claim_returns_error_for_nonexistent_relationship(self, mock_builder):
@@ -544,7 +556,7 @@ class TestAddRelationshipClaimTool:
             canon=TEST_CANON,
             claim="Test",
             evidence_url="https://example.com",
-            evidence_text="Test"
+            evidence_text="Test",
         )
 
         assert result["success"] is False
@@ -568,11 +580,11 @@ class TestGetRelationshipTool:
                         {
                             "evidence_url": "https://example.com",
                             "evidence_text": "Test evidence",
-                            "added_at": "2025-01-01T00:00:00Z"
+                            "added_at": "2025-01-01T00:00:00Z",
                         }
-                    ]
+                    ],
                 }
-            ]
+            ],
         }
 
         result = mock_builder._tool_get_relationship("Aang", "Katara", canon=TEST_CANON)
@@ -595,22 +607,23 @@ class TestSearchWikiTool:
 
     def test_search_wiki_calls_query_engine(self, mock_builder):
         """Should call query engine with correct parameters."""
-        mock_builder.query_engine.query_with_citations = Mock(return_value={
-            "evidence": [
-                {
-                    "cited_text": "Test result",
-                    "url": "https://example.com",
-                    "page_title": "Test Page"
-                }
-            ],
-            "text": "Summary text"
-        })
+        mock_builder.query_engine.query_with_citations = Mock(
+            return_value={
+                "evidence": [
+                    {
+                        "cited_text": "Test result",
+                        "url": "https://example.com",
+                        "page_title": "Test Page",
+                    }
+                ],
+                "text": "Summary text",
+            }
+        )
 
         result = mock_builder._tool_search_wiki("test query", max_results=3)
 
         mock_builder.query_engine.query_with_citations.assert_called_once_with(
-            query="test query",
-            k=3
+            query="test query", k=3
         )
         assert result["count"] == 1
         assert len(result["results"]) == 1
@@ -644,7 +657,7 @@ class TestAddAffiliationTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Suki"] = {
             "name": "Suki",
             "aliases": [],
-            "source_urls": []
+            "source_urls": [],
         }
 
         result = mock_builder._tool_add_affiliation(
@@ -653,7 +666,7 @@ class TestAddAffiliationTool:
             group="Kyoshi Warriors",
             role="Leader",
             evidence_url="https://example.com/suki",
-            evidence_text="Suki is the leader of the Kyoshi Warriors"
+            evidence_text="Suki is the leader of the Kyoshi Warriors",
         )
 
         assert result["success"] is True
@@ -668,7 +681,7 @@ class TestAddAffiliationTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {
             "name": "Aang",
             "aliases": [],
-            "source_urls": []
+            "source_urls": [],
         }
 
         mock_builder._tool_add_affiliation(
@@ -677,7 +690,7 @@ class TestAddAffiliationTool:
             group="Air Acolytes",
             role="Founder",
             evidence_url="https://example.com/aang",
-            evidence_text="Aang founded the Air Acolytes"
+            evidence_text="Aang founded the Air Acolytes",
         )
 
         char = mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"]
@@ -694,7 +707,7 @@ class TestAddAffiliationTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Zuko"] = {
             "name": "Zuko",
             "aliases": [],
-            "source_urls": []
+            "source_urls": [],
         }
 
         result = mock_builder._tool_add_affiliation(
@@ -702,7 +715,7 @@ class TestAddAffiliationTool:
             canon=TEST_CANON,
             group="Team Avatar",
             evidence_url="https://example.com/zuko",
-            evidence_text="Zuko joined Team Avatar"
+            evidence_text="Zuko joined Team Avatar",
         )
 
         assert result["success"] is True
@@ -719,9 +732,9 @@ class TestAddAffiliationTool:
                     "group": "Kyoshi Warriors",
                     "role": "Member",
                     "evidence_url": "https://old.com",
-                    "evidence_text": "Old evidence"
+                    "evidence_text": "Old evidence",
                 }
-            ]
+            ],
         }
 
         result = mock_builder._tool_add_affiliation(
@@ -730,7 +743,7 @@ class TestAddAffiliationTool:
             group="kyoshi warriors",  # Different case
             role="Member",
             evidence_url="https://new.com",
-            evidence_text="New evidence"
+            evidence_text="New evidence",
         )
 
         assert result["success"] is True
@@ -748,9 +761,9 @@ class TestAddAffiliationTool:
                     "group": "Kyoshi Warriors",
                     "role": "Member",
                     "evidence_url": "https://old.com",
-                    "evidence_text": "Old evidence"
+                    "evidence_text": "Old evidence",
                 }
-            ]
+            ],
         }
 
         result = mock_builder._tool_add_affiliation(
@@ -759,7 +772,7 @@ class TestAddAffiliationTool:
             group="Kyoshi Warriors",
             role="Leader",  # Updated role
             evidence_url="https://new.com",
-            evidence_text="Suki became the leader"
+            evidence_text="Suki became the leader",
         )
 
         assert result["success"] is True
@@ -774,7 +787,7 @@ class TestAddAffiliationTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Zuko"] = {
             "name": "Zuko",
             "aliases": [],
-            "source_urls": []
+            "source_urls": [],
         }
 
         mock_builder._tool_add_affiliation(
@@ -783,7 +796,7 @@ class TestAddAffiliationTool:
             group="Fire Nation",
             role="Prince",
             evidence_url="https://example.com/1",
-            evidence_text="Zuko is prince of Fire Nation"
+            evidence_text="Zuko is prince of Fire Nation",
         )
 
         result = mock_builder._tool_add_affiliation(
@@ -792,7 +805,7 @@ class TestAddAffiliationTool:
             group="Team Avatar",
             role="Member",
             evidence_url="https://example.com/2",
-            evidence_text="Zuko joined Team Avatar"
+            evidence_text="Zuko joined Team Avatar",
         )
 
         assert result["success"] is True
@@ -808,7 +821,7 @@ class TestAddAffiliationTool:
             canon=TEST_CANON,
             group="Some Group",
             evidence_url="https://example.com",
-            evidence_text="Test"
+            evidence_text="Test",
         )
 
         assert result["success"] is False
@@ -820,7 +833,7 @@ class TestAddAffiliationTool:
         mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"] = {
             "name": "Aang",
             "aliases": [],
-            "source_urls": []
+            "source_urls": [],
         }
 
         long_text = "A" * 300  # 300 characters
@@ -830,7 +843,7 @@ class TestAddAffiliationTool:
             canon=TEST_CANON,
             group="Test Group",
             evidence_url="https://example.com",
-            evidence_text=long_text
+            evidence_text=long_text,
         )
 
         char = mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"]

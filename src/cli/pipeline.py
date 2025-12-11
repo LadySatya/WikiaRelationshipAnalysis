@@ -4,8 +4,10 @@ Pipeline and validation commands.
 
 from pathlib import Path
 from typing import Optional
-from .utils import validate_project_exists, setup_project_logging
-from src.utils.logging_config import setup_logging, get_logger
+
+from src.utils.logging_config import get_logger, setup_logging
+
+from .utils import setup_project_logging, validate_project_exists
 
 
 def validate_command(project_name: str):
@@ -30,7 +32,7 @@ def validate_command(project_name: str):
         logger.error(f"Run 'python main.py build {project_name}' first")
         return
 
-    with open(graph_path, 'r', encoding='utf-8') as f:
+    with open(graph_path, "r", encoding="utf-8") as f:
         graph = json.load(f)
 
     nodes = graph.get("nodes", [])
@@ -54,9 +56,15 @@ def validate_command(project_name: str):
         med_conf = sum(1 for e in edges if 0.5 <= e.get("confidence", 0) < 0.8)
         low_conf = sum(1 for e in edges if e.get("confidence", 0) < 0.5)
 
-        logger.info(f"  High (>=0.8):    {high_conf:3d} ({high_conf/len(edges)*100:5.1f}%)")
-        logger.info(f"  Medium (0.5-0.8):   {med_conf:3d} ({med_conf/len(edges)*100:5.1f}%)")
-        logger.info(f"  Low (<0.5):        {low_conf:3d} ({low_conf/len(edges)*100:5.1f}%)")
+        logger.info(
+            f"  High (>=0.8):    {high_conf:3d} ({high_conf/len(edges)*100:5.1f}%)"
+        )
+        logger.info(
+            f"  Medium (0.5-0.8):   {med_conf:3d} ({med_conf/len(edges)*100:5.1f}%)"
+        )
+        logger.info(
+            f"  Low (<0.5):        {low_conf:3d} ({low_conf/len(edges)*100:5.1f}%)"
+        )
 
     # Evidence statistics
     if edges:
@@ -75,7 +83,7 @@ def validate_command(project_name: str):
     high_conf_edges = sorted(
         [e for e in edges if e.get("confidence", 0) >= 0.8],
         key=lambda e: e.get("confidence", 0),
-        reverse=True
+        reverse=True,
     )[:3]
 
     if high_conf_edges:
@@ -99,7 +107,7 @@ def validate_command(project_name: str):
         char_file = characters_dir / f"{first_node['id'].replace(' ', '_')}.json"
 
         if char_file.exists():
-            with open(char_file, 'r', encoding='utf-8') as f:
+            with open(char_file, "r", encoding="utf-8") as f:
                 profile = json.load(f)
 
             logger.info("=" * 80)
@@ -122,11 +130,19 @@ def validate_command(project_name: str):
                     # Show first 3 claims
                     for i, claim in enumerate(claims[:3], 1):
                         logger.info(f"  {i}. \"{claim['claim']}\"")
-                        logger.info(f"     Confidence: {claim.get('confidence', 0.0):.2f}, Evidence: {len(claim.get('evidence', []))} citations")
-                        if claim.get('evidence'):
-                            evidence = claim['evidence'][0]
-                            cited_preview = evidence['cited_text'][:80] + "..." if len(evidence['cited_text']) > 80 else evidence['cited_text']
-                            logger.info(f"     Source: {evidence.get('title', 'Unknown')}")
+                        logger.info(
+                            f"     Confidence: {claim.get('confidence', 0.0):.2f}, Evidence: {len(claim.get('evidence', []))} citations"
+                        )
+                        if claim.get("evidence"):
+                            evidence = claim["evidence"][0]
+                            cited_preview = (
+                                evidence["cited_text"][:80] + "..."
+                                if len(evidence["cited_text"]) > 80
+                                else evidence["cited_text"]
+                            )
+                            logger.info(
+                                f"     Source: {evidence.get('title', 'Unknown')}"
+                            )
                             logger.info(f"     Cited: {cited_preview}")
                         logger.info("")
 
@@ -141,7 +157,7 @@ async def pipeline_command(
     wikia_url: Optional[str] = None,
     max_pages: Optional[int] = None,
     max_characters: int = 5,
-    skip_crawl: bool = False
+    skip_crawl: bool = False,
 ):
     """
     Run the full pipeline from crawl to validation.
@@ -154,7 +170,7 @@ async def pipeline_command(
         skip_crawl: Skip crawling phase (use existing data)
     """
     from .crawl_commands import crawl_command
-    from .processor_commands import index_command, discover_command
+    from .processor_commands import discover_command, index_command
 
     # Setup logging
     setup_logging(project_name, log_level="INFO")

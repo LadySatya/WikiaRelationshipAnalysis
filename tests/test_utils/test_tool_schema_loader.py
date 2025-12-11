@@ -3,12 +3,14 @@ Tests for tool_schema_loader module.
 
 Tests the loading of tool schemas and system prompts from JSON files.
 """
-import pytest
-from pathlib import Path
-from unittest.mock import patch, mock_open
-import json
 
-from src.utils.tool_schema_loader import load_tool_schemas, load_system_prompt
+import json
+from pathlib import Path
+from unittest.mock import mock_open, patch
+
+import pytest
+
+from src.utils.tool_schema_loader import load_system_prompt, load_tool_schemas
 
 
 @pytest.mark.unit

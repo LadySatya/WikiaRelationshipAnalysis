@@ -4,10 +4,11 @@ Shared utilities for CLI commands.
 
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
 import yaml
 
-from src.utils.logging_config import setup_logging, get_logger
+from src.utils.logging_config import get_logger, setup_logging
 
 
 def setup_project_logging(project_name: str, phase_name: str) -> logging.Logger:
@@ -45,18 +46,18 @@ def load_crawler_config() -> Dict[str, Any]:
         Dictionary with crawler configuration
     """
     config_path = Path("config/crawler_config.yaml")
-    with open(config_path, 'r') as f:
+    with open(config_path, "r") as f:
         full_config = yaml.safe_load(f)
 
     return {
-        'respect_robots_txt': full_config['crawler']['respect_robots_txt'],
-        'user_agent': full_config['crawler']['user_agent'],
-        'default_delay_seconds': full_config['crawler']['default_delay_seconds'],
-        'target_namespaces': full_config['crawler']['target_namespaces'],
-        'timeout_seconds': full_config['crawler']['timeout_seconds'],
-        'max_retries': full_config['crawler']['max_retries'],
-        'exclude_patterns': full_config['crawler']['exclude_patterns'],
-        'save_state_every_n_pages': full_config['crawler']['save_state_every_n_pages'],
+        "respect_robots_txt": full_config["crawler"]["respect_robots_txt"],
+        "user_agent": full_config["crawler"]["user_agent"],
+        "default_delay_seconds": full_config["crawler"]["default_delay_seconds"],
+        "target_namespaces": full_config["crawler"]["target_namespaces"],
+        "timeout_seconds": full_config["crawler"]["timeout_seconds"],
+        "max_retries": full_config["crawler"]["max_retries"],
+        "exclude_patterns": full_config["crawler"]["exclude_patterns"],
+        "save_state_every_n_pages": full_config["crawler"]["save_state_every_n_pages"],
     }
 
 

@@ -3,9 +3,10 @@ Tests for ContentChunker - splits wiki pages into semantic chunks for embedding.
 
 Following TDD methodology: write tests first, then implement.
 """
-import pytest
-from typing import List, Dict, Any
 
+from typing import Any, Dict, List
+
+import pytest
 
 # Mark all tests in this file as unit tests
 pytestmark = pytest.mark.unit
@@ -36,7 +37,9 @@ class TestContentChunkerInitialization:
         """ContentChunker should validate that chunk_size > chunk_overlap."""
         from src.processor.core.content_chunker import ContentChunker
 
-        with pytest.raises(ValueError, match="chunk_size must be greater than chunk_overlap"):
+        with pytest.raises(
+            ValueError, match="chunk_size must be greater than chunk_overlap"
+        ):
             ContentChunker(chunk_size=100, chunk_overlap=150)
 
     def test_init_validates_positive_values(self):
@@ -81,7 +84,7 @@ class TestContentChunkerChunking:
         for chunk in chunks:
             # If chunk doesn't end at text boundary, it should end with sentence boundary or space
             if chunk != chunks[-1]:  # Last chunk might not end with period
-                assert chunk.rstrip()[-1] in '.!? ' or chunk == text
+                assert chunk.rstrip()[-1] in ".!? " or chunk == text
 
     def test_chunk_text_with_overlap(self):
         """ContentChunker should create overlapping chunks for context."""
@@ -135,8 +138,8 @@ class TestContentChunkerPageProcessing:
             "url": "https://example.com/wiki/Test",
             "content": {
                 "title": "Test Page",
-                "main_content": "A" * 120  # Content that will be chunked
-            }
+                "main_content": "A" * 120,  # Content that will be chunked
+            },
         }
 
         chunks = chunker.chunk_page(page_data)
@@ -160,10 +163,7 @@ class TestContentChunkerPageProcessing:
         chunker = ContentChunker()
         page_data = {
             "url": "https://avatar.fandom.com/wiki/Aang",
-            "content": {
-                "title": "Aang",
-                "main_content": "Aang is the Avatar."
-            }
+            "content": {"title": "Aang", "main_content": "Aang is the Avatar."},
         }
 
         chunks = chunker.chunk_page(page_data)
@@ -182,12 +182,12 @@ class TestContentChunkerPageProcessing:
         pages = [
             {
                 "url": "https://example.com/wiki/Page1",
-                "content": {"title": "Page 1", "main_content": "Content for page 1"}
+                "content": {"title": "Page 1", "main_content": "Content for page 1"},
             },
             {
                 "url": "https://example.com/wiki/Page2",
-                "content": {"title": "Page 2", "main_content": "Content for page 2"}
-            }
+                "content": {"title": "Page 2", "main_content": "Content for page 2"},
+            },
         ]
 
         all_chunks = chunker.chunk_pages(pages)
@@ -209,7 +209,7 @@ class TestContentChunkerPageProcessing:
             "content": {
                 "title": "Empty Page"
                 # No main_content field
-            }
+            },
         }
 
         chunks = chunker.chunk_page(page_data)
@@ -257,8 +257,9 @@ class TestContentChunkerEdgeCases:
         Regression test for bug where early sentence boundaries could cause
         start position to not advance, leading to infinite loop.
         """
-        from src.processor.core.content_chunker import ContentChunker
         import time
+
+        from src.processor.core.content_chunker import ContentChunker
 
         chunker = ContentChunker(chunk_size=500, chunk_overlap=50)
 

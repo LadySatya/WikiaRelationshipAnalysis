@@ -8,9 +8,10 @@ This module tests the QueryEngine class which handles:
 - Context building and prompt formatting
 - Response generation with source tracking
 """
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Mark all tests in this file as unit tests
 pytestmark = pytest.mark.unit
@@ -23,8 +24,10 @@ class TestQueryEngineInitialization:
         """QueryEngine should initialize with project name."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever"), \
-             patch("src.processor.rag.query_engine.LLMClient"):
+        with (
+            patch("src.processor.rag.query_engine.RAGRetriever"),
+            patch("src.processor.rag.query_engine.LLMClient"),
+        ):
 
             engine = QueryEngine(project_name="avatar_wiki")
 
@@ -34,8 +37,12 @@ class TestQueryEngineInitialization:
         """QueryEngine should create RAGRetriever for project."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient"):
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient"),
+        ):
 
             engine = QueryEngine(project_name="test_wiki")
 
@@ -46,8 +53,10 @@ class TestQueryEngineInitialization:
         """QueryEngine should create LLMClient."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever"), \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch("src.processor.rag.query_engine.RAGRetriever"),
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             engine = QueryEngine(project_name="test_wiki")
 
@@ -62,27 +71,40 @@ class TestQueryEngineQuery:
         """QueryEngine should execute full RAG query (retrieve + generate)."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             # Mock retriever
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = [
-                {"id": "chunk1", "text": "Aang is the Avatar", "metadata": {"url": "url1"}, "distance": 0.1}
+                {
+                    "id": "chunk1",
+                    "text": "Aang is the Avatar",
+                    "metadata": {"url": "url1"},
+                    "distance": 0.1,
+                }
             ]
             mock_retriever.build_context.return_value = "Context: Aang is the Avatar"
             mock_retriever_class.return_value = mock_retriever
 
             # Mock LLM client
             mock_llm = MagicMock()
-            mock_llm.generate.return_value = "Aang is the protagonist of Avatar: The Last Airbender."
+            mock_llm.generate.return_value = (
+                "Aang is the protagonist of Avatar: The Last Airbender."
+            )
             mock_llm_class.return_value = mock_llm
 
             engine = QueryEngine(project_name="test_wiki")
             response = engine.query("Who is Aang?")
 
             # Should retrieve chunks
-            mock_retriever.retrieve.assert_called_once_with(query="Who is Aang?", k=10, metadata_filter=None)
+            mock_retriever.retrieve.assert_called_once_with(
+                query="Who is Aang?", k=10, metadata_filter=None
+            )
 
             # Should build context
             mock_retriever.build_context.assert_called_once()
@@ -97,8 +119,12 @@ class TestQueryEngineQuery:
         """QueryEngine should support custom k for retrieval."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
@@ -120,8 +146,12 @@ class TestQueryEngineQuery:
         """QueryEngine should support metadata filtering."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
@@ -144,8 +174,12 @@ class TestQueryEngineQuery:
         """QueryEngine should use default system prompt for RAG context."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
@@ -168,8 +202,12 @@ class TestQueryEngineQuery:
         """QueryEngine should include retrieved context in LLM prompt."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = [
@@ -187,7 +225,7 @@ class TestQueryEngineQuery:
 
             # LLM prompt should include context
             call_args = mock_llm.generate.call_args
-            prompt = call_args.kwargs['prompt']  # Access keyword argument
+            prompt = call_args.kwargs["prompt"]  # Access keyword argument
             assert "Important context" in prompt or "context" in prompt.lower()
 
 
@@ -198,12 +236,21 @@ class TestQueryEngineResponse:
         """QueryEngine should return detailed response with metadata."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = [
-                {"id": "chunk1", "text": "Context", "metadata": {"url": "url1"}, "distance": 0.1}
+                {
+                    "id": "chunk1",
+                    "text": "Context",
+                    "metadata": {"url": "url1"},
+                    "distance": 0.1,
+                }
             ]
             mock_retriever.build_context.return_value = "Context"
             mock_retriever_class.return_value = mock_retriever
@@ -213,7 +260,7 @@ class TestQueryEngineResponse:
             mock_llm.get_usage_stats.return_value = {
                 "total_input_tokens": 100,
                 "total_output_tokens": 50,
-                "estimated_cost_usd": 0.001
+                "estimated_cost_usd": 0.001,
             }
             mock_llm_class.return_value = mock_llm
 
@@ -235,8 +282,12 @@ class TestQueryEngineResponse:
         """QueryEngine detailed response should include original query."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
@@ -262,8 +313,10 @@ class TestQueryEngineEdgeCases:
         """QueryEngine should handle empty queries."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever"), \
-             patch("src.processor.rag.query_engine.LLMClient"):
+        with (
+            patch("src.processor.rag.query_engine.RAGRetriever"),
+            patch("src.processor.rag.query_engine.LLMClient"),
+        ):
 
             engine = QueryEngine(project_name="test_wiki")
 
@@ -274,8 +327,12 @@ class TestQueryEngineEdgeCases:
         """QueryEngine should handle case when no relevant chunks found."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
@@ -297,13 +354,15 @@ class TestQueryEngineEdgeCases:
         """QueryEngine should provide access to LLM usage stats."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever"), \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch("src.processor.rag.query_engine.RAGRetriever"),
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_llm = MagicMock()
             mock_llm.get_usage_stats.return_value = {
                 "total_tokens": 150,
-                "estimated_cost_usd": 0.002
+                "estimated_cost_usd": 0.002,
             }
             mock_llm_class.return_value = mock_llm
 
@@ -321,19 +380,28 @@ class TestQueryEngineWithCitations:
         """QueryEngine should retrieve chunks for citation-enabled queries."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = [
-                {"id": "c1", "text": "Aang is the Avatar", "metadata": {"url": "wiki/aang", "title": "Aang"}, "distance": 0.1}
+                {
+                    "id": "c1",
+                    "text": "Aang is the Avatar",
+                    "metadata": {"url": "wiki/aang", "title": "Aang"},
+                    "distance": 0.1,
+                }
             ]
             mock_retriever_class.return_value = mock_retriever
 
             mock_llm = MagicMock()
             mock_llm.query_with_citations.return_value = {
                 "text": "Aang is the protagonist",
-                "evidence": []
+                "evidence": [],
             }
             mock_llm_class.return_value = mock_llm
 
@@ -341,19 +409,35 @@ class TestQueryEngineWithCitations:
             result = engine.query_with_citations("Who is Aang?")
 
             # Should retrieve chunks
-            mock_retriever.retrieve.assert_called_once_with(query="Who is Aang?", k=10, metadata_filter=None)
+            mock_retriever.retrieve.assert_called_once_with(
+                query="Who is Aang?", k=10, metadata_filter=None
+            )
 
     def test_query_with_citations_passes_documents_to_llm(self):
         """QueryEngine should pass retrieved chunks as documents to LLM."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             chunks = [
-                {"id": "c1", "text": "Doc 1 text", "metadata": {"url": "url1", "title": "T1"}, "distance": 0.1},
-                {"id": "c2", "text": "Doc 2 text", "metadata": {"url": "url2", "title": "T2"}, "distance": 0.2}
+                {
+                    "id": "c1",
+                    "text": "Doc 1 text",
+                    "metadata": {"url": "url1", "title": "T1"},
+                    "distance": 0.1,
+                },
+                {
+                    "id": "c2",
+                    "text": "Doc 2 text",
+                    "metadata": {"url": "url2", "title": "T2"},
+                    "distance": 0.2,
+                },
             ]
             mock_retriever.retrieve.return_value = chunks
             mock_retriever_class.return_value = mock_retriever
@@ -361,7 +445,7 @@ class TestQueryEngineWithCitations:
             mock_llm = MagicMock()
             mock_llm.query_with_citations.return_value = {
                 "text": "Answer",
-                "evidence": []
+                "evidence": [],
             }
             mock_llm_class.return_value = mock_llm
 
@@ -388,12 +472,21 @@ class TestQueryEngineWithCitations:
         """QueryEngine should return both text and evidence from citation query."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = [
-                {"id": "c1", "text": "Context", "metadata": {"url": "wiki/aang", "title": "Aang"}, "distance": 0.1}
+                {
+                    "id": "c1",
+                    "text": "Context",
+                    "metadata": {"url": "wiki/aang", "title": "Aang"},
+                    "distance": 0.1,
+                }
             ]
             mock_retriever_class.return_value = mock_retriever
 
@@ -406,9 +499,9 @@ class TestQueryEngineWithCitations:
                         "source_url": "wiki/aang",
                         "page_title": "Aang",
                         "document_index": 0,
-                        "location": {"start": 0, "end": 20}
+                        "location": {"start": 0, "end": 20},
                     }
-                ]
+                ],
             }
             mock_llm_class.return_value = mock_llm
 
@@ -426,15 +519,22 @@ class TestQueryEngineWithCitations:
         """QueryEngine citation query should support custom k parameter."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
             mock_retriever_class.return_value = mock_retriever
 
             mock_llm = MagicMock()
-            mock_llm.query_with_citations.return_value = {"text": "Answer", "evidence": []}
+            mock_llm.query_with_citations.return_value = {
+                "text": "Answer",
+                "evidence": [],
+            }
             mock_llm_class.return_value = mock_llm
 
             engine = QueryEngine(project_name="test_wiki")
@@ -448,15 +548,22 @@ class TestQueryEngineWithCitations:
         """QueryEngine citation query should support metadata filtering."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []
             mock_retriever_class.return_value = mock_retriever
 
             mock_llm = MagicMock()
-            mock_llm.query_with_citations.return_value = {"text": "Answer", "evidence": []}
+            mock_llm.query_with_citations.return_value = {
+                "text": "Answer",
+                "evidence": [],
+            }
             mock_llm_class.return_value = mock_llm
 
             engine = QueryEngine(project_name="test_wiki")
@@ -471,8 +578,10 @@ class TestQueryEngineWithCitations:
         """QueryEngine citation query should validate query is not empty."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever"), \
-             patch("src.processor.rag.query_engine.LLMClient"):
+        with (
+            patch("src.processor.rag.query_engine.RAGRetriever"),
+            patch("src.processor.rag.query_engine.LLMClient"),
+        ):
 
             engine = QueryEngine(project_name="test_wiki")
 
@@ -483,8 +592,12 @@ class TestQueryEngineWithCitations:
         """QueryEngine should handle case when retriever returns no chunks."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             mock_retriever.retrieve.return_value = []  # No chunks found
@@ -507,12 +620,21 @@ class TestQueryEngineWithCitations:
         """QueryEngine detailed response should include citation evidence when enabled."""
         from src.processor.rag.query_engine import QueryEngine
 
-        with patch("src.processor.rag.query_engine.RAGRetriever") as mock_retriever_class, \
-             patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
+        with (
+            patch(
+                "src.processor.rag.query_engine.RAGRetriever"
+            ) as mock_retriever_class,
+            patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class,
+        ):
 
             mock_retriever = MagicMock()
             chunks = [
-                {"id": "c1", "text": "Context", "metadata": {"url": "wiki/aang", "title": "Aang"}, "distance": 0.1}
+                {
+                    "id": "c1",
+                    "text": "Context",
+                    "metadata": {"url": "wiki/aang", "title": "Aang"},
+                    "distance": 0.1,
+                }
             ]
             mock_retriever.retrieve.return_value = chunks
             mock_retriever_class.return_value = mock_retriever
@@ -520,13 +642,11 @@ class TestQueryEngineWithCitations:
             mock_llm = MagicMock()
             mock_llm.query_with_citations.return_value = {
                 "text": "Aang is the Avatar",
-                "evidence": [
-                    {"cited_text": "Source text", "source_url": "wiki/aang"}
-                ]
+                "evidence": [{"cited_text": "Source text", "source_url": "wiki/aang"}],
             }
             mock_llm.get_usage_stats.return_value = {
                 "total_tokens": 100,
-                "estimated_cost_usd": 0.001
+                "estimated_cost_usd": 0.001,
             }
             mock_llm_class.return_value = mock_llm
 

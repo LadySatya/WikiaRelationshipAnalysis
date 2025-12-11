@@ -12,6 +12,7 @@ from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from src.utils.logging_config import get_logger
+
 from ..core.session_manager import SessionManager
 from ..core.url_manager import URLManager
 from ..extraction.page_extractor import PageExtractor
@@ -80,25 +81,20 @@ class WikiaCrawler:
         self._create_project_structure()
 
         # Initialize components
-        self.rate_limiter = RateLimiter(
-            default_delay=config["default_delay_seconds"]
-        )
+        self.rate_limiter = RateLimiter(default_delay=config["default_delay_seconds"])
 
         # Initialize robots.txt parser if respect_robots_txt is enabled
         self.respect_robots_txt = config["respect_robots_txt"]
         if self.respect_robots_txt:
             cache_dir = self.project_path / "cache" / "robots"
             self.robots_parser = RobotsParser(
-                user_agent=config["user_agent"],
-                cache_dir=cache_dir,
-                cache_ttl_hours=24
+                user_agent=config["user_agent"], cache_dir=cache_dir, cache_ttl_hours=24
             )
         else:
             self.robots_parser = None
 
         self.session_manager = SessionManager(
-            user_agent=config["user_agent"],
-            timeout_seconds=self.timeout_seconds
+            user_agent=config["user_agent"], timeout_seconds=self.timeout_seconds
         )
 
         self.url_manager = URLManager(self.project_path)
@@ -152,11 +148,11 @@ class WikiaCrawler:
         start_time = time.time()
 
         # Log crawl start
-        self.logger.info("="*60)
+        self.logger.info("=" * 60)
         self.logger.info(f"Starting crawl: {self.project_name}")
         self.logger.info(f"Start URLs: {start_urls}")
         self.logger.info(f"Max pages: {max_pages if max_pages else 'unlimited'}")
-        self.logger.info("="*60)
+        self.logger.info("=" * 60)
 
         try:
             # Set target domain for domain validation
@@ -169,8 +165,7 @@ class WikiaCrawler:
             # Main crawling loop
             while True:
                 # Check if we've reached the page limit
-                if (max_pages is not None and
-                        stats["pages_crawled"] >= max_pages):
+                if max_pages is not None and stats["pages_crawled"] >= max_pages:
                     break
 
                 # Get next URL from queue
@@ -214,7 +209,9 @@ class WikiaCrawler:
                                 if self._should_crawl_url(link)
                             ]
                             self.url_manager.add_urls(new_links)
-                            self.logger.debug(f"  Added {len(new_links)} new links to queue")
+                            self.logger.debug(
+                                f"  Added {len(new_links)} new links to queue"
+                            )
                     else:
                         # Mark as failed if no data returned
                         self.url_manager.mark_failed(url, "No data extracted")
@@ -246,14 +243,14 @@ class WikiaCrawler:
             )
 
             # Log completion
-            self.logger.info("="*60)
+            self.logger.info("=" * 60)
             self.logger.info("Crawl complete!")
             self.logger.info(f"Pages crawled: {stats['pages_crawled']}")
             self.logger.info(f"Errors: {stats['errors']}")
             self.logger.info(f"Time: {elapsed:.1f}s")
             self.logger.info(f"Rate: {stats['pages_crawled']/elapsed:.2f} pages/sec")
             self.logger.info(f"Remaining in queue: {stats['urls_in_queue']}")
-            self.logger.info("="*60)
+            self.logger.info("=" * 60)
 
             # Save final state
             await self._save_crawl_state(stats)
@@ -329,23 +326,19 @@ class WikiaCrawler:
                 extracted_data = self.page_extractor.extract_content(html, url)
 
                 # Validate content quality
-                if (not extracted_data or
-                        not extracted_data.get("main_content")):
+                if not extracted_data or not extracted_data.get("main_content"):
                     self.logger.info(f"No main content found for {url}")
                     return None
 
                 # Save content to file system
                 try:
                     file_path = self.content_saver.save_page_content(
-                        url,
-                        extracted_data
+                        url, extracted_data
                     )
                     extracted_data["saved_to"] = str(file_path)
                     self.logger.info(f"Saved page content to: {file_path}")
                 except Exception as save_error:
-                    self.logger.error(
-                        f"Failed to save content for {url}: {save_error}"
-                    )
+                    self.logger.error(f"Failed to save content for {url}: {save_error}")
 
                 return extracted_data
 

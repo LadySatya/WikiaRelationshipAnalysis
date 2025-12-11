@@ -10,10 +10,12 @@ This module tests the complete RAG pipeline from indexing to query:
 
 These are integration tests using real components (not mocks).
 """
-import pytest
-import tempfile
+
 import shutil
-from typing import List, Dict, Any
+import tempfile
+from typing import Any, Dict, List
+
+import pytest
 
 # Mark all tests as integration tests
 pytestmark = pytest.mark.integration
@@ -34,34 +36,34 @@ def sample_documents() -> List[Dict[str, Any]]:
             "content": {
                 "title": "Aang",
                 "main_content": "Aang is the protagonist of Avatar: The Last Airbender. "
-                               "He is the Avatar and last surviving Air Nomad. "
-                               "Aang was frozen in an iceberg for 100 years and was found by Katara and Sokka. "
-                               "He mastered all four elements: air, water, earth, and fire.",
-                "namespace": "Character"
-            }
+                "He is the Avatar and last surviving Air Nomad. "
+                "Aang was frozen in an iceberg for 100 years and was found by Katara and Sokka. "
+                "He mastered all four elements: air, water, earth, and fire.",
+                "namespace": "Character",
+            },
         },
         {
             "url": "https://example.com/katara",
             "content": {
                 "title": "Katara",
                 "main_content": "Katara is a waterbender from the Southern Water Tribe. "
-                               "She is one of Aang's closest friends and teachers. "
-                               "Katara taught Aang waterbending and later became his wife. "
-                               "She is known for her powerful healing abilities.",
-                "namespace": "Character"
-            }
+                "She is one of Aang's closest friends and teachers. "
+                "Katara taught Aang waterbending and later became his wife. "
+                "She is known for her powerful healing abilities.",
+                "namespace": "Character",
+            },
         },
         {
             "url": "https://example.com/zuko",
             "content": {
                 "title": "Zuko",
                 "main_content": "Zuko is the prince of the Fire Nation. "
-                               "He was initially an antagonist hunting the Avatar. "
-                               "Zuko eventually joined Team Avatar and taught Aang firebending. "
-                               "He later became the Fire Lord and helped restore balance.",
-                "namespace": "Character"
-            }
-        }
+                "He was initially an antagonist hunting the Avatar. "
+                "Zuko eventually joined Team Avatar and taught Aang firebending. "
+                "He later became the Fire Lord and helped restore balance.",
+                "namespace": "Character",
+            },
+        },
     ]
 
 
@@ -74,10 +76,7 @@ def prepare_vector_store(temp_dir, sample_documents, project_name):
     # Initialize components
     chunker = ContentChunker()
     embedding_gen = EmbeddingGenerator(provider="local")
-    vector_store = VectorStore(
-        project_name=project_name,
-        persist_directory=temp_dir
-    )
+    vector_store = VectorStore(project_name=project_name, persist_directory=temp_dir)
 
     # Process documents
     all_chunks = []
@@ -92,11 +91,13 @@ def prepare_vector_store(temp_dir, sample_documents, project_name):
     # Combine chunks with embeddings for storage
     chunks_with_embeddings = []
     for i, chunk in enumerate(all_chunks):
-        chunks_with_embeddings.append({
-            "text": chunk["text"],
-            "embedding": embeddings[i],
-            "metadata": chunk["metadata"]
-        })
+        chunks_with_embeddings.append(
+            {
+                "text": chunk["text"],
+                "embedding": embeddings[i],
+                "metadata": chunk["metadata"],
+            }
+        )
 
     # Store in vector database
     vector_store.add_documents(chunks_with_embeddings)
@@ -110,9 +111,7 @@ class TestRAGPipelineIndexing:
     def test_full_indexing_pipeline(self, temp_vector_store, sample_documents):
         """Test complete indexing: chunk → embed → store."""
         vector_store, all_chunks = prepare_vector_store(
-            temp_vector_store,
-            sample_documents,
-            "test_rag_integration"
+            temp_vector_store, sample_documents, "test_rag_integration"
         )
 
         # Verify storage
@@ -134,8 +133,7 @@ class TestRAGPipelineRetrieval:
 
         # Test: Retrieve relevant chunks
         retriever = RAGRetriever(
-            project_name="test_rag_retrieval",
-            vector_store_path=temp_vector_store
+            project_name="test_rag_retrieval", vector_store_path=temp_vector_store
         )
 
         results = retriever.retrieve("Who is Aang?", k=3)
@@ -157,14 +155,11 @@ class TestRAGPipelineRetrieval:
 
         # Test: Filter by namespace
         retriever = RAGRetriever(
-            project_name="test_rag_filter",
-            vector_store_path=temp_vector_store
+            project_name="test_rag_filter", vector_store_path=temp_vector_store
         )
 
         results = retriever.retrieve(
-            "characters",
-            k=10,
-            metadata_filter={"namespace": "Character"}
+            "characters", k=10, metadata_filter={"namespace": "Character"}
         )
 
         # Verify all results match filter
@@ -181,8 +176,7 @@ class TestRAGPipelineRetrieval:
 
         # Test: Build context
         retriever = RAGRetriever(
-            project_name="test_context",
-            vector_store_path=temp_vector_store
+            project_name="test_context", vector_store_path=temp_vector_store
         )
 
         results = retriever.retrieve("Who is Aang?", k=2)
@@ -199,26 +193,29 @@ class TestRAGPipelineRetrieval:
 class TestRAGPipelineQuery:
     """Test end-to-end query workflow with mocked LLM."""
 
-    def test_full_query_pipeline_with_mock_llm(self, temp_vector_store, sample_documents):
+    def test_full_query_pipeline_with_mock_llm(
+        self, temp_vector_store, sample_documents
+    ):
         """Test complete query: retrieve → context → LLM (mocked)."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from src.processor.rag.query_engine import QueryEngine
 
         # Setup: Index documents
         vector_store, _ = prepare_vector_store(
-            temp_vector_store,
-            sample_documents,
-            "test_query"
+            temp_vector_store, sample_documents, "test_query"
         )
 
         # Test: Query with mocked LLM
         with patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
             mock_llm = MagicMock()
-            mock_llm.generate.return_value = "Aang is the Avatar and protagonist of the series."
+            mock_llm.generate.return_value = (
+                "Aang is the Avatar and protagonist of the series."
+            )
             mock_llm.get_usage_stats.return_value = {
                 "total_input_tokens": 100,
                 "total_output_tokens": 20,
-                "estimated_cost_usd": 0.001
+                "estimated_cost_usd": 0.001,
             }
             mock_llm_class.return_value = mock_llm
 
@@ -244,24 +241,25 @@ class TestRAGPipelineQuery:
 
     def test_detailed_query_response(self, temp_vector_store, sample_documents):
         """Test detailed query response with sources and metadata."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from src.processor.rag.query_engine import QueryEngine
 
         # Setup: Index documents
         vector_store, _ = prepare_vector_store(
-            temp_vector_store,
-            sample_documents,
-            "test_detailed"
+            temp_vector_store, sample_documents, "test_detailed"
         )
 
         # Test: Detailed query
         with patch("src.processor.rag.query_engine.LLMClient") as mock_llm_class:
             mock_llm = MagicMock()
-            mock_llm.generate.return_value = "Katara is a waterbender from the Southern Water Tribe."
+            mock_llm.generate.return_value = (
+                "Katara is a waterbender from the Southern Water Tribe."
+            )
             mock_llm.get_usage_stats.return_value = {
                 "total_input_tokens": 150,
                 "total_output_tokens": 30,
-                "estimated_cost_usd": 0.002
+                "estimated_cost_usd": 0.002,
             }
             mock_llm_class.return_value = mock_llm
 

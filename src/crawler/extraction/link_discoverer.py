@@ -7,9 +7,9 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from ..utils.url_utils import URLUtils
-
 from src.utils.logging_config import get_logger
+
+from ..utils.url_utils import URLUtils
 
 
 class LinkDiscoverer:
@@ -42,9 +42,7 @@ class LinkDiscoverer:
             "forum:",
         ]
 
-    def discover_links(
-            self, soup: BeautifulSoup, base_url: str
-    ) -> Dict[str, Set[str]]:
+    def discover_links(self, soup: BeautifulSoup, base_url: str) -> Dict[str, Set[str]]:
         """Discover and categorize links by priority using simplified
         three-category system."""
         if not soup or not base_url:
@@ -73,25 +71,17 @@ class LinkDiscoverer:
         # Split prioritized list into categories
         # Top 30 are high priority (categories first)
         for link in prioritized[:30]:
-            result["high_priority"].add(
-                link if isinstance(link, str) else link[0]
-            )
+            result["high_priority"].add(link if isinstance(link, str) else link[0])
         # Next 70 are medium priority (content)
         for link in prioritized[30:100]:
-            result["medium_priority"].add(
-                link if isinstance(link, str) else link[0]
-            )
+            result["medium_priority"].add(link if isinstance(link, str) else link[0])
         # Rest are low priority (non-content, if any)
         for link in prioritized[100:]:
-            result["low_priority"].add(
-                link if isinstance(link, str) else link[0]
-            )
+            result["low_priority"].add(link if isinstance(link, str) else link[0])
 
         return result
 
-    def find_content_links(
-            self, soup: BeautifulSoup, base_url: str
-    ) -> Set[str]:
+    def find_content_links(self, soup: BeautifulSoup, base_url: str) -> Set[str]:
         """Find content links (main namespace pages that aren't
         categories)."""
         if not soup:
@@ -117,9 +107,7 @@ class LinkDiscoverer:
 
         return content_links
 
-    def find_non_content_links(
-            self, soup: BeautifulSoup, base_url: str
-    ) -> Set[str]:
+    def find_non_content_links(self, soup: BeautifulSoup, base_url: str) -> Set[str]:
         """Find non-content links (templates, user pages, etc.)."""
         if not soup:
             return set()
@@ -144,9 +132,7 @@ class LinkDiscoverer:
 
         return non_content_links
 
-    def find_category_links(
-            self, soup: BeautifulSoup, base_url: str
-    ) -> Set[str]:
+    def find_category_links(self, soup: BeautifulSoup, base_url: str) -> Set[str]:
         """Find category page links for systematic crawling."""
         if not soup:
             return set()
@@ -167,10 +153,9 @@ class LinkDiscoverer:
                 href = link_tag.get("href")
                 if href:
                     normalized_url = self._normalize_url(href, base_url)
-                    if (normalized_url and
-                            self._is_same_wikia_domain(
-                                normalized_url, base_url
-                            )):
+                    if normalized_url and self._is_same_wikia_domain(
+                        normalized_url, base_url
+                    ):
                         category_links.add(normalized_url)
 
         return category_links
@@ -249,8 +234,7 @@ class LinkDiscoverer:
             return False
 
         # Not a non-content namespace
-        if any(namespace in url_lower
-               for namespace in self.non_content_namespaces):
+        if any(namespace in url_lower for namespace in self.non_content_namespaces):
             return False
 
         return True
@@ -263,8 +247,7 @@ class LinkDiscoverer:
         url_lower = url.lower()
 
         # Check if it's in a non-content namespace
-        return any(namespace in url_lower
-                   for namespace in self.non_content_namespaces)
+        return any(namespace in url_lower for namespace in self.non_content_namespaces)
 
     def _normalize_url(self, url: str, base_url: str) -> str:
         """Normalize and resolve relative URLs."""
@@ -304,8 +287,7 @@ class LinkDiscoverer:
             context_text = prev_text + " " + context_text
 
         if link_tag.next_sibling:
-            next_text = (str(link_tag.next_sibling)[:50]
-                         if link_tag.next_sibling else "")
+            next_text = str(link_tag.next_sibling)[:50] if link_tag.next_sibling else ""
             context_text = context_text + " " + next_text
 
         return context_text.strip()

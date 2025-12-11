@@ -38,7 +38,6 @@ class SessionManager:
         if self._session and not self._session.closed:
             await self._session.close()
 
-
         # Configure timeout
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
 
@@ -54,9 +53,7 @@ class SessionManager:
 
         # Create session with default headers
         self._session = aiohttp.ClientSession(
-            headers=self._get_default_headers(),
-            timeout=timeout,
-            connector=connector
+            headers=self._get_default_headers(), timeout=timeout, connector=connector
         )
 
         return self._session

@@ -269,8 +269,7 @@ class PageExtractor:
             "this article is about",
         ]
 
-        return any(indicator in page_text
-                   for indicator in disambiguation_indicators)
+        return any(indicator in page_text for indicator in disambiguation_indicators)
 
     def _clean_text(self, text: str) -> str:
         """Clean and normalize extracted text."""

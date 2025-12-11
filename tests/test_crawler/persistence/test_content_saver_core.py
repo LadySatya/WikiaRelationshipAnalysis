@@ -4,13 +4,15 @@ HIGH-QUALITY tests for ContentSaver core logic.
 Tests file operations, filename generation, and indexing logic.
 Uses real temp files to ensure file operations actually work.
 """
-import pytest
-import json
-import tempfile
-import shutil
-from pathlib import Path
-from src.crawler.persistence.content_saver import ContentSaver
 
+import json
+import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
+
+from src.crawler.persistence.content_saver import ContentSaver
 
 pytestmark = pytest.mark.unit
 
@@ -31,7 +33,7 @@ class TestFilenameGeneration:
 
         filename = saver._generate_filename(
             url="https://avatar.fandom.com/wiki/Aang",
-            title="Aang | Avatar Wiki | Fandom"
+            title="Aang | Avatar Wiki | Fandom",
         )
 
         # Should clean title and use it
@@ -44,8 +46,7 @@ class TestFilenameGeneration:
         saver = ContentSaver(temp_project_dir)
 
         filename = saver._generate_filename(
-            url="https://avatar.fandom.com/wiki/Some_Page",
-            title=None
+            url="https://avatar.fandom.com/wiki/Some_Page", title=None
         )
 
         # Should be a hex hash
@@ -101,10 +102,7 @@ class TestPageSaving:
         saver = ContentSaver(temp_project_dir)
 
         url = "https://test.com/page"
-        content = {
-            "title": "Test Page",
-            "text": "Page content"
-        }
+        content = {"title": "Test Page", "text": "Page content"}
 
         file_path = saver.save_page_content(url, content)
 
@@ -172,7 +170,7 @@ class TestPageIndexManagement:
         page_info = {
             "url": "https://test.com/page1",
             "file_path": "processed/page1.json",
-            "saved_at": "2025-01-01T00:00:00"
+            "saved_at": "2025-01-01T00:00:00",
         }
 
         saver.update_page_index(page_info)
@@ -192,7 +190,7 @@ class TestPageIndexManagement:
         page1 = {
             "url": "https://test.com/page1",
             "file_path": "processed/page1.json",
-            "saved_at": "2025-01-01T00:00:00"
+            "saved_at": "2025-01-01T00:00:00",
         }
         saver.update_page_index(page1)
 
@@ -200,7 +198,7 @@ class TestPageIndexManagement:
         page2 = {
             "url": "https://test.com/page2",
             "file_path": "processed/page2.json",
-            "saved_at": "2025-01-01T00:01:00"
+            "saved_at": "2025-01-01T00:01:00",
         }
         saver.update_page_index(page2)
 
@@ -222,7 +220,7 @@ class TestPageIndexManagement:
         page1 = {
             "url": url,
             "file_path": "processed/page1.json",
-            "saved_at": "2025-01-01T00:00:00"
+            "saved_at": "2025-01-01T00:00:00",
         }
         saver.update_page_index(page1)
 
@@ -230,7 +228,7 @@ class TestPageIndexManagement:
         page2 = {
             "url": url,
             "file_path": "processed/page2.json",
-            "saved_at": "2025-01-01T00:01:00"
+            "saved_at": "2025-01-01T00:01:00",
         }
         saver.update_page_index(page2)
 
@@ -256,10 +254,7 @@ class TestCrawlLogManagement:
         """Should create new log file with first entry."""
         saver = ContentSaver(temp_project_dir)
 
-        entry = {
-            "url": "https://test.com/page",
-            "status": "success"
-        }
+        entry = {"url": "https://test.com/page", "status": "success"}
 
         saver.save_crawl_log_entry(entry)
 
@@ -278,10 +273,7 @@ class TestCrawlLogManagement:
 
         # Add multiple entries
         for i in range(5):
-            entry = {
-                "url": f"https://test.com/page{i}",
-                "status": "success"
-            }
+            entry = {"url": f"https://test.com/page{i}", "status": "success"}
             saver.save_crawl_log_entry(entry)
 
         with open(saver.crawl_log_file, "r", encoding="utf-8") as f:
@@ -303,10 +295,7 @@ class TestCrawlLogManagement:
             json.dump(initial_entries, f)
 
         # Add one more entry
-        new_entry = {
-            "url": "https://test.com/new_page",
-            "status": "success"
-        }
+        new_entry = {"url": "https://test.com/new_page", "status": "success"}
         saver.save_crawl_log_entry(new_entry)
 
         # Should still be 1000 entries (oldest dropped)

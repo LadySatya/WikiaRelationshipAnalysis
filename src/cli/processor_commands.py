@@ -4,7 +4,8 @@ Phase 2 CLI commands: Processing and character analysis.
 
 from pathlib import Path
 from typing import Optional
-from .utils import validate_project_exists, setup_project_logging
+
+from .utils import setup_project_logging, validate_project_exists
 
 
 def index_command(project_name: str):
@@ -14,11 +15,12 @@ def index_command(project_name: str):
     Args:
         project_name: Name of the project to index
     """
+    import json
+
+    from processor.config import ProcessorConfig
     from processor.core.content_chunker import ContentChunker
     from processor.rag.embeddings import EmbeddingGenerator
     from processor.rag.vector_store import VectorStore
-    from processor.config import ProcessorConfig
-    import json
 
     # Validate project exists with crawled data
     project_path = validate_project_exists(project_name, require_crawled=True)
@@ -34,7 +36,7 @@ def index_command(project_name: str):
     # Load all pages
     pages = []
     for file_path in page_files:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             # Keep full structure - chunker expects nested content field
             pages.append(data)
@@ -45,7 +47,7 @@ def index_command(project_name: str):
     config = ProcessorConfig()
     chunker = ContentChunker(
         chunk_size=config.get("processor", "rag", "chunk_size", default=500),
-        chunk_overlap=config.get("processor", "rag", "chunk_overlap", default=50)
+        chunk_overlap=config.get("processor", "rag", "chunk_overlap", default=50),
     )
 
     all_chunks = []
@@ -68,11 +70,13 @@ def index_command(project_name: str):
     # Combine texts, embeddings, and metadata into chunk format
     chunks_with_embeddings = []
     for i, chunk in enumerate(all_chunks):
-        chunks_with_embeddings.append({
-            "text": chunk["text"],
-            "embedding": embeddings[i],
-            "metadata": chunk["metadata"]
-        })
+        chunks_with_embeddings.append(
+            {
+                "text": chunk["text"],
+                "embedding": embeddings[i],
+                "metadata": chunk["metadata"],
+            }
+        )
 
     # Store in ChromaDB
     vector_store = VectorStore(project_name=project_name)
@@ -81,8 +85,10 @@ def index_command(project_name: str):
     batch_size = 5000
     total_chunks = len(chunks_with_embeddings)
     for i in range(0, total_chunks, batch_size):
-        batch = chunks_with_embeddings[i:i + batch_size]
-        logger.info(f"Adding batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size} ({len(batch)} chunks)")
+        batch = chunks_with_embeddings[i : i + batch_size]
+        logger.info(
+            f"Adding batch {i//batch_size + 1}/{(total_chunks + batch_size - 1)//batch_size} ({len(batch)} chunks)"
+        )
         vector_store.add_documents(batch)
 
     logger.info(f"Indexed {len(all_chunks)} chunks into ChromaDB")
@@ -98,7 +104,11 @@ def index_command(project_name: str):
 
     logger.info(f"Query: '{test_query}'")
     for i, result in enumerate(results, 1):
-        preview = result["text"][:100] + "..." if len(result["text"]) > 100 else result["text"]
+        preview = (
+            result["text"][:100] + "..."
+            if len(result["text"]) > 100
+            else result["text"]
+        )
         logger.info(f"  {i}. {preview}")
 
     logger.info("")
@@ -110,9 +120,7 @@ def index_command(project_name: str):
 
 
 def discover_command(
-    project_name: str,
-    max_pages: Optional[int] = None,
-    save_frequency: int = 10
+    project_name: str, max_pages: Optional[int] = None, save_frequency: int = 10
 ):
     """
     Build knowledge base (characters + relationships) from indexed data.
@@ -126,8 +134,9 @@ def discover_command(
         max_pages: Maximum number of pages to process (None = all)
         save_frequency: Save KB every N pages (default: 10)
     """
-    from processor.analysis.knowledge_builder import CharacterKnowledgeBuilder
     import time
+
+    from processor.analysis.knowledge_builder import CharacterKnowledgeBuilder
 
     # Validate project exists with crawled data
     validate_project_exists(project_name, require_crawled=True)
@@ -141,8 +150,7 @@ def discover_command(
 
     # Create knowledge builder
     builder = CharacterKnowledgeBuilder(
-        project_name=project_name,
-        save_frequency=save_frequency
+        project_name=project_name, save_frequency=save_frequency
     )
 
     # Build knowledge base
@@ -155,8 +163,7 @@ def discover_command(
     num_relationships = len(kb["relationships"])
 
     total_claims = sum(
-        len(rel.get("claims", []))
-        for rel in kb["relationships"].values()
+        len(rel.get("claims", [])) for rel in kb["relationships"].values()
     )
 
     avg_claims = total_claims / num_relationships if num_relationships else 0
@@ -177,7 +184,7 @@ def discover_command(
     top_chars = sorted(
         kb["characters"].items(),
         key=lambda x: len(x[1].get("source_urls", [])),
-        reverse=True
+        reverse=True,
     )[:10]
 
     for i, (name, char_data) in enumerate(top_chars, 1):
@@ -205,7 +212,9 @@ def discover_command(
             if evidence_list:
                 logger.info(f"      Evidence ({len(evidence_list)} sources):")
                 for i, evidence in enumerate(evidence_list[:2], 1):  # Show first 2
-                    logger.info(f"        {i}. {evidence.get('evidence_url', 'No URL')}")
+                    logger.info(
+                        f"        {i}. {evidence.get('evidence_url', 'No URL')}"
+                    )
             else:
                 logger.info(f"      Evidence: None")
 

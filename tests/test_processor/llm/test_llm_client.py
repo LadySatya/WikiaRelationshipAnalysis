@@ -8,10 +8,11 @@ This module tests the LLMClient class which handles:
 - Error handling and retries
 - System prompts and context management
 """
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import List, Dict, Any
 
+from typing import Any, Dict, List
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Mark all tests in this file as unit tests
 pytestmark = pytest.mark.unit
@@ -108,12 +109,15 @@ class TestLLMClientTextGeneration:
             client = LLMClient(provider="anthropic")
             response = client.generate(
                 prompt="Who is Aang?",
-                system_prompt="You are a helpful assistant analyzing Avatar: The Last Airbender wiki."
+                system_prompt="You are a helpful assistant analyzing Avatar: The Last Airbender wiki.",
             )
 
             # Should pass system prompt to API
             call_kwargs = mock_client.messages.create.call_args[1]
-            assert call_kwargs["system"] == "You are a helpful assistant analyzing Avatar: The Last Airbender wiki."
+            assert (
+                call_kwargs["system"]
+                == "You are a helpful assistant analyzing Avatar: The Last Airbender wiki."
+            )
 
     def test_generate_with_temperature(self):
         """LLMClient should support custom temperature setting."""
@@ -179,11 +183,11 @@ class TestLLMClientTextGeneration:
             mock_client.messages.create.side_effect = [
                 MagicMock(
                     content=[MagicMock(text="Response 1")],
-                    usage=MagicMock(input_tokens=100, output_tokens=50)
+                    usage=MagicMock(input_tokens=100, output_tokens=50),
                 ),
                 MagicMock(
                     content=[MagicMock(text="Response 2")],
-                    usage=MagicMock(input_tokens=200, output_tokens=75)
+                    usage=MagicMock(input_tokens=200, output_tokens=75),
                 ),
             ]
             mock_anthropic_class.return_value = mock_client
@@ -212,8 +216,10 @@ class TestLLMClientRetryLogic:
 
             # First call fails with 529, second succeeds
             mock_client.messages.create.side_effect = [
-                Exception("Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error'}}"),
-                mock_response
+                Exception(
+                    "Error code: 529 - {'type': 'error', 'error': {'type': 'overloaded_error'}}"
+                ),
+                mock_response,
             ]
             mock_anthropic_class.return_value = mock_client
 
@@ -237,7 +243,7 @@ class TestLLMClientRetryLogic:
 
             mock_client.messages.create.side_effect = [
                 Exception("rate_limit exceeded"),
-                mock_response
+                mock_response,
             ]
             mock_anthropic_class.return_value = mock_client
 
@@ -260,7 +266,7 @@ class TestLLMClientRetryLogic:
 
             mock_client.messages.create.side_effect = [
                 Exception("Request timeout"),
-                mock_response
+                mock_response,
             ]
             mock_anthropic_class.return_value = mock_client
 
@@ -283,7 +289,7 @@ class TestLLMClientRetryLogic:
 
             mock_client.messages.create.side_effect = [
                 Exception("Connection refused"),
-                mock_response
+                mock_response,
             ]
             mock_anthropic_class.return_value = mock_client
 
@@ -307,7 +313,7 @@ class TestLLMClientRetryLogic:
             mock_client.messages.create.side_effect = [
                 Exception("overloaded"),
                 Exception("overloaded"),
-                mock_response
+                mock_response,
             ]
             mock_anthropic_class.return_value = mock_client
 
@@ -329,13 +335,17 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             # Always fail with retryable error
-            mock_client.messages.create.side_effect = Exception("Error code: 529 - overloaded")
+            mock_client.messages.create.side_effect = Exception(
+                "Error code: 529 - overloaded"
+            )
             mock_anthropic_class.return_value = mock_client
 
             with patch("time.sleep") as mock_sleep:
                 client = LLMClient(provider="anthropic")
 
-                with pytest.raises(Exception, match="LLM API call failed.*529.*overloaded"):
+                with pytest.raises(
+                    Exception, match="LLM API call failed.*529.*overloaded"
+                ):
                     client.generate("Test")
 
                 # Should attempt 3 times (initial + 2 retries)
@@ -355,7 +365,9 @@ class TestLLMClientRetryLogic:
             with patch("time.sleep") as mock_sleep:
                 client = LLMClient(provider="anthropic")
 
-                with pytest.raises(Exception, match="LLM API call failed.*Invalid API key"):
+                with pytest.raises(
+                    Exception, match="LLM API call failed.*Invalid API key"
+                ):
                     client.generate("Test")
 
                 # Should fail immediately without retries
@@ -374,7 +386,7 @@ class TestLLMClientRetryLogic:
 
             mock_client.messages.create.side_effect = [
                 Exception("529 overloaded"),
-                mock_response
+                mock_response,
             ]
             mock_anthropic_class.return_value = mock_client
 
@@ -402,7 +414,9 @@ class TestLLMClientErrorHandling:
 
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
-            mock_client.messages.create.side_effect = Exception("Invalid request format")
+            mock_client.messages.create.side_effect = Exception(
+                "Invalid request format"
+            )
             mock_anthropic_class.return_value = mock_client
 
             client = LLMClient(provider="anthropic")
@@ -528,12 +542,14 @@ class TestLLMClientWithContext:
             # Provide context from previous conversation
             context = [
                 {"role": "user", "content": "What is retrieval augmented generation?"},
-                {"role": "assistant", "content": "RAG is a technique that combines retrieval with LLMs..."}
+                {
+                    "role": "assistant",
+                    "content": "RAG is a technique that combines retrieval with LLMs...",
+                },
             ]
 
             response = client.generate(
-                prompt="Can you give me an example?",
-                context=context
+                prompt="Can you give me an example?", context=context
             )
 
             # Should include context in API call
@@ -570,7 +586,7 @@ class TestLLMClientWithCitations:
             documents = ["Document 1 content", "Document 2 content"]
             metadata = [
                 {"source_url": "wiki/page1", "page_title": "Page 1"},
-                {"source_url": "wiki/page2", "page_title": "Page 2"}
+                {"source_url": "wiki/page2", "page_title": "Page 2"},
             ]
 
             result = client.query_with_citations("Who is Aang?", documents, metadata)
@@ -620,7 +636,7 @@ class TestLLMClientWithCitations:
             result = client.query_with_citations(
                 "Who is Aang?",
                 ["Document content"],
-                [{"source_url": "wiki/aang", "page_title": "Aang"}]
+                [{"source_url": "wiki/aang", "page_title": "Aang"}],
             )
 
             assert result["text"] == "Aang is the last Airbender and Avatar"
@@ -654,7 +670,9 @@ class TestLLMClientWithCitations:
 
             mock_content = MagicMock()
             mock_content.type = "text"
-            mock_content.text = "Aang is the last Airbender and a master of all elements"
+            mock_content.text = (
+                "Aang is the last Airbender and a master of all elements"
+            )
             mock_content.citations = [citation1, citation2]
 
             mock_response.content = [mock_content]
@@ -667,7 +685,11 @@ class TestLLMClientWithCitations:
             documents = ["Document 1", "Document 2"]
             metadata = [
                 {"source_url": "wiki/aang", "page_title": "Aang", "chunk_id": "chunk1"},
-                {"source_url": "wiki/avatar", "page_title": "Avatar", "chunk_id": "chunk2"}
+                {
+                    "source_url": "wiki/avatar",
+                    "page_title": "Avatar",
+                    "chunk_id": "chunk2",
+                },
             ]
 
             result = client.query_with_citations("Who is Aang?", documents, metadata)
@@ -684,7 +706,10 @@ class TestLLMClientWithCitations:
             assert result["evidence"][0]["location"] == {"start": 0, "end": 27}
 
             # Second citation
-            assert result["evidence"][1]["cited_text"] == "He is a master of all four elements"
+            assert (
+                result["evidence"][1]["cited_text"]
+                == "He is a master of all four elements"
+            )
             assert result["evidence"][1]["source_url"] == "wiki/avatar"
             assert result["evidence"][1]["page_title"] == "Avatar"
             assert result["evidence"][1]["chunk_id"] == "chunk2"
@@ -710,7 +735,7 @@ class TestLLMClientWithCitations:
             result = client.query_with_citations(
                 "Who is Unknown Character?",
                 ["Document"],
-                [{"source_url": "wiki/unknown", "page_title": "Unknown"}]
+                [{"source_url": "wiki/unknown", "page_title": "Unknown"}],
             )
 
             assert result["text"] == "No specific information found"
@@ -735,9 +760,7 @@ class TestLLMClientWithCitations:
             client = LLMClient(provider="anthropic")
 
             client.query_with_citations(
-                "Query",
-                ["Document"],
-                [{"source_url": "wiki/page"}]
+                "Query", ["Document"], [{"source_url": "wiki/page"}]
             )
 
             # Should track tokens
@@ -759,11 +782,13 @@ class TestLLMClientWithCitations:
 
         client = LLMClient(provider="anthropic")
 
-        with pytest.raises(ValueError, match="documents and metadata must have same length"):
+        with pytest.raises(
+            ValueError, match="documents and metadata must have same length"
+        ):
             client.query_with_citations(
                 "Query",
                 ["Doc 1", "Doc 2"],
-                [{"source_url": "wiki/page1"}]  # Only 1 metadata for 2 docs
+                [{"source_url": "wiki/page1"}],  # Only 1 metadata for 2 docs
             )
 
     def test_query_with_citations_validates_empty_query(self):
@@ -773,11 +798,7 @@ class TestLLMClientWithCitations:
         client = LLMClient(provider="anthropic")
 
         with pytest.raises(ValueError, match="query cannot be empty"):
-            client.query_with_citations(
-                "",
-                ["Document"],
-                [{"source_url": "wiki/page"}]
-            )
+            client.query_with_citations("", ["Document"], [{"source_url": "wiki/page"}])
 
     def test_query_with_citations_handles_multiple_text_blocks(self):
         """LLMClient should handle responses with multiple text blocks."""
@@ -815,7 +836,7 @@ class TestLLMClientWithCitations:
             result = client.query_with_citations(
                 "Query",
                 ["Document"],
-                [{"source_url": "wiki/page", "page_title": "Page"}]
+                [{"source_url": "wiki/page", "page_title": "Page"}],
             )
 
             # Should concatenate text from all blocks

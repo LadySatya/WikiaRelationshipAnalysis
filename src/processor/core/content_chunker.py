@@ -4,9 +4,10 @@ ContentChunker - splits wiki pages into semantic chunks for embedding.
 This module handles splitting large wiki pages into smaller chunks that can be
 embedded and stored in a vector database for semantic search.
 """
-from typing import List, Dict, Any, Optional
-import re
+
 import logging
+import re
+from typing import Any, Dict, List, Optional
 
 from src.utils.logging_config import get_logger
 
@@ -69,15 +70,15 @@ class ContentChunker:
 
                 # Try to find last sentence boundary
                 sentence_end_match = None
-                for match in re.finditer(r'[.!?]\s', chunk_text):
+                for match in re.finditer(r"[.!?]\s", chunk_text):
                     sentence_end_match = match
 
                 # If we found a sentence boundary, use it
                 if sentence_end_match:
                     end = start + sentence_end_match.end()
                 # Otherwise, try to break at last space to avoid splitting words
-                elif ' ' in chunk_text:
-                    last_space = chunk_text.rfind(' ')
+                elif " " in chunk_text:
+                    last_space = chunk_text.rfind(" ")
                     if last_space > 0:  # Make sure we don't create empty chunks
                         end = start + last_space + 1
 
@@ -162,17 +163,14 @@ class ContentChunker:
                 "chunk_index": i,
                 "total_chunks": len(text_chunks),
                 "char_start": char_start,
-                "char_end": char_end
+                "char_end": char_end,
             }
 
             # Add optional contextual fields if available
             if namespace:
                 metadata["namespace"] = namespace
 
-            chunk_dict = {
-                "text": text,
-                "metadata": metadata
-            }
+            chunk_dict = {"text": text, "metadata": metadata}
             chunks_with_metadata.append(chunk_dict)
 
         return chunks_with_metadata

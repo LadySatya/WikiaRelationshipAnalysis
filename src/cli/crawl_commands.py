@@ -4,11 +4,15 @@ Phase 1 CLI commands: Crawling wikia sites.
 
 from pathlib import Path
 from typing import Optional
+
+from src.utils.logging_config import get_logger, setup_logging
+
 from .utils import load_crawler_config
-from src.utils.logging_config import setup_logging, get_logger
 
 
-async def crawl_command(project_name: str, wikia_url: str, max_pages: Optional[int] = None):
+async def crawl_command(
+    project_name: str, wikia_url: str, max_pages: Optional[int] = None
+):
     """
     Start crawling a wikia site.
 
@@ -81,7 +85,9 @@ async def resume_command(project_name: str, max_pages: Optional[int] = None):
     project_path = Path(f"data/projects/{project_name}")
     if not project_path.exists():
         logger.error(f"Project '{project_name}' not found")
-        logger.error(f"Use 'python main.py crawl {project_name} <url>' to start a new crawl")
+        logger.error(
+            f"Use 'python main.py crawl {project_name} <url>' to start a new crawl"
+        )
         return
 
     # Check for saved state
