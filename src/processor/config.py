@@ -150,6 +150,18 @@ class ProcessorConfig:
         return self.get("processor", "rag", "llm_prompt_caching", default=True)
 
     @property
+    def knowledge_window_chars(self) -> int:
+        """Get max characters of page text per knowledge-building window."""
+        return self.get("processor", "knowledge_building", "window_chars", default=6000)
+
+    @property
+    def knowledge_max_windows_per_page(self) -> int:
+        """Get max windows processed per page (pages over this are partly read)."""
+        return self.get(
+            "processor", "knowledge_building", "max_windows_per_page", default=25
+        )
+
+    @property
     def character_discovery_min_mentions(self) -> int:
         """Get minimum mentions threshold for character discovery."""
         return self.get("processor", "character_discovery", "min_mentions", default=3)

@@ -22,9 +22,42 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.utils.logging_config import get_llm_logger, get_logger
 from src.utils.tool_schema_loader import load_system_prompt, load_tool_schemas
 
+from ..config import get_config
 from ..rag.query_engine import QueryEngine
 
 logger = get_logger("processor.knowledge_builder")
+
+
+def split_into_windows(text: str, window_chars: int) -> List[str]:
+    """
+    Split page text into consecutive windows of at most window_chars characters.
+
+    Breaks after the last sentence end (". ") in the second half of each window;
+    text with no sentence break there is split hard at the limit. No text is
+    dropped - the windows together cover the whole page.
+
+    Args:
+        text: Page text (crawled pages are a single line, so sentences are the
+            natural boundary)
+        window_chars: Maximum characters per window
+
+    Returns:
+        List of windows (empty for empty text)
+    """
+    text = text.strip()
+    windows: List[str] = []
+    start = 0
+    while start < len(text):
+        end = start + window_chars
+        if end < len(text):
+            boundary = text.rfind(". ", start + window_chars // 2, end)
+            if boundary != -1:
+                end = boundary + 1  # keep the period, drop the space
+        window = text[start:end].strip()
+        if window:
+            windows.append(window)
+        start = end
+    return windows
 
 
 class CharacterKnowledgeBuilder:
@@ -55,6 +88,12 @@ class CharacterKnowledgeBuilder:
         """
         self.project_name = project_name
         self.save_frequency = save_frequency
+
+        # Pages are read in windows; pages over the cap are recorded as partial
+        config = get_config()
+        self.window_chars = config.knowledge_window_chars
+        self.max_windows_per_page = config.knowledge_max_windows_per_page
+        self.partial_pages: Dict[str, Dict[str, int]] = {}
 
         # Initialize query engine for RAG
         self.query_engine = QueryEngine(project_name=project_name)
@@ -119,6 +158,7 @@ class CharacterKnowledgeBuilder:
                 with open(self.state_file, "r", encoding="utf-8") as f:
                     state_data = json.load(f)
                 self.processed_pages = state_data.get("processed_pages", {})
+                self.partial_pages = state_data.get("partial_pages", {})
                 logger.info(
                     f"Loaded discovery state: {len(self.processed_pages)} pages "
                     f"previously processed"
@@ -291,6 +331,12 @@ class CharacterKnowledgeBuilder:
         logger.info(f"Pages failed:     {failure_count}")
         logger.info(f"Estimated cost:   ${total_cost:.4f}")
         logger.info(f"Total processed:  {len(self.processed_pages)} (cumulative)")
+        if self.partial_pages:
+            logger.warning(
+                f"Partly read:      {len(self.partial_pages)} pages hit "
+                f"max_windows_per_page ({self.max_windows_per_page}); see "
+                f"partial_pages in {self.state_file}"
+            )
 
         # Print summary (count across all canons)
         char_count = sum(
@@ -316,7 +362,7 @@ class CharacterKnowledgeBuilder:
         Returns:
             Estimated cost for this page, or None if unknown
         """
-        # Reset canon state for new page
+        # Reset canon state for new page (kept across this page's windows)
         self.current_page_canon = None
 
         title = page.get("title", "Unknown")
@@ -325,46 +371,75 @@ class CharacterKnowledgeBuilder:
         infobox = page.get("infobox_data", {})
         categories = page.get("categories", [])
 
-        # Build task prompt with page content
-        task_prompt = self._build_task_prompt(title, url, content, infobox, categories)
+        # Read the whole page in windows; each window is its own short conversation
+        # and the knowledge base (via tools) carries what earlier windows found.
+        windows = split_into_windows(content, self.window_chars) or [""]
+        window_count = len(windows)
+        if window_count > self.max_windows_per_page:
+            logger.warning(
+                f"Page '{title}' has {window_count} windows; reading only the first "
+                f"{self.max_windows_per_page} (max_windows_per_page). Page is "
+                f"recorded as partly read."
+            )
+            self.partial_pages[url] = {
+                "windows_processed": self.max_windows_per_page,
+                "windows_total": window_count,
+            }
+            windows = windows[: self.max_windows_per_page]
 
-        # Execute with tools
         def tool_executor(tool_name: str, **tool_input):
             return self._execute_kb_tool(tool_name, tool_input)
 
-        result = self.query_engine.llm_client.generate_with_tools(
-            prompt=task_prompt,
-            tools=self.kb_tools,
-            tool_executor=tool_executor,
-            max_iterations=50,  # Allow many tool calls for thorough extraction
-            system_prompt=self.system_prompt,
-            prune_history=True,  # Prune to avoid context overflow
-            keep_last_n=10,
-        )
+        page_cost = 0.0
+        for index, window in enumerate(windows, 1):
+            if window_count > 1:
+                logger.info(f"  Window {index}/{window_count} ({len(window)} chars)")
 
-        # Cost is calculated by LLMClient from its pricing table
-        input_tokens = result["usage"].get("total_input_tokens", 0)
-        output_tokens = result["usage"].get("total_output_tokens", 0)
-        page_cost = result["usage"].get("estimated_cost_usd", 0.0)
+            task_prompt = self._build_task_prompt(
+                title,
+                url,
+                window,
+                infobox if index == 1 else {},
+                categories,
+                window_index=index,
+                window_count=window_count,
+            )
 
-        # Log the interaction
-        self.llm_logger.log_prompt(
-            prompt=task_prompt,
-            model=self.query_engine.llm_client.model,
-            purpose=f"knowledge_building:{title}",
-            response=result["final_response"],
-            usage={
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
-            },
-            metadata={
-                "page_title": title,
-                "page_url": url,
-                "tool_calls_made": len(result.get("tool_calls", [])),
-                "iterations": result["usage"].get("iterations", 0),
-                "estimated_cost": page_cost,
-            },
-        )
+            result = self.query_engine.llm_client.generate_with_tools(
+                prompt=task_prompt,
+                tools=self.kb_tools,
+                tool_executor=tool_executor,
+                max_iterations=50,  # Allow many tool calls for thorough extraction
+                system_prompt=self.system_prompt,
+                prune_history=True,  # Prune to avoid context overflow
+                keep_last_n=10,
+            )
+
+            # Cost is calculated by LLMClient from its pricing table
+            usage = result["usage"]
+            window_cost = usage.get("estimated_cost_usd", 0.0)
+            page_cost += window_cost
+
+            self.llm_logger.log_prompt(
+                prompt=task_prompt,
+                model=self.query_engine.llm_client.model,
+                purpose=f"knowledge_building:{title} [part {index}/{window_count}]",
+                response=result["final_response"],
+                usage={
+                    "input_tokens": usage.get("total_input_tokens", 0),
+                    "output_tokens": usage.get("total_output_tokens", 0),
+                },
+                cost=window_cost,
+                metadata={
+                    "page_title": title,
+                    "page_url": url,
+                    "window_index": index,
+                    "window_count": window_count,
+                    "tool_calls_made": len(result.get("tool_calls", [])),
+                    "iterations": usage.get("iterations", 0),
+                    "estimated_cost": window_cost,
+                },
+            )
 
         # Update metadata
         self.knowledge_base["metadata"]["last_updated"] = (
@@ -380,33 +455,59 @@ class CharacterKnowledgeBuilder:
         content: str,
         infobox: Dict[str, Any],
         categories: List[str],
+        window_index: int = 1,
+        window_count: int = 1,
     ) -> str:
         """
-        Build task prompt with page content.
+        Build task prompt for one window of a page.
 
         Args:
             title: Page title
             url: Page URL
-            content: Main page content
-            infobox: Infobox data
+            content: Text of this window (the full page text is split by
+                split_into_windows; nothing is truncated here)
+            infobox: Infobox data (pass {} for windows after the first)
             categories: Page categories
+            window_index: 1-based number of this window
+            window_count: Total windows for the page
 
         Returns:
             Task prompt string
         """
-        # Truncate content to avoid token limits (keep first 3000 chars)
-        content_excerpt = content[:3000] if content else "No content available"
+        content_excerpt = content if content else "No content available"
 
-        # Format infobox
+        # Format infobox (all fields - it is only sent with the first window)
         infobox_str = ""
         if infobox:
-            infobox_lines = [f"  - {k}: {v}" for k, v in list(infobox.items())[:10]]
-            infobox_str = "\n".join(infobox_lines)
+            infobox_str = "\n".join(f"  - {k}: {v}" for k, v in infobox.items())
+        elif window_index > 1:
+            infobox_str = "  (shown with part 1 of this page)"
 
         # Format categories
         categories_str = ", ".join(categories[:15]) if categories else "(no categories)"
 
-        prompt = f"""Process this wiki page and extract all characters and relationships.
+        # Windowed pages: say which part this is and what earlier parts already did
+        part_str = ""
+        if window_count > 1:
+            part_str = f"\nThis is part {window_index} of {window_count} of the page."
+            if window_index > 1:
+                part_str += (
+                    " Earlier parts were already processed: their characters and"
+                    " relationships are in the knowledge base, so search before"
+                    " creating."
+                )
+
+        if window_index > 1 and self.current_page_canon:
+            canon_step = (
+                f"1. The canon for this page is already set to "
+                f"'{self.current_page_canon}' - do not call determine_canon() again"
+            )
+        else:
+            canon_step = (
+                "1. FIRST call determine_canon() to declare the canon for this page"
+            )
+
+        prompt = f"""Process this wiki page and extract all characters and relationships.{part_str}
 
 <page>
 Title: {title}
@@ -421,7 +522,7 @@ Content:
 </page>
 
 Use the available tools to:
-1. FIRST call determine_canon() to declare the canon for this page
+{canon_step}
 2. Check for existing characters (avoid duplicates)
 3. Create new character entries with the determined canon
 4. Extract and document relationships with evidence (within the same canon)
@@ -1028,6 +1129,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         state_data = {
             "processed_pages": self.processed_pages,
+            "partial_pages": self.partial_pages,
             "last_saved": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "total_processed": len(self.processed_pages),
         }

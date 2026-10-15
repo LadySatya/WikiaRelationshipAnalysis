@@ -29,6 +29,15 @@ processor:
     # growing tool-loop history. Cache reads cost 0.1x the input rate.
     llm_prompt_caching: true
 
+  # Knowledge building (discover) settings
+  knowledge_building:
+    # Pages are read in consecutive windows of at most this many characters, each in
+    # its own short LLM conversation, so a large page never sits in one call.
+    window_chars: 6000
+    # Safety cap on cost per page. Pages with more windows are only partly read;
+    # this is logged, recorded in cache/discovery_state.json, and reported.
+    max_windows_per_page: 25
+
   # Character discovery settings
   character_discovery:
     min_mentions: 3              # minimum chunks mentioning character to be discovered
