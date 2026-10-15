@@ -25,10 +25,10 @@ class TestLLMClientInitialization:
         """LLMClient should initialize with Anthropic provider."""
         from src.processor.llm.llm_client import LLMClient
 
-        client = LLMClient(provider="anthropic", model="claude-3-5-haiku-20241022")
+        client = LLMClient(provider="anthropic", model="claude-haiku-5-5")
 
         assert client.provider == "anthropic"
-        assert client.model == "claude-3-5-haiku-20241022"
+        assert client.model == "claude-haiku-5-5"
 
     def test_init_with_default_config(self):
         """LLMClient should use config defaults when no parameters provided."""
@@ -38,7 +38,7 @@ class TestLLMClientInitialization:
 
         # Should default to anthropic and haiku from config
         assert client.provider == "anthropic"
-        assert client.model == "claude-3-5-haiku-20241022"
+        assert client.model == "claude-haiku-5-5"
 
     def test_init_validates_provider(self):
         """LLMClient should validate provider is supported."""
@@ -83,7 +83,7 @@ class TestLLMClientTextGeneration:
             # Mock Anthropic client
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Generated response")]
+            mock_response.content = [MagicMock(type="text", text="Generated response")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
@@ -101,7 +101,7 @@ class TestLLMClientTextGeneration:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=20, output_tokens=10)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
@@ -119,23 +119,100 @@ class TestLLMClientTextGeneration:
                 == "You are a helpful assistant analyzing Avatar: The Last Airbender wiki."
             )
 
-    def test_generate_with_temperature(self):
-        """LLMClient should support custom temperature setting."""
+    def test_generate_does_not_send_sampling_params(self):
+        """Claude Haiku 5.5 rejects non-default sampling params and SDK 1.x removed them."""
         from src.processor.llm.llm_client import LLMClient
 
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
 
             client = LLMClient(provider="anthropic")
-            client.generate("Test", temperature=0.3)
+            client.generate("Test")
 
             call_kwargs = mock_client.messages.create.call_args[1]
-            assert call_kwargs["temperature"] == 0.3
+            assert "temperature" not in call_kwargs
+            assert "top_p" not in call_kwargs
+            assert "top_k" not in call_kwargs
+
+    def test_generate_sends_effort_from_config(self):
+        """LLMClient should send the configured effort level via output_config."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [MagicMock(type="text", text="Response")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+            client.generate("Test")
+
+            call_kwargs = mock_client.messages.create.call_args[1]
+            assert call_kwargs["output_config"] == {"effort": client.effort}
+
+    def test_generate_skips_leading_thinking_blocks(self):
+        """Responses can begin with thinking blocks; text must be read by block type."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.stop_reason = "end_turn"
+            mock_response.content = [
+                MagicMock(type="thinking", thinking="", signature="sig"),
+                MagicMock(type="text", text="Aang is the Avatar."),
+            ]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            assert client.generate("Who is Aang?") == "Aang is the Avatar."
+
+    def test_generate_raises_on_refusal(self):
+        """A refusal stop_reason should raise a clear error, not return empty text."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.stop_reason = "refusal"
+            mock_response.stop_details = MagicMock(category="general_harms")
+            mock_response.content = []
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=0)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            with pytest.raises(Exception, match="refus"):
+                client.generate("Test")
+
+    def test_generate_raises_when_max_tokens_hit_before_text(self):
+        """If thinking uses up max_tokens before any text, raise instead of returning ''."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.stop_reason = "max_tokens"
+            mock_response.content = [MagicMock(type="thinking", thinking="")]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=100)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+
+            with pytest.raises(Exception, match="max_tokens"):
+                client.generate("Test", max_tokens=100)
 
     def test_generate_with_max_tokens(self):
         """LLMClient should support custom max_tokens setting."""
@@ -144,7 +221,7 @@ class TestLLMClientTextGeneration:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
@@ -162,7 +239,7 @@ class TestLLMClientTextGeneration:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
@@ -182,11 +259,11 @@ class TestLLMClientTextGeneration:
             mock_client = MagicMock()
             mock_client.messages.create.side_effect = [
                 MagicMock(
-                    content=[MagicMock(text="Response 1")],
+                    content=[MagicMock(type="text", text="Response 1")],
                     usage=MagicMock(input_tokens=100, output_tokens=50),
                 ),
                 MagicMock(
-                    content=[MagicMock(text="Response 2")],
+                    content=[MagicMock(type="text", text="Response 2")],
                     usage=MagicMock(input_tokens=200, output_tokens=75),
                 ),
             ]
@@ -211,7 +288,7 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Success after retry")]
+            mock_response.content = [MagicMock(type="text", text="Success after retry")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
             # First call fails with 529, second succeeds
@@ -238,7 +315,7 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Success")]
+            mock_response.content = [MagicMock(type="text", text="Success")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
             mock_client.messages.create.side_effect = [
@@ -261,7 +338,7 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Success")]
+            mock_response.content = [MagicMock(type="text", text="Success")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
             mock_client.messages.create.side_effect = [
@@ -284,7 +361,7 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Success")]
+            mock_response.content = [MagicMock(type="text", text="Success")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
             mock_client.messages.create.side_effect = [
@@ -306,7 +383,7 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Success")]
+            mock_response.content = [MagicMock(type="text", text="Success")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
             # Fail twice, succeed on third attempt
@@ -381,7 +458,7 @@ class TestLLMClientRetryLogic:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Success")]
+            mock_response.content = [MagicMock(type="text", text="Success")]
             mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
 
             mock_client.messages.create.side_effect = [
@@ -436,18 +513,6 @@ class TestLLMClientErrorHandling:
         with pytest.raises(ValueError, match="prompt cannot be empty"):
             client.generate("   ")
 
-    def test_generate_validates_temperature_range(self):
-        """LLMClient should validate temperature is in valid range."""
-        from src.processor.llm.llm_client import LLMClient
-
-        client = LLMClient(provider="anthropic")
-
-        with pytest.raises(ValueError, match="temperature must be between 0 and 1"):
-            client.generate("Test", temperature=1.5)
-
-        with pytest.raises(ValueError, match="temperature must be between 0 and 1"):
-            client.generate("Test", temperature=-0.1)
-
     def test_generate_validates_max_tokens(self):
         """LLMClient should validate max_tokens is positive."""
         from src.processor.llm.llm_client import LLMClient
@@ -471,12 +536,12 @@ class TestLLMClientCostTracking:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=1000, output_tokens=500)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
 
-            client = LLMClient(provider="anthropic", model="claude-3-5-haiku-20241022")
+            client = LLMClient(provider="anthropic", model="claude-haiku-5-5")
             client.generate("Test")
 
             stats = client.get_usage_stats()
@@ -485,18 +550,18 @@ class TestLLMClientCostTracking:
             assert stats["total_output_tokens"] == 500
             assert stats["total_tokens"] == 1500
             assert "estimated_cost_usd" in stats
-            assert stats["model"] == "claude-3-5-haiku-20241022"
+            assert stats["model"] == "claude-haiku-5-5"
 
     def test_estimate_cost_for_haiku(self):
-        """LLMClient should estimate cost correctly for Claude 3.5 Haiku."""
+        """LLMClient should estimate cost correctly for Claude Haiku 5.5."""
         from src.processor.llm.llm_client import LLMClient
 
-        client = LLMClient(provider="anthropic", model="claude-3-5-haiku-20241022")
+        client = LLMClient(provider="anthropic", model="claude-haiku-5-5")
 
-        # Haiku pricing: $1/1M input tokens, $5/1M output tokens
+        # Haiku 5.5 pricing: $0.10/1M input tokens, $0.50/1M output tokens
         cost = client.estimate_cost(input_tokens=1_000_000, output_tokens=1_000_000)
 
-        assert cost == pytest.approx(6.0, rel=0.01)  # $1 + $5 = $6
+        assert cost == pytest.approx(0.60, rel=0.01)  # $0.10 + $0.50 = $0.60
 
     def test_reset_usage_stats(self):
         """LLMClient should support resetting usage statistics."""
@@ -505,7 +570,7 @@ class TestLLMClientCostTracking:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
@@ -532,7 +597,7 @@ class TestLLMClientWithContext:
         with patch("anthropic.Anthropic") as mock_anthropic_class:
             mock_client = MagicMock()
             mock_response = MagicMock()
-            mock_response.content = [MagicMock(text="Response")]
+            mock_response.content = [MagicMock(type="text", text="Response")]
             mock_response.usage = MagicMock(input_tokens=50, output_tokens=25)
             mock_client.messages.create.return_value = mock_response
             mock_anthropic_class.return_value = mock_client
@@ -766,6 +831,27 @@ class TestLLMClientWithCitations:
             # Should track tokens
             assert client.total_input_tokens == 500
             assert client.total_output_tokens == 100
+
+    def test_query_with_citations_does_not_send_temperature(self):
+        """Citations call must not send temperature (removed in SDK 1.x)."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_response = MagicMock()
+            mock_response.content = [
+                MagicMock(type="text", text="Answer", citations=None)
+            ]
+            mock_response.usage = MagicMock(input_tokens=10, output_tokens=5)
+            mock_client.messages.create.return_value = mock_response
+            mock_anthropic_class.return_value = mock_client
+
+            client = LLMClient(provider="anthropic")
+            client.query_with_citations("Q", ["doc"], [{"source_url": "u"}])
+
+            call_kwargs = mock_client.messages.create.call_args[1]
+            assert "temperature" not in call_kwargs
+            assert call_kwargs["output_config"] == {"effort": client.effort}
 
     def test_query_with_citations_validates_empty_documents(self):
         """LLMClient should validate documents list is not empty."""

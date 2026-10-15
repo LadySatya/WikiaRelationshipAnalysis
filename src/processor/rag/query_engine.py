@@ -117,8 +117,7 @@ Please answer the question based on the information provided above."""
         answer = self.llm_client.generate(
             prompt=prompt,
             system_prompt=system_prompt or self.DEFAULT_SYSTEM_PROMPT,
-            temperature=0.3,  # Lower temperature for more factual responses
-            max_tokens=1024,
+            max_tokens=4096,
         )
 
         return answer
@@ -214,8 +213,7 @@ Please answer the question based on the information provided above."""
         query: str,
         k: int = 10,
         metadata_filter: Optional[Dict[str, Any]] = None,
-        temperature: float = 0.3,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
     ) -> Dict[str, Any]:
         """
         Execute RAG query with automatic citation tracking.
@@ -227,8 +225,7 @@ Please answer the question based on the information provided above."""
             query: User question
             k: Number of chunks to retrieve (default: 10)
             metadata_filter: Optional metadata filter
-            temperature: Sampling temperature (default: 0.3 for factual)
-            max_tokens: Maximum tokens to generate (default: 1024)
+            max_tokens: Maximum tokens to generate, including thinking (default: 4096)
 
         Returns:
             Dictionary with structure:
@@ -284,7 +281,6 @@ Please provide a clear, concise answer based only on the information in the docu
             query=prompt,
             documents=documents,
             document_metadata=document_metadata,
-            temperature=temperature,
             max_tokens=max_tokens,
         )
 

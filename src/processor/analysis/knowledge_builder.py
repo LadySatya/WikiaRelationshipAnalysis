@@ -336,15 +336,14 @@ class CharacterKnowledgeBuilder:
             tool_executor=tool_executor,
             max_iterations=50,  # Allow many tool calls for thorough extraction
             system_prompt=self.system_prompt,
-            temperature=0.1,  # Low temperature for factual extraction
             prune_history=True,  # Prune to avoid context overflow
             keep_last_n=10,
         )
 
-        # Calculate cost (Haiku pricing: $0.80/1M input, $4.00/1M output)
+        # Cost is calculated by LLMClient from its pricing table
         input_tokens = result["usage"].get("total_input_tokens", 0)
         output_tokens = result["usage"].get("total_output_tokens", 0)
-        page_cost = (input_tokens * 0.80 / 1_000_000) + (output_tokens * 4.00 / 1_000_000)
+        page_cost = result["usage"].get("estimated_cost_usd", 0.0)
 
         # Log the interaction
         self.llm_logger.log_prompt(

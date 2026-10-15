@@ -27,7 +27,7 @@ class LLMClient:
     - Text generation with system prompts
     - Multi-turn conversations with context
     - Token counting and cost tracking
-    - Temperature and max_tokens control
+    - Effort and max_tokens control
 
     Args:
         provider: LLM provider - only "anthropic" supported currently
@@ -52,15 +52,18 @@ class LLMClient:
 
     SUPPORTED_PROVIDERS = {"anthropic"}
 
-    # Pricing per 1M tokens (as of 2024-10-16)
+    # Pricing per 1M tokens (as of 2026-10). Single source of truth for cost estimates.
+    # NOTE: Haiku 5.5 bills prompts over 100K tokens at $0.50/$2.50; our per-page
+    # prompts stay well under that, so the base rate is used.
+    DEFAULT_PRICING_MODEL = "claude-haiku-5-5"
     PRICING = {
-        "claude-3-5-haiku-20241022": {
-            "input": 1.00,  # $1 per 1M input tokens
-            "output": 5.00,  # $5 per 1M output tokens
+        "claude-haiku-5-5": {
+            "input": 0.10,  # $0.10 per 1M input tokens
+            "output": 0.50,  # $0.50 per 1M output tokens
         },
-        "claude-3-5-sonnet-20241022": {
-            "input": 3.00,  # $3 per 1M input tokens
-            "output": 15.00,  # $15 per 1M output tokens
+        "claude-sonnet-5-5": {
+            "input": 2.00,  # $2 per 1M input tokens
+            "output": 10.00,  # $10 per 1M output tokens
         },
     }
 
@@ -99,6 +102,9 @@ class LLMClient:
 
         self.model = model
 
+        # Effort level sent via output_config (controls thinking depth)
+        self.effort = config.llm_effort
+
         # Get API key
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
 
@@ -131,12 +137,18 @@ class LLMClient:
         """Calculate cost for given token counts."""
         return self.estimate_cost(input_tokens, output_tokens)
 
+    @staticmethod
+    def _refusal_message(response: Any) -> str:
+        """Describe a refusal stop_reason, including the category when present."""
+        stop_details = getattr(response, "stop_details", None)
+        category = getattr(stop_details, "category", None)
+        return f"Model refused the request (category: {category})"
+
     def generate(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
         context: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
@@ -145,8 +157,7 @@ class LLMClient:
         Args:
             prompt: User prompt/question
             system_prompt: Optional system prompt for context
-            temperature: Sampling temperature 0-1 (default: 0.7)
-            max_tokens: Maximum tokens to generate (default: 1024)
+            max_tokens: Maximum tokens to generate, including thinking (default: 4096)
             context: Optional conversation context as list of messages
 
         Returns:
@@ -159,9 +170,6 @@ class LLMClient:
         # Validate inputs
         if not prompt or not prompt.strip():
             raise ValueError("prompt cannot be empty")
-
-        if not (0 <= temperature <= 1):
-            raise ValueError("temperature must be between 0 and 1")
 
         if max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
@@ -194,16 +202,16 @@ class LLMClient:
                     response = self._client.messages.create(
                         model=self.model,
                         messages=messages,
-                        temperature=temperature,
                         max_tokens=max_tokens,
+                        output_config={"effort": self.effort},
                         system=system_prompt,
                     )
                 else:
                     response = self._client.messages.create(
                         model=self.model,
                         messages=messages,
-                        temperature=temperature,
                         max_tokens=max_tokens,
+                        output_config={"effort": self.effort},
                     )
                 break  # Success, exit retry loop
 
@@ -233,14 +241,19 @@ class LLMClient:
                     # Non-retryable error or last attempt failed
                     raise Exception(f"LLM API call failed: {error_str}") from e
 
-        # Extract text from response
-        # We expect TextBlock since we're not using tools/thinking
-        content_block = response.content[0]
-        if hasattr(content_block, "text"):
-            text: str = cast("TextBlock", content_block).text
-        else:
+        if response.stop_reason == "refusal":
+            raise Exception(self._refusal_message(response))
+
+        # Extract text by block type - responses can begin with thinking blocks
+        text: str = "".join(
+            cast("TextBlock", block).text
+            for block in response.content
+            if block.type == "text"
+        )
+        if not text and response.stop_reason == "max_tokens":
             raise Exception(
-                f"Unexpected content block type: {type(content_block).__name__}"
+                f"Response hit max_tokens ({max_tokens}) before producing text; "
+                "raise max_tokens or lower effort"
             )
 
         # Track token usage
@@ -277,7 +290,7 @@ class LLMClient:
                     "total_output_tokens": 500,
                     "total_tokens": 1500,
                     "estimated_cost_usd": 0.006,
-                    "model": "claude-3-5-haiku-20241022"
+                    "model": "claude-haiku-5-5"
                 }
         """
         cost = self.estimate_cost(self.total_input_tokens, self.total_output_tokens)
@@ -302,9 +315,7 @@ class LLMClient:
             Estimated cost in USD
         """
         # Get pricing for current model (default to Haiku if unknown)
-        pricing = self.PRICING.get(
-            self.model, self.PRICING["claude-3-5-haiku-20241022"]
-        )
+        pricing = self.PRICING.get(self.model, self.PRICING[self.DEFAULT_PRICING_MODEL])
 
         # Calculate cost (pricing is per 1M tokens)
         input_cost = (input_tokens / 1_000_000) * pricing["input"]
@@ -322,8 +333,7 @@ class LLMClient:
         query: str,
         documents: List[str],
         document_metadata: List[Dict[str, Any]],
-        temperature: float = 0.7,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
     ) -> Dict[str, Any]:
         """
         Query Claude with documents and get automatic citation tracking.
@@ -340,8 +350,7 @@ class LLMClient:
                 - source_url: URL of the source page
                 - page_title: Title of the source page
                 - chunk_id: ID of the chunk (optional)
-            temperature: Sampling temperature 0-1 (default: 0.7)
-            max_tokens: Maximum tokens to generate (default: 1024)
+            max_tokens: Maximum tokens to generate, including thinking (default: 4096)
 
         Returns:
             Dictionary with:
@@ -386,9 +395,6 @@ class LLMClient:
         if len(documents) != len(document_metadata):
             raise ValueError("documents and metadata must have same length")
 
-        if not (0 <= temperature <= 1):
-            raise ValueError("temperature must be between 0 and 1")
-
         if max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
 
@@ -425,11 +431,14 @@ class LLMClient:
             response = self._client.messages.create(
                 model=self.model,
                 messages=messages,
-                temperature=temperature,
                 max_tokens=max_tokens,
+                output_config={"effort": self.effort},
             )
         except Exception as e:
             raise Exception(f"Claude API call failed: {str(e)}") from e
+
+        if response.stop_reason == "refusal":
+            raise Exception(self._refusal_message(response))
 
         # Extract text and citations from response
         result_text = ""
@@ -482,8 +491,7 @@ class LLMClient:
         tool_executor: callable,
         max_iterations: int = 10,
         system_prompt: Optional[str] = None,
-        temperature: float = 0.3,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
         prune_history: bool = True,
         keep_last_n: int = 3,
     ) -> Dict[str, Any]:
@@ -500,8 +508,7 @@ class LLMClient:
                           Should have signature: fn(tool_name: str, **kwargs) -> Dict
             max_iterations: Max tool-call rounds (default: 10)
             system_prompt: Optional system prompt
-            temperature: Sampling temperature (default: 0.3)
-            max_tokens: Max tokens to generate (default: 4096)
+            max_tokens: Max tokens per response, including thinking (default: 8192)
             prune_history: If True, keep only recent conversation to reduce tokens (default: True)
             keep_last_n: Number of recent tool exchanges to keep when pruning (default: 3)
 
@@ -549,9 +556,6 @@ class LLMClient:
         if not callable(tool_executor):
             raise ValueError("tool_executor must be callable")
 
-        if not (0 <= temperature <= 1):
-            raise ValueError("temperature must be between 0 and 1")
-
         if max_tokens <= 0:
             raise ValueError("max_tokens must be positive")
 
@@ -584,16 +588,16 @@ class LLMClient:
                         messages=conversation,
                         tools=tools,
                         system=system_prompt,
-                        temperature=temperature,
                         max_tokens=max_tokens,
+                        output_config={"effort": self.effort},
                     )
                 else:
                     response = self._client.messages.create(
                         model=self.model,
                         messages=conversation,
                         tools=tools,
-                        temperature=temperature,
                         max_tokens=max_tokens,
+                        output_config={"effort": self.effort},
                     )
             except Exception as e:
                 raise RuntimeError(f"LLM API call failed: {e}") from e
@@ -714,6 +718,15 @@ class LLMClient:
                     },
                 }
 
+            elif response.stop_reason == "refusal":
+                raise RuntimeError(self._refusal_message(response))
+
+            elif response.stop_reason == "max_tokens":
+                raise RuntimeError(
+                    f"Response hit max_tokens ({max_tokens}) mid-turn; "
+                    "raise max_tokens or lower effort"
+                )
+
             else:
                 # Unexpected stop reason
                 print(f"[WARN] Unexpected stop reason: {response.stop_reason}")
@@ -739,6 +752,8 @@ class LLMClient:
         - Keep first message (original task description)
         - Keep last N exchanges (assistant + user pairs)
         - Discard older exchanges in the middle
+        - Strip thinking blocks from kept assistant turns: the API rejects
+          thinking blocks once earlier history has changed
 
         Args:
             messages: Full conversation history
@@ -766,7 +781,26 @@ class LLMClient:
         # Last N exchanges = last (N * 2) messages
         recent_exchanges = messages[-(keep_last_n * 2) :]
 
-        # Rebuild conversation: task + recent exchanges
-        pruned = [task_message] + recent_exchanges
+        # Rebuild conversation: task + recent exchanges (copies, original untouched)
+        pruned = [task_message] + [
+            self._strip_thinking(message) for message in recent_exchanges
+        ]
 
         return pruned
+
+    @staticmethod
+    def _strip_thinking(message: "MessageParam") -> "MessageParam":
+        """Return a copy of an assistant message without thinking blocks."""
+        content = message["content"]
+        if message["role"] != "assistant" or isinstance(content, str):
+            return message
+
+        def block_type(block: Any) -> Any:
+            return block.get("type") if isinstance(block, dict) else block.type
+
+        kept = [
+            block
+            for block in content
+            if block_type(block) not in ("thinking", "redacted_thinking")
+        ]
+        return cast("MessageParam", {**message, "content": kept})

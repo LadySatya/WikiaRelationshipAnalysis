@@ -42,7 +42,7 @@ class TestVectorStoreInitialization:
             assert store.project_name == "naruto_wiki"
             mock_client.get_or_create_collection.assert_called_once()
 
-    def test_init_with_custom_persist_directory(self):
+    def test_init_with_custom_persist_directory(self, tmp_path):
         """VectorStore should support custom persistence directory."""
         from src.processor.rag.vector_store import VectorStore
 
@@ -52,7 +52,8 @@ class TestVectorStoreInitialization:
             mock_client.get_or_create_collection.return_value = mock_collection
             mock_client_class.return_value = mock_client
 
-            custom_dir = "/custom/path"
+            # Use tmp_path: VectorStore creates the directory on the real filesystem
+            custom_dir = (tmp_path / "custom" / "path").as_posix()
             store = VectorStore(
                 project_name="test_project", persist_directory=custom_dir
             )

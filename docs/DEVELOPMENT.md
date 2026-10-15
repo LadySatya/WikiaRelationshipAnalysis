@@ -6,7 +6,7 @@
 # Clone and install
 git clone https://github.com/LadySatya/WikiaRelationshipAnalysis.git
 cd WikiaRelationshipAnalysis
-pip install -e ".[dev,llm,viz]"
+pip install -e ".[dev,rag,viz]"
 
 # Set API keys
 export ANTHROPIC_API_KEY="your-key"

@@ -29,7 +29,7 @@ A tool that crawls Fandom/Wikia sites, extracts character information using LLM-
 
 ```bash
 # Install
-pip install -e ".[dev,llm,viz]"
+pip install -e ".[dev,rag,viz]"
 
 # Set API keys
 export ANTHROPIC_API_KEY="your-key"

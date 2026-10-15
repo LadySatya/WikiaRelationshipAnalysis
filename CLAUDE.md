@@ -48,7 +48,7 @@ BAD (DO NOT): Anti-example
 
 ```bash
 # Environment
-pip install -e ".[dev,llm,viz]"
+pip install -e ".[dev,rag,viz]"
 
 # Full Pipeline
 python main.py pipeline <project> <url> [--max-pages N] [--max-characters N]
@@ -280,7 +280,7 @@ llm_logger.log_prompt(
 
 ```bash
 pip install -e ".[dev]"        # Development
-pip install -e ".[dev,llm]"    # + LLM features
+pip install -e ".[dev,rag]"    # + RAG / LLM features
 pip install -e ".[all]"        # Everything
 ```
 

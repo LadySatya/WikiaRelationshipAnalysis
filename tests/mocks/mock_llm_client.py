@@ -41,11 +41,11 @@ class MockLLMClient:
         "default": "Mako: yes",
     }
 
-    # Pricing per 1M tokens (same as real Haiku)
+    # Pricing per 1M tokens (same as real Haiku 5.5)
     PRICING = {
-        "claude-3-5-haiku-20241022": {
-            "input": 1.00,
-            "output": 5.00,
+        "claude-haiku-5-5": {
+            "input": 0.10,
+            "output": 0.50,
         }
     }
 
@@ -53,7 +53,7 @@ class MockLLMClient:
         self,
         fixture_dir: Optional[Path] = None,
         use_fixtures: bool = True,
-        model: str = "claude-3-5-haiku-20241022",
+        model: str = "claude-haiku-5-5",
     ):
         """
         Initialize mock LLM client.
@@ -93,8 +93,7 @@ class MockLLMClient:
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
         context: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
@@ -103,7 +102,6 @@ class MockLLMClient:
         Args:
             prompt: User prompt/question
             system_prompt: Optional system prompt
-            temperature: Sampling temperature (ignored in mock)
             max_tokens: Maximum tokens (used for token estimation)
             context: Conversation context (ignored in mock)
 
@@ -278,9 +276,7 @@ class MockLLMClient:
         Returns:
             Estimated cost in USD
         """
-        pricing = self.PRICING.get(
-            self.model, self.PRICING["claude-3-5-haiku-20241022"]
-        )
+        pricing = self.PRICING.get(self.model, self.PRICING["claude-haiku-5-5"])
 
         input_cost = (input_tokens / 1_000_000) * pricing["input"]
         output_cost = (output_tokens / 1_000_000) * pricing["output"]

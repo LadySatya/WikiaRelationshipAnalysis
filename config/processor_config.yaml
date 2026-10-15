@@ -20,7 +20,11 @@ processor:
 
     # LLM settings
     llm_provider: "anthropic"
-    llm_model: "claude-3-5-haiku-20241022"  # Fast and cheap for RAG
+    llm_model: "claude-haiku-5-5"  # Fast and cheap for RAG
+    # Effort controls how much the model thinks (thinking is on by default on Haiku 5.5).
+    # low | medium | high | xhigh | max. Lower = cheaper/faster; low can skip tool calls
+    # or stop early in long agent prompts.
+    llm_effort: "medium"
 
   # Character discovery settings
   character_discovery:

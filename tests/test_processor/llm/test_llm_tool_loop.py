@@ -55,18 +55,6 @@ class TestGenerateWithToolsValidation:
         with pytest.raises(ValueError, match="tool_executor must be callable"):
             client.generate_with_tools("Test prompt", tools, "not_callable")
 
-    def test_invalid_temperature_raises_error(self):
-        """Should raise ValueError for temperature outside 0-1 range."""
-        from src.processor.llm.llm_client import LLMClient
-
-        client = LLMClient()
-        tools = [{"name": "test_tool", "input_schema": {}}]
-
-        with pytest.raises(ValueError, match="temperature must be between 0 and 1"):
-            client.generate_with_tools(
-                "Test prompt", tools, lambda n, **k: {}, temperature=1.5
-            )
-
     def test_negative_max_tokens_raises_error(self):
         """Should raise ValueError for non-positive max_tokens."""
         from src.processor.llm.llm_client import LLMClient
@@ -312,6 +300,96 @@ class TestGenerateWithToolsExecution:
             assert len(result["tool_calls"]) == 0
             assert result["usage"]["iterations"] == 1
 
+    def test_does_not_send_sampling_params_and_sends_effort(self):
+        """Tool loop must not send temperature (rejected by Haiku 5.5) and should send effort."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+            mock_client.messages.create.return_value = (
+                self._create_mock_end_turn_response("Done")
+            )
+
+            client = LLMClient()
+            tools = [{"name": "test", "input_schema": {"type": "object"}}]
+            client.generate_with_tools("Test", tools, lambda n, **k: {})
+
+            call_kwargs = mock_client.messages.create.call_args[1]
+            assert "temperature" not in call_kwargs
+            assert call_kwargs["output_config"] == {"effort": client.effort}
+
+    def test_refusal_raises_clear_error(self):
+        """A refusal should raise an error naming the refusal, not 'max iterations'."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+
+            refusal = MagicMock()
+            refusal.stop_reason = "refusal"
+            refusal.stop_details = MagicMock(category="general_harms")
+            refusal.content = []
+            refusal.usage = MagicMock(input_tokens=10, output_tokens=0)
+            mock_client.messages.create.return_value = refusal
+
+            client = LLMClient()
+            tools = [{"name": "test", "input_schema": {"type": "object"}}]
+
+            with pytest.raises(RuntimeError, match="refus"):
+                client.generate_with_tools("Test", tools, lambda n, **k: {})
+
+    def test_max_tokens_stop_raises_clear_error(self):
+        """Hitting max_tokens mid-turn should raise an error naming max_tokens."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+
+            truncated = MagicMock()
+            truncated.stop_reason = "max_tokens"
+            truncated.content = [MagicMock(type="thinking", thinking="")]
+            truncated.usage = MagicMock(input_tokens=10, output_tokens=4096)
+            mock_client.messages.create.return_value = truncated
+
+            client = LLMClient()
+            tools = [{"name": "test", "input_schema": {"type": "object"}}]
+
+            with pytest.raises(RuntimeError, match="max_tokens"):
+                client.generate_with_tools("Test", tools, lambda n, **k: {})
+
+    def test_thinking_blocks_passed_back_unmodified(self):
+        """Assistant turns (including thinking blocks) must be sent back as-is."""
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+
+            tool_response = self._create_mock_tool_use_response("search", {"q": "x"})
+            thinking_block = MagicMock(type="thinking", thinking="", signature="sig")
+            tool_response.content = [thinking_block] + tool_response.content
+
+            sent_conversations = []
+
+            def record(**kwargs):
+                sent_conversations.append(list(kwargs["messages"]))
+                if len(sent_conversations) == 1:
+                    return tool_response
+                return self._create_mock_end_turn_response("Done")
+
+            mock_client.messages.create.side_effect = record
+
+            client = LLMClient()
+            tools = [{"name": "search", "input_schema": {"type": "object"}}]
+            client.generate_with_tools("Test", tools, lambda n, **k: {"ok": True})
+
+            assistant_turn = sent_conversations[1][1]
+            assert assistant_turn["role"] == "assistant"
+            assert assistant_turn["content"][0] is thinking_block
+
 
 class TestPruneConversation:
     """Test the conversation pruning helper."""
@@ -402,3 +480,51 @@ class TestPruneConversation:
         assert pruned[0]["content"] == "Task"
         # R1 and U1 should be gone
         assert "R1" not in [m["content"] for m in pruned]
+
+    def test_prune_strips_thinking_blocks_when_history_changes(self):
+        """Thinking blocks are invalid after earlier turns are removed, so strip them."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient()
+
+        def assistant_turn(n):
+            return {
+                "role": "assistant",
+                "content": [
+                    MagicMock(type="thinking", thinking="", signature=f"s{n}"),
+                    {"type": "redacted_thinking", "data": "x"},
+                    MagicMock(type="tool_use", id=f"t{n}", name="search", input={}),
+                ],
+            }
+
+        messages = [{"role": "user", "content": "Task"}]
+        for n in range(3):
+            messages.append(assistant_turn(n))
+            messages.append({"role": "user", "content": [{"type": "tool_result"}]})
+
+        pruned = client._prune_conversation(messages, keep_last_n=1)
+
+        assistant_blocks = pruned[1]["content"]
+        types = [
+            b["type"] if isinstance(b, dict) else b.type for b in assistant_blocks
+        ]
+        assert types == ["tool_use"]
+        assert assistant_blocks[0].id == "t2"
+        # Original conversation must not be mutated
+        assert len(messages[5]["content"]) == 3
+
+    def test_prune_keeps_thinking_blocks_when_nothing_pruned(self):
+        """Short conversations are unchanged, so thinking blocks stay valid."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient()
+        thinking = MagicMock(type="thinking", thinking="", signature="s")
+        messages = [
+            {"role": "user", "content": "Task"},
+            {"role": "assistant", "content": [thinking]},
+            {"role": "user", "content": "Result"},
+        ]
+
+        pruned = client._prune_conversation(messages, keep_last_n=3)
+
+        assert pruned[1]["content"][0] is thinking

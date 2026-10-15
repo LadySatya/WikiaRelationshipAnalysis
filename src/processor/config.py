@@ -137,9 +137,12 @@ class ProcessorConfig:
     @property
     def llm_model(self) -> str:
         """Get LLM model name."""
-        return self.get(
-            "processor", "rag", "llm_model", default="claude-3-5-haiku-20241022"
-        )
+        return self.get("processor", "rag", "llm_model", default="claude-haiku-5-5")
+
+    @property
+    def llm_effort(self) -> str:
+        """Get LLM effort level (low, medium, high, xhigh, max)."""
+        return self.get("processor", "rag", "llm_effort", default="medium")
 
     @property
     def character_discovery_min_mentions(self) -> int:
