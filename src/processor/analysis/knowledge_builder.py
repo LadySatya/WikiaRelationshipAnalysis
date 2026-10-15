@@ -255,7 +255,9 @@ class CharacterKnowledgeBuilder:
                         f"Successfully processed: {success_count} pages. "
                         f"Estimated cost: ${total_cost:.4f}"
                     )
-                    logger.error("Add credits at https://console.anthropic.com/settings/billing")
+                    logger.error(
+                        "Add credits at https://console.anthropic.com/settings/billing"
+                    )
                     # Save what we have and stop
                     logger.info("Saving partial results before stopping...")
                     self.save()
