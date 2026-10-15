@@ -276,6 +276,9 @@ Examples:
     discover_parser.add_argument("--max-pages", type=int, help="Maximum pages to process (default: all)")
     discover_parser.add_argument("--save-frequency", type=int, default=10,
                                  help="Save KB every N pages (default: 10)")
+    discover_parser.add_argument("--max-cost", type=float,
+                                 help="Stop starting new pages once this many USD are spent "
+                                      "(may exceed by up to one page; resume later)")
 
     # ========== Phase 3: Validation ==========
 
@@ -328,7 +331,7 @@ Examples:
         elif args.command == "index":
             index_command(args.project_name)
         elif args.command == "discover":
-            discover_command(args.project_name, args.max_pages, args.save_frequency)
+            discover_command(args.project_name, args.max_pages, args.save_frequency, args.max_cost)
         elif args.command == "validate":
             validate_command(args.project_name)
         elif args.command == "visualize":

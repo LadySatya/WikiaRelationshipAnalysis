@@ -93,3 +93,42 @@ class TestSummarizeKnowledgeBase:
         assert summary["avg_claims"] == 0
         assert summary["top_characters"] == []
         assert summary["sample_relationship"] is None
+
+
+class TestDiscoverCommandMaxCost:
+    """discover_command passes the spending cap through to the builder."""
+
+    def test_passes_max_cost_to_builder(self):
+        import sys
+        import types
+        from unittest.mock import MagicMock, patch
+
+        from src.cli.processor_commands import discover_command
+
+        builder = MagicMock()
+        builder.build_knowledge_base.return_value = {
+            "characters": {},
+            "relationships": {},
+        }
+        builder.budget_exhausted = False
+        builder.query_engine.get_usage_stats.return_value = {
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "estimated_cost_usd": 0.0,
+        }
+        kb_module = types.ModuleType("processor.analysis.knowledge_builder")
+        kb_module.CharacterKnowledgeBuilder = MagicMock(return_value=builder)
+        fake_modules = {
+            "processor": types.ModuleType("processor"),
+            "processor.analysis": types.ModuleType("processor.analysis"),
+            "processor.analysis.knowledge_builder": kb_module,
+        }
+
+        with (
+            patch.dict(sys.modules, fake_modules),
+            patch("src.cli.processor_commands.validate_project_exists"),
+            patch("src.cli.processor_commands.setup_project_logging"),
+        ):
+            discover_command("avatar_wiki", max_pages=5, max_cost=0.75)
+
+        builder.build_knowledge_base.assert_called_once_with(max_pages=5, max_cost=0.75)

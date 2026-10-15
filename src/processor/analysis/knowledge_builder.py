@@ -134,6 +134,9 @@ class CharacterKnowledgeBuilder:
             },
         }
 
+        # Set when a run stops early because max_cost was reached
+        self.budget_exhausted = False
+
         # Track which pages have been fully processed (for resume support)
         # Key: page URL, Value: timestamp of completion
         self.processed_pages: Dict[str, str] = {}
@@ -219,12 +222,17 @@ class CharacterKnowledgeBuilder:
             if rel_count > 0:
                 logger.info(f"Loaded {rel_count} existing relationships from disk")
 
-    def build_knowledge_base(self, max_pages: Optional[int] = None) -> Dict[str, Any]:
+    def build_knowledge_base(
+        self, max_pages: Optional[int] = None, max_cost: Optional[float] = None
+    ) -> Dict[str, Any]:
         """
         Build knowledge base by processing all crawled pages.
 
         Args:
             max_pages: Optional limit on number of pages to process
+            max_cost: Optional spending cap in USD. No new page is started once
+                this run has spent at least this much, so a run can exceed it by
+                up to one page's cost. Remaining pages are left for resume.
 
         Returns:
             Final knowledge base dictionary
@@ -247,10 +255,20 @@ class CharacterKnowledgeBuilder:
         skipped_count = 0
         consecutive_failures = 0
         total_cost = 0.0
+        self.budget_exhausted = False
 
         for i, page in enumerate(pages, 1):
             page_title = page.get("title", "Unknown")
             page_url = page.get("url", "")
+
+            if max_cost is not None and total_cost >= max_cost:
+                self.budget_exhausted = True
+                logger.warning(
+                    f"Spending cap reached: ${total_cost:.4f} spent (max_cost "
+                    f"${max_cost:.2f}). Stopping before page {i}/{len(pages)}; "
+                    f"run discover again to resume."
+                )
+                break
 
             # Skip already-processed pages (resume support)
             if page_url and page_url in self.processed_pages:

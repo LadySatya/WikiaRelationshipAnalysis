@@ -176,7 +176,10 @@ def summarize_knowledge_base(kb: Dict[str, Any], top_n: int = 10) -> Dict[str, A
 
 
 def discover_command(
-    project_name: str, max_pages: Optional[int] = None, save_frequency: int = 10
+    project_name: str,
+    max_pages: Optional[int] = None,
+    save_frequency: int = 10,
+    max_cost: Optional[float] = None,
 ):
     """
     Build knowledge base (characters + relationships) from indexed data.
@@ -189,6 +192,8 @@ def discover_command(
         project_name: Name of the project
         max_pages: Maximum number of pages to process (None = all)
         save_frequency: Save KB every N pages (default: 10)
+        max_cost: Optional spending cap in USD; stops starting new pages once
+            reached (resume by running discover again)
     """
     import time
 
@@ -211,7 +216,7 @@ def discover_command(
 
     # Build knowledge base
     start_time = time.time()
-    kb = builder.build_knowledge_base(max_pages=max_pages)
+    kb = builder.build_knowledge_base(max_pages=max_pages, max_cost=max_cost)
     duration = time.time() - start_time
 
     # Calculate statistics
@@ -270,6 +275,11 @@ def discover_command(
     logger.info(f"  Input tokens:  {usage['total_input_tokens']:,}")
     logger.info(f"  Output tokens: {usage['total_output_tokens']:,}")
     logger.info(f"  Total cost:    ${usage['estimated_cost_usd']:.4f}")
+    if builder.budget_exhausted:
+        logger.warning(
+            f"  Stopped at spending cap (--max-cost {max_cost}). Run discover "
+            f"again to process the remaining pages."
+        )
 
     logger.info("")
     logger.info("=" * 80)
