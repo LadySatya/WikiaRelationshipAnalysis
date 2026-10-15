@@ -563,6 +563,18 @@ class TestLLMClientCostTracking:
 
         assert cost == pytest.approx(0.60, rel=0.01)  # $0.10 + $0.50 = $0.60
 
+    def test_estimate_cost_includes_cache_tokens(self):
+        """Cache reads cost 0.1x and 5-minute cache writes 1.25x the input rate."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient(provider="anthropic", model="claude-haiku-5-5")
+
+        read_cost = client.estimate_cost(0, 0, cache_read_tokens=1_000_000)
+        write_cost = client.estimate_cost(0, 0, cache_write_tokens=1_000_000)
+
+        assert read_cost == pytest.approx(0.01)  # $0.10 * 0.1
+        assert write_cost == pytest.approx(0.125)  # $0.10 * 1.25
+
     def test_reset_usage_stats(self):
         """LLMClient should support resetting usage statistics."""
         from src.processor.llm.llm_client import LLMClient

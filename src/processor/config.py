@@ -145,6 +145,11 @@ class ProcessorConfig:
         return self.get("processor", "rag", "llm_effort", default="medium")
 
     @property
+    def llm_prompt_caching(self) -> bool:
+        """Whether to use prompt caching in the tool loop."""
+        return self.get("processor", "rag", "llm_prompt_caching", default=True)
+
+    @property
     def character_discovery_min_mentions(self) -> int:
         """Get minimum mentions threshold for character discovery."""
         return self.get("processor", "character_discovery", "min_mentions", default=3)

@@ -269,6 +269,7 @@ class TestGenerateWithToolsExecution:
             )
 
             client = LLMClient()
+            client.prompt_caching = False  # plain pass-through; caching tested below
             tools = [{"name": "test", "input_schema": {"type": "object"}}]
 
             client.generate_with_tools(
@@ -528,3 +529,96 @@ class TestPruneConversation:
         pruned = client._prune_conversation(messages, keep_last_n=3)
 
         assert pruned[1]["content"][0] is thinking
+
+
+class TestPromptCaching:
+    """Test prompt caching in the tool loop and cache-aware cost tracking."""
+
+    def _end_turn(self, input_tokens=100, output_tokens=50, cache_read=0, cache_write=0):
+        response = MagicMock()
+        response.stop_reason = "end_turn"
+        response.content = [MagicMock(type="text", text="Done")]
+        response.usage = MagicMock(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_input_tokens=cache_read,
+            cache_creation_input_tokens=cache_write,
+        )
+        return response
+
+    def _run(self, client, response, system_prompt="You are helpful"):
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+            mock_client.messages.create.return_value = response
+            tools = [{"name": "test", "input_schema": {"type": "object"}}]
+            result = client.generate_with_tools(
+                "Test", tools, lambda n, **k: {}, system_prompt=system_prompt
+            )
+            return result, mock_client.messages.create.call_args[1]
+
+    def test_caching_marks_system_prompt_and_enables_auto_caching(self):
+        """System prompt (after tools) gets a breakpoint; history uses auto caching."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient()
+        client.prompt_caching = True
+        _, kwargs = self._run(client, self._end_turn())
+
+        assert kwargs["system"] == [
+            {
+                "type": "text",
+                "text": "You are helpful",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        assert kwargs["cache_control"] == {"type": "ephemeral"}
+
+    def test_caching_disabled_sends_plain_system_prompt(self):
+        """With caching off, requests are unchanged from the uncached form."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient()
+        client.prompt_caching = False
+        _, kwargs = self._run(client, self._end_turn())
+
+        assert kwargs["system"] == "You are helpful"
+        assert "cache_control" not in kwargs
+
+    def test_caching_without_system_prompt(self):
+        """Without a system prompt, only automatic caching is used."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient()
+        client.prompt_caching = True
+        _, kwargs = self._run(client, self._end_turn(), system_prompt=None)
+
+        assert "system" not in kwargs
+        assert kwargs["cache_control"] == {"type": "ephemeral"}
+
+    def test_prompt_caching_reads_config(self):
+        """prompt_caching defaults from processor config."""
+        from src.processor.config import get_config
+        from src.processor.llm.llm_client import LLMClient
+
+        assert LLMClient().prompt_caching == get_config().llm_prompt_caching
+
+    def test_usage_includes_cache_tokens_and_cost(self):
+        """Cache reads/writes are tracked and priced (0.1x / 1.25x input rate)."""
+        from src.processor.llm.llm_client import LLMClient
+
+        client = LLMClient(model="claude-haiku-5-5")
+        result, _ = self._run(
+            client, self._end_turn(100, 50, cache_read=1000, cache_write=200)
+        )
+
+        usage = result["usage"]
+        assert usage["total_cache_read_tokens"] == 1000
+        assert usage["total_cache_write_tokens"] == 200
+        expected = (100 * 0.10 + 50 * 0.50 + 1000 * 0.01 + 200 * 0.125) / 1_000_000
+        assert usage["estimated_cost_usd"] == pytest.approx(expected)
+
+        stats = client.get_usage_stats()
+        assert stats["total_cache_read_tokens"] == 1000
+        assert stats["total_cache_write_tokens"] == 200
+        assert stats["estimated_cost_usd"] == pytest.approx(expected)

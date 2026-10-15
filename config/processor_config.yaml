@@ -25,6 +25,9 @@ processor:
     # low | medium | high | xhigh | max. Lower = cheaper/faster; low can skip tool calls
     # or stop early in long agent prompts.
     llm_effort: "medium"
+    # Cache the system prompt + tool definitions (identical on every call) and the
+    # growing tool-loop history. Cache reads cost 0.1x the input rate.
+    llm_prompt_caching: true
 
   # Character discovery settings
   character_discovery:

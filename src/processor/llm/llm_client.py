@@ -55,6 +55,9 @@ class LLMClient:
     # Pricing per 1M tokens (as of 2026-10). Single source of truth for cost estimates.
     # NOTE: Haiku 5.5 bills prompts over 100K tokens at $0.50/$2.50; our per-page
     # prompts stay well under that, so the base rate is used.
+    # Cache reads cost 0.1x and 5-minute cache writes 1.25x the input rate.
+    CACHE_READ_MULTIPLIER = 0.1
+    CACHE_WRITE_MULTIPLIER = 1.25
     DEFAULT_PRICING_MODEL = "claude-haiku-5-5"
     PRICING = {
         "claude-haiku-5-5": {
@@ -105,6 +108,9 @@ class LLMClient:
         # Effort level sent via output_config (controls thinking depth)
         self.effort = config.llm_effort
 
+        # Cache system prompt + tools and tool-loop history
+        self.prompt_caching = config.llm_prompt_caching
+
         # Get API key
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
 
@@ -114,6 +120,8 @@ class LLMClient:
         # Token tracking
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self.total_cache_read_tokens = 0
+        self.total_cache_write_tokens = 0
 
         self.logger = get_logger("llm")
         self.llm_logger = None
@@ -136,6 +144,16 @@ class LLMClient:
     def _calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
         """Calculate cost for given token counts."""
         return self.estimate_cost(input_tokens, output_tokens)
+
+    @staticmethod
+    def _cache_tokens(usage: Any) -> "tuple[int, int]":
+        """Return (cache_read, cache_write) token counts; 0 when not reported."""
+        read = getattr(usage, "cache_read_input_tokens", 0)
+        write = getattr(usage, "cache_creation_input_tokens", 0)
+        return (
+            read if isinstance(read, int) else 0,
+            write if isinstance(write, int) else 0,
+        )
 
     @staticmethod
     def _refusal_message(response: Any) -> str:
@@ -289,27 +307,44 @@ class LLMClient:
                     "total_input_tokens": 1000,
                     "total_output_tokens": 500,
                     "total_tokens": 1500,
+                    "total_cache_read_tokens": 0,
+                    "total_cache_write_tokens": 0,
                     "estimated_cost_usd": 0.006,
                     "model": "claude-haiku-5-5"
                 }
         """
-        cost = self.estimate_cost(self.total_input_tokens, self.total_output_tokens)
+        cost = self.estimate_cost(
+            self.total_input_tokens,
+            self.total_output_tokens,
+            cache_read_tokens=self.total_cache_read_tokens,
+            cache_write_tokens=self.total_cache_write_tokens,
+        )
 
         return {
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
             "total_tokens": self.total_input_tokens + self.total_output_tokens,
+            "total_cache_read_tokens": self.total_cache_read_tokens,
+            "total_cache_write_tokens": self.total_cache_write_tokens,
             "estimated_cost_usd": cost,
             "model": self.model,
         }
 
-    def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
+    def estimate_cost(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+    ) -> float:
         """
         Estimate cost in USD for given token counts.
 
         Args:
-            input_tokens: Number of input tokens
+            input_tokens: Number of uncached input tokens
             output_tokens: Number of output tokens
+            cache_read_tokens: Input tokens served from the prompt cache
+            cache_write_tokens: Input tokens written to the prompt cache
 
         Returns:
             Estimated cost in USD
@@ -318,15 +353,22 @@ class LLMClient:
         pricing = self.PRICING.get(self.model, self.PRICING[self.DEFAULT_PRICING_MODEL])
 
         # Calculate cost (pricing is per 1M tokens)
-        input_cost = (input_tokens / 1_000_000) * pricing["input"]
+        input_rate = pricing["input"] / 1_000_000
+        input_cost = input_tokens * input_rate
+        cache_cost = input_rate * (
+            cache_read_tokens * self.CACHE_READ_MULTIPLIER
+            + cache_write_tokens * self.CACHE_WRITE_MULTIPLIER
+        )
         output_cost = (output_tokens / 1_000_000) * pricing["output"]
 
-        return input_cost + output_cost
+        return input_cost + cache_cost + output_cost
 
     def reset_usage_stats(self) -> None:
         """Reset token usage statistics to zero."""
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self.total_cache_read_tokens = 0
+        self.total_cache_write_tokens = 0
 
     def query_with_citations(
         self,
@@ -571,6 +613,32 @@ class LLMClient:
         all_tool_calls = []
         iteration_input_tokens = 0
         iteration_output_tokens = 0
+        iteration_cache_read = 0
+        iteration_cache_write = 0
+
+        # Static request parts. With caching on, the system prompt block carries a
+        # breakpoint covering tools + system (identical every call), and top-level
+        # automatic caching covers the growing conversation history.
+        request_options: Dict[str, Any] = {
+            "model": self.model,
+            "tools": tools,
+            "max_tokens": max_tokens,
+            "output_config": {"effort": self.effort},
+        }
+        if system_prompt:
+            request_options["system"] = (
+                [
+                    {
+                        "type": "text",
+                        "text": system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ]
+                if self.prompt_caching
+                else system_prompt
+            )
+        if self.prompt_caching:
+            request_options["cache_control"] = {"type": "ephemeral"}
 
         for iteration in range(max_iterations):
             self.logger.info(f"Tool iteration {iteration + 1}/{max_iterations}")
@@ -582,23 +650,9 @@ class LLMClient:
 
             # Call Claude with tools available
             try:
-                if system_prompt:
-                    response = self._client.messages.create(
-                        model=self.model,
-                        messages=conversation,
-                        tools=tools,
-                        system=system_prompt,
-                        max_tokens=max_tokens,
-                        output_config={"effort": self.effort},
-                    )
-                else:
-                    response = self._client.messages.create(
-                        model=self.model,
-                        messages=conversation,
-                        tools=tools,
-                        max_tokens=max_tokens,
-                        output_config={"effort": self.effort},
-                    )
+                response = self._client.messages.create(
+                    messages=conversation, **request_options
+                )
             except Exception as e:
                 raise RuntimeError(f"LLM API call failed: {e}") from e
 
@@ -606,6 +660,9 @@ class LLMClient:
             if hasattr(response, "usage"):
                 iteration_input_tokens += response.usage.input_tokens
                 iteration_output_tokens += response.usage.output_tokens
+                cache_read, cache_write = self._cache_tokens(response.usage)
+                iteration_cache_read += cache_read
+                iteration_cache_write += cache_write
 
             # Check if Claude made tool calls
             if response.stop_reason == "tool_use":
@@ -675,10 +732,15 @@ class LLMClient:
                 # Track total usage
                 self.total_input_tokens += iteration_input_tokens
                 self.total_output_tokens += iteration_output_tokens
+                self.total_cache_read_tokens += iteration_cache_read
+                self.total_cache_write_tokens += iteration_cache_write
 
                 # Calculate cost
                 estimated_cost = self.estimate_cost(
-                    iteration_input_tokens, iteration_output_tokens
+                    iteration_input_tokens,
+                    iteration_output_tokens,
+                    cache_read_tokens=iteration_cache_read,
+                    cache_write_tokens=iteration_cache_write,
                 )
 
                 self._ensure_llm_logger()
@@ -691,6 +753,8 @@ class LLMClient:
                         usage={
                             "input_tokens": iteration_input_tokens,
                             "output_tokens": iteration_output_tokens,
+                            "cache_read_input_tokens": iteration_cache_read,
+                            "cache_creation_input_tokens": iteration_cache_write,
                         },
                         cost=estimated_cost,
                         metadata={
@@ -713,6 +777,8 @@ class LLMClient:
                     "usage": {
                         "total_input_tokens": iteration_input_tokens,
                         "total_output_tokens": iteration_output_tokens,
+                        "total_cache_read_tokens": iteration_cache_read,
+                        "total_cache_write_tokens": iteration_cache_write,
                         "estimated_cost_usd": estimated_cost,
                         "iterations": iteration + 1,
                     },
