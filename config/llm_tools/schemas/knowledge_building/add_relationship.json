@@ -1,0 +1,50 @@
+{
+  "name": "add_relationship",
+  "description": "Record a relationship between two characters in the same canon, together with one evidence-backed claim. If the relationship does not exist yet it is created with this claim; if it already exists, the claim is added to it (no error) and the response shows the existing type, summary and all claim texts - check them to avoid adding near-duplicate claims. Both characters must already exist (use create_character first); if a name is not found, the response suggests close existing names. Every call needs evidence_text that is an exact quote from the page - it is checked, and nothing is stored if it is not found. Call this once per distinct claim. If no passage on the page supports a relationship, do not record it.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "character_a": {
+        "type": "string",
+        "description": "Name of the first character in the relationship"
+      },
+      "character_b": {
+        "type": "string",
+        "description": "Name of the second character in the relationship"
+      },
+      "canon": {
+        "type": "string",
+        "description": "Canon this relationship belongs to (e.g., 'main', 'film', 'legends'). Both characters must exist in this canon."
+      },
+      "relationship_type": {
+        "type": "string",
+        "description": "Type of relationship (e.g., 'friend', 'enemy', 'romantic_partner', 'mentor', 'family', 'ally')"
+      },
+      "summary": {
+        "type": "string",
+        "description": "Brief one-sentence summary of the relationship. Used only when the relationship is new; an existing relationship keeps its summary."
+      },
+      "claim": {
+        "type": "string",
+        "description": "Specific factual claim about the relationship (e.g., 'Aang and Katara married after the Hundred Year War')"
+      },
+      "evidence_url": {
+        "type": "string",
+        "description": "URL of the crawled wiki page the quote is copied from (usually the current page)"
+      },
+      "evidence_text": {
+        "type": "string",
+        "description": "An exact quote copied word-for-word from the page content or its infobox (e.g. 'Enemies: Azula, Ozai'), under 200 characters. Must be ONE contiguous passage: do not paraphrase, summarize, or join fragments with '...'. The quote is checked against the page text and rejected if it is not found there."
+      }
+    },
+    "required": [
+      "character_a",
+      "character_b",
+      "canon",
+      "relationship_type",
+      "claim",
+      "evidence_url",
+      "evidence_text"
+    ]
+  }
+}

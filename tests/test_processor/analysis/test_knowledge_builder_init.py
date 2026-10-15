@@ -97,8 +97,7 @@ class TestKnowledgeBuilderInitialization:
             {"name": "create_character"},
             {"name": "update_character"},
             {"name": "get_relationship"},
-            {"name": "create_relationship"},
-            {"name": "add_relationship_claim"},
+            {"name": "add_relationship"},
             {"name": "get_character"},
             {"name": "search_wiki"},
         ]
@@ -107,7 +106,7 @@ class TestKnowledgeBuilderInitialization:
         builder = CharacterKnowledgeBuilder(project_name="test")
 
         mock_load_schemas.assert_called_once_with("knowledge_building")
-        assert len(builder.kb_tools) == 8
+        assert len(builder.kb_tools) == len(expected_tools)
         tool_names = [t["name"] for t in builder.kb_tools]
         assert all(
             tool in tool_names
@@ -116,8 +115,7 @@ class TestKnowledgeBuilderInitialization:
                 "create_character",
                 "update_character",
                 "get_relationship",
-                "create_relationship",
-                "add_relationship_claim",
+                "add_relationship",
                 "get_character",
                 "search_wiki",
             ]
@@ -169,3 +167,23 @@ class TestKnowledgeBuilderInitialization:
         builder = CharacterKnowledgeBuilder(project_name="test")
 
         assert builder.knowledge_base["metadata"]["pages_processed"] == 0
+
+
+@pytest.mark.unit
+def test_real_tool_schemas_match_dispatched_tools():
+    """The tool schema files sent to the model must match the tools the builder handles."""
+    from src.utils.tool_schema_loader import load_tool_schemas
+
+    names = {t["name"] for t in load_tool_schemas("knowledge_building")}
+
+    assert names == {
+        "determine_canon",
+        "search_characters",
+        "create_character",
+        "update_character",
+        "get_character",
+        "add_relationship",
+        "get_relationship",
+        "add_affiliation",
+        "search_wiki",
+    }

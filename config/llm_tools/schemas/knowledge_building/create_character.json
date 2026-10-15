@@ -1,6 +1,6 @@
 {
   "name": "create_character",
-  "description": "Create a new character entry in the knowledge base. This will fail if a character with this name already exists in this canon - use update_character instead to modify existing entries. Always use search_characters first to avoid creating duplicates.",
+  "description": "Create a new character entry in the knowledge base. If a character with this exact name already exists in this canon, nothing is changed and the existing record is returned (existed: true) - use update_character to modify it. Use search_characters first to catch name variations (e.g. 'Avatar Aang' vs 'Aang').",
   "input_schema": {
     "type": "object",
     "properties": {
@@ -28,6 +28,10 @@
         "description": "URL of the wiki page where this character was discovered"
       }
     },
-    "required": ["name", "canon", "source_url"]
+    "required": [
+      "name",
+      "canon",
+      "source_url"
+    ]
   }
 }

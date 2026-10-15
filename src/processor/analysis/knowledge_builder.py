@@ -96,7 +96,7 @@ class CharacterKnowledgeBuilder:
         self.partial_pages: Dict[str, Dict[str, int]] = {}
 
         # Normalized quotable text per page URL; evidence quotes are checked
-        # against it (see _tool_add_relationship_claim)
+        # against it (see _tool_add_relationship)
         self.page_texts: Dict[str, str] = {}
         self.current_page_url: Optional[str] = None
         self.evidence_rejections = 0
@@ -621,20 +621,13 @@ Be thorough - extract all characters mentioned, not just the page subject.
                     canon=tool_input.get("canon", ""),
                 )
 
-            elif tool_name == "create_relationship":
-                return self._tool_create_relationship(
+            elif tool_name == "add_relationship":
+                return self._tool_add_relationship(
                     character_a=tool_input.get("character_a", ""),
                     character_b=tool_input.get("character_b", ""),
                     canon=tool_input.get("canon", ""),
                     relationship_type=tool_input.get("relationship_type", ""),
                     summary=tool_input.get("summary", ""),
-                )
-
-            elif tool_name == "add_relationship_claim":
-                return self._tool_add_relationship_claim(
-                    character_a=tool_input.get("character_a", ""),
-                    character_b=tool_input.get("character_b", ""),
-                    canon=tool_input.get("canon", ""),
                     claim=tool_input.get("claim", ""),
                     evidence_url=tool_input.get("evidence_url", ""),
                     evidence_text=tool_input.get("evidence_text", ""),
@@ -768,10 +761,15 @@ Be thorough - extract all characters mentioned, not just the page subject.
         if canon not in self.knowledge_base["characters"]:
             self.knowledge_base["characters"][canon] = {}
 
-        if name in self.knowledge_base["characters"][canon]:
+        existing = self.knowledge_base["characters"][canon].get(name)
+        if existing:
+            # Create-or-get: return the existing record instead of an error
             return {
-                "error": f"Character '{name}' already exists in canon '{canon}'",
-                "success": False,
+                "success": True,
+                "existed": True,
+                "name": name,
+                "canon": canon,
+                "character": existing,
             }
 
         self.knowledge_base["characters"][canon][name] = {
@@ -784,7 +782,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
         }
 
         logger.info(f"Created character: {name} (canon: {canon})")
-        return {"success": True, "name": name, "canon": canon}
+        return {"success": True, "existed": False, "name": name, "canon": canon}
 
     def _tool_update_character(
         self,
@@ -849,69 +847,6 @@ Be thorough - extract all characters mentioned, not just the page subject.
         canon_rels = self.knowledge_base["relationships"].get(canon, {})
         return canon_rels.get(key)
 
-    def _tool_create_relationship(
-        self,
-        character_a: str,
-        character_b: str,
-        canon: str,
-        relationship_type: str,
-        summary: str,
-    ) -> Dict[str, Any]:
-        """Create a new relationship between two existing characters in the same canon."""
-        if not canon:
-            return {"error": "canon is required", "success": False}
-
-        canon = canon.lower()
-        canon_chars = self.knowledge_base["characters"].get(canon, {})
-
-        # Validate both characters exist in this canon
-        missing = []
-        if character_a not in canon_chars:
-            missing.append(character_a)
-        if character_b not in canon_chars:
-            missing.append(character_b)
-
-        if missing:
-            return {
-                "error": f"Character(s) not found in canon '{canon}': {', '.join(missing)}. Create them first with create_character().",
-                "success": False,
-                "hint": "If this is a group/organization (like 'Kyoshi Warriors' or 'Air Acolytes'), use add_affiliation() instead.",
-            }
-
-        key = self._normalize_relationship_key(character_a, character_b)
-
-        # Ensure canon bucket exists for relationships
-        if canon not in self.knowledge_base["relationships"]:
-            self.knowledge_base["relationships"][canon] = {}
-
-        if key in self.knowledge_base["relationships"][canon]:
-            return {
-                "error": f"Relationship between '{character_a}' and '{character_b}' already exists in canon '{canon}'",
-                "success": False,
-            }
-
-        new_rel = {
-            "characters": list(key),
-            "canon": canon,
-            "type": relationship_type,
-            "summary": summary,
-            "claims": [],
-            "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        }
-        self.knowledge_base["relationships"][canon][key] = new_rel
-
-        logger.info(
-            f"Created relationship: {character_a} <-> {character_b} ({relationship_type}) [canon: {canon}]"
-        )
-        # Return relationship structure so LLM knows it starts with empty claims
-        return {
-            "success": True,
-            "characters": list(key),
-            "canon": canon,
-            "type": relationship_type,
-            "claim_count": 0,
-        }
-
     # Typographic characters normalized before quote matching (escaped: no
     # non-ASCII characters in .py files)
     _QUOTE_TRANSLATION = str.maketrans(
@@ -961,27 +896,54 @@ Be thorough - extract all characters mentioned, not just the page subject.
 
         return None
 
-    def _tool_add_relationship_claim(
+    def _tool_add_relationship(
         self,
         character_a: str,
         character_b: str,
         canon: str,
+        relationship_type: str,
+        summary: str,
         claim: str,
         evidence_url: str,
         evidence_text: str,
     ) -> Dict[str, Any]:
-        """Add a claim to an existing relationship in a specific canon."""
+        """
+        Create a relationship with its first claim, or add a claim to an existing one.
+
+        Every call must carry a claim with an exact quote, which is verified before
+        anything is stored - so a relationship never exists without evidence.
+        Calling this for an existing relationship adds the claim (no error); the
+        existing type and summary are kept and returned.
+        """
         if not canon:
             return {"error": "canon is required", "success": False}
+        if not claim or not claim.strip():
+            return {
+                "error": "claim is required: a specific factual statement.",
+                "success": False,
+            }
 
         canon = canon.lower()
-        key = self._normalize_relationship_key(character_a, character_b)
-        canon_rels = self.knowledge_base["relationships"].get(canon, {})
+        canon_chars = self.knowledge_base["characters"].get(canon, {})
 
-        if key not in canon_rels:
+        # Both characters must exist; suggest close names to save a search round
+        missing = [c for c in (character_a, character_b) if c not in canon_chars]
+        if missing:
+            suggestions = {
+                name: [
+                    m["name"]
+                    for m in self._tool_search_characters(name, canon)["matches"][:3]
+                ]
+                for name in missing
+            }
             return {
-                "error": f"Relationship between '{character_a}' and '{character_b}' not found in canon '{canon}'. Create it first.",
+                "error": f"Character(s) not found in canon '{canon}': "
+                f"{', '.join(missing)}. Create them first with create_character(), "
+                "or use one of the suggested existing names.",
                 "success": False,
+                "suggestions": suggestions,
+                "hint": "If this is a group/organization (like 'Kyoshi Warriors' or "
+                "'Air Acolytes'), use add_affiliation() instead.",
             }
 
         # Evidence must be a real quote from a crawled page - this keeps claims
@@ -991,54 +953,57 @@ Be thorough - extract all characters mentioned, not just the page subject.
             self.evidence_rejections += 1
             return {"error": evidence_error, "success": False}
 
+        key = self._normalize_relationship_key(character_a, character_b)
+        canon_rels = self.knowledge_base["relationships"].setdefault(canon, {})
+        now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+        created = key not in canon_rels
+        if created:
+            canon_rels[key] = {
+                "characters": list(key),
+                "canon": canon,
+                "type": relationship_type,
+                "summary": summary.strip() if summary and summary.strip() else claim,
+                "claims": [],
+                "created_at": now,
+            }
+            logger.info(
+                f"Created relationship: {character_a} <-> {character_b} "
+                f"({relationship_type}) [canon: {canon}]"
+            )
         rel_data = canon_rels[key]
 
-        # Find or create claim
-        claims_list = rel_data.setdefault("claims", [])
-        existing_claim = None
-
-        for claim_entry in claims_list:
-            if claim_entry.get("claim") == claim:
-                existing_claim = claim_entry
-                break
-
-        # Create new evidence entry
         new_evidence = {
             "evidence_url": evidence_url,
             "evidence_text": evidence_text[:200],  # Truncate to 200 chars
-            "added_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "added_at": now,
         }
-
-        if existing_claim:
-            # Add to existing claim's evidence array
-            evidence_list = existing_claim.setdefault("evidence", [])
-            evidence_list.append(new_evidence)
-            # Return the full updated claim so LLM can see all existing evidence
-            return {
-                "success": True,
-                "canon": canon,
-                "claim_count": len(claims_list),
-                "evidence_count": len(evidence_list),
-                "updated_claim": {
-                    "claim": claim,
-                    "evidence": evidence_list,  # Show all evidence for this claim
-                },
-            }
+        claims_list = rel_data.setdefault("claims", [])
+        claim_entry = next((c for c in claims_list if c.get("claim") == claim), None)
+        if claim_entry:
+            claim_entry.setdefault("evidence", []).append(new_evidence)
         else:
-            # Create new claim with evidence array
-            new_claim = {"claim": claim, "evidence": [new_evidence]}
-            claims_list.append(new_claim)
-            rel_data["updated_at"] = (
-                datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+            claim_entry = {"claim": claim, "evidence": [new_evidence]}
+            claims_list.append(claim_entry)
+        rel_data["updated_at"] = now
+
+        # Show the relationship as it now stands so the model can avoid duplicates
+        result: Dict[str, Any] = {
+            "success": True,
+            "created": created,
+            "characters": list(key),
+            "canon": canon,
+            "type": rel_data["type"],
+            "summary": rel_data["summary"],
+            "claims": [c["claim"] for c in claims_list],
+            "updated_claim": claim_entry,
+        }
+        if not created and relationship_type and relationship_type != rel_data["type"]:
+            result["note"] = (
+                f"Relationship already existed with type '{rel_data['type']}'; "
+                "type and summary were kept and your claim was added."
             )
-            # Return the new claim so LLM sees the structure
-            return {
-                "success": True,
-                "canon": canon,
-                "claim_count": len(claims_list),
-                "evidence_count": 1,
-                "updated_claim": new_claim,
-            }
+        return result
 
     def _tool_search_wiki(self, query: str, max_results: int = 5) -> Dict[str, Any]:
         """Search wiki using RAG."""

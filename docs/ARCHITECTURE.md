@@ -45,19 +45,18 @@ Indexes crawled data and extracts character information using Retrieval Augmente
 
 The knowledge builder reads each crawled page in full, one window at a time: the page text is split at sentence boundaries into windows of up to 6000 characters (`processor.knowledge_building.window_chars`), and each window is processed in its own short tool conversation. The knowledge base carries what earlier windows found. A per-page cap (`max_windows_per_page`, default 25) limits cost; pages over it are logged and recorded as partly read in `cache/discovery_state.json`.
 
-In each window, Claude autonomously decides which of 10 tools to call:
+In each window, Claude autonomously decides which of 9 tools to call:
 1. `determine_canon` - Declare which canon (main, film, ...) the page belongs to
 2. `search_characters` - Find existing characters by name (fuzzy match)
-3. `create_character` - Add a new character to the knowledge base
+3. `create_character` - Add a new character (returns the existing record if the name already exists)
 4. `update_character` - Update character details
 5. `get_character` - Retrieve full character profile
-6. `create_relationship` - Create a new relationship between characters
-7. `add_relationship_claim` - Add an evidence-backed claim to a relationship
-8. `get_relationship` - Retrieve relationship details
-9. `add_affiliation` - Record a character's membership in a group
-10. `search_wiki` - Query the RAG system for additional context
+6. `add_relationship` - Record a relationship together with an evidence-backed claim; creates the relationship if new, otherwise adds the claim
+7. `get_relationship` - Retrieve relationship details
+8. `add_affiliation` - Record a character's membership in a group
+9. `search_wiki` - Query the RAG system for additional context
 
-Evidence is verified: `add_relationship_claim` rejects any `evidence_text` that is not an exact quote (ignoring case and whitespace) from the cited crawled page or its infobox, and the model retries. This keeps claims grounded in the ingested text rather than the model's prior knowledge of the wiki.
+Evidence is verified: `add_relationship` rejects any `evidence_text` that is not an exact quote (ignoring case and whitespace) from the cited crawled page or its infobox, and the model retries. This keeps claims grounded in the ingested text rather than the model's prior knowledge of the wiki.
 
 Tools return contextual responses (e.g., existing evidence) to prevent duplicates.
 

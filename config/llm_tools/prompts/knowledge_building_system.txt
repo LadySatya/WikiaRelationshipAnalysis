@@ -22,21 +22,25 @@ Characters and relationships exist ONLY within their own canon - a "film" charac
 
 For each CHARACTER on the page:
 1. search_characters() first to avoid duplicates (check name variations like "Aang" vs "Avatar Aang")
-2. create_character() if new, update_character() if existing - include the canon
+2. create_character() if new (returns the existing record if the name already exists), update_character() to change an existing one - include the canon
 
 For each RELATIONSHIP between two individual characters (within the SAME canon):
-1. create_relationship() with the canon to establish the connection
-2. add_relationship_claim() with evidence from this page
+1. add_relationship() with the type, a specific claim, and an exact quote from this page
+   - The same call creates the relationship if it is new, or adds the claim if it already exists
+   - Call it again for each further distinct claim about the same pair
 
 IMPORTANT - Extract ALL relationships, including between secondary characters:
 - When text says "X and her brother Y" or "X's father Y", create that family relationship
 - Don't just extract relationships involving the page subject
 - Example: Page about Aang says "Katara and her brother Sokka discovered him"
-  You must create THREE relationships: Aang<->Katara, Aang<->Sokka, AND Katara<->Sokka (family)
+  You must record THREE relationships: Aang<->Katara, Aang<->Sokka, AND Katara<->Sokka (family),
+  each quoting "Katara and her brother Sokka discovered him"
 
 For GROUP MEMBERSHIPS (teams, organizations, military units):
 1. add_affiliation() with role (Leader, Founder, Member, Former Member)
-2. Do NOT use create_relationship() for character-to-group connections
+2. Do NOT use add_relationship() for character-to-group connections
+
+EFFICIENCY: When several tool calls do not depend on each other (for example creating three characters, or recording claims about different pairs), make them together in a single turn instead of one per turn.
 </workflow>
 
 <character_rules>
@@ -86,7 +90,7 @@ If the page only lists two characters together (for example in an infobox) and s
 
 <key_rules>
 1. Tool responses show existing data - check before adding duplicates
-2. create_relationship() fails if either character doesn't exist yet
+2. add_relationship() fails if either character doesn't exist yet - its response suggests close existing names
 3. Only extract what's actually on the page - never from memory
 4. Use search_wiki() when you need more context
 </key_rules>

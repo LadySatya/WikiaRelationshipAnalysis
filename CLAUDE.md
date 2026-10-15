@@ -112,13 +112,13 @@ Crawled pages → ContentChunker → EmbeddingGenerator (Voyage AI)
 **Analysis:**
 - `CharacterKnowledgeBuilder`: Unified single-pass architecture
   - **Processes pages one at a time, in windows**: each page's full text is split at sentence boundaries into windows of `window_chars` (default 6000); each window is its own short tool conversation. The knowledge base carries results between windows. Pages over `max_windows_per_page` (default 25) are logged and recorded under `partial_pages` in `cache/discovery_state.json` - never silently cut. Settings: `processor.knowledge_building` in `config/processor_config.yaml`
-  - **10-Tool System**: determine_canon, search_characters, create_character, update_character, get_character, create_relationship, add_relationship_claim, get_relationship, add_affiliation, search_wiki
+  - **9-Tool System**: determine_canon, search_characters, create_character (create-or-get), update_character, get_character, add_relationship, get_relationship, add_affiliation, search_wiki
   - **Tool Executors**: Each tool returns contextual information to prevent duplicates
-  - **Contextual Responses**: Tools return updated state (e.g., add_relationship_claim returns updated_claim with ALL existing evidence)
+  - **Contextual Responses**: Tools return updated state (e.g., add_relationship returns the relationship's type, summary and all claim texts)
   - **In-Memory Knowledge Base**: Maintains characters and relationships with periodic saves
   - **Prompt-Driven Workflow**: LLM guided by strong prompts; the one hard check is evidence (below)
   - Claude autonomously decides which tools to call and when
-  - **Verified evidence**: add_relationship_claim rejects evidence_text that is not an exact quote (ignoring case/whitespace) from the cited crawled page or its infobox; the model retries. Claims are grounded in ingested text, not the model's prior knowledge
+  - **Verified evidence**: add_relationship creates a relationship together with its first claim (or adds a claim to an existing one), so no relationship exists without evidence. It rejects evidence_text that is not an exact quote (ignoring case/whitespace) from the cited crawled page or its infobox; the model retries. Claims are grounded in ingested text, not the model's prior knowledge
   - **Cost controls**: prompt caching in the tool loop (`llm_prompt_caching`), `--max-cost` spending cap (resumable)
   - Saves to `characters/<name>_<canon>.json` and `relationships/<char_a>_<char_b>_<canon>.json`
 
