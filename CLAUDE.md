@@ -6,6 +6,10 @@ Guidance for Claude Code when working with this repository.
 
 WikiaAnalyzer webcrawls wikia sites, extracts character information, and uses LLM analysis to discover and visualize character relationships. File-based storage with project-oriented architecture.
 
+## Respectful Crawling (NON-NEGOTIABLE)
+
+This is a respectful project: it must never put meaningful load on any website (no accidental DDoS - keep rate limits conservative) and it always honors the wishes of the people who run the sites (robots.txt, terms of use, official APIs where offered). There will never, under any circumstances, be an attempt to get around Cloudflare challenges, bot detection, CAPTCHAs, IP blocks, or any similar protection - no spoofed browser user agents, challenge solvers, headless-browser evasion, or proxy rotation. If a site blocks us, we use its sanctioned access route or stop.
+
 ## Data Schemas Reference
 
 **CRITICAL**: Before working with JSON data structures, consult `docs/DATA_SCHEMAS.md` to avoid KeyError bugs.
