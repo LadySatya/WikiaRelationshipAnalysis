@@ -95,6 +95,12 @@ class CharacterKnowledgeBuilder:
         self.max_windows_per_page = config.knowledge_max_windows_per_page
         self.partial_pages: Dict[str, Dict[str, int]] = {}
 
+        # Normalized quotable text per page URL; evidence quotes are checked
+        # against it (see _tool_add_relationship_claim)
+        self.page_texts: Dict[str, str] = {}
+        self.current_page_url: Optional[str] = None
+        self.evidence_rejections = 0
+
         # Initialize query engine for RAG
         self.query_engine = QueryEngine(project_name=project_name)
 
@@ -225,6 +231,9 @@ class CharacterKnowledgeBuilder:
         """
         # Load all crawled pages
         pages = self._load_crawled_pages()
+        self.page_texts = {
+            page["url"]: self._quotable_text(page) for page in pages if page.get("url")
+        }
 
         if max_pages:
             pages = pages[:max_pages]
@@ -331,6 +340,10 @@ class CharacterKnowledgeBuilder:
         logger.info(f"Pages failed:     {failure_count}")
         logger.info(f"Estimated cost:   ${total_cost:.4f}")
         logger.info(f"Total processed:  {len(self.processed_pages)} (cumulative)")
+        logger.info(
+            f"Evidence rejected: {self.evidence_rejections} quotes not found on the "
+            f"cited page (model was asked to retry)"
+        )
         if self.partial_pages:
             logger.warning(
                 f"Partly read:      {len(self.partial_pages)} pages hit "
@@ -367,6 +380,7 @@ class CharacterKnowledgeBuilder:
 
         title = page.get("title", "Unknown")
         url = page.get("url", "")
+        self.current_page_url = url
         content = page.get("main_content", "")
         infobox = page.get("infobox_data", {})
         categories = page.get("categories", [])
@@ -880,6 +894,55 @@ Be thorough - extract all characters mentioned, not just the page subject.
             "claim_count": 0,
         }
 
+    # Typographic characters normalized before quote matching (escaped: no
+    # non-ASCII characters in .py files)
+    _QUOTE_TRANSLATION = str.maketrans(
+        {
+            "\u2018": "'",
+            "\u2019": "'",
+            "\u201c": '"',
+            "\u201d": '"',
+            "\u2013": "-",
+            "\u2014": "-",
+        }
+    )
+
+    @classmethod
+    def _normalize_quote(cls, text: str) -> str:
+        """Lowercase, unify typographic quotes/dashes, and drop all whitespace."""
+        return re.sub(r"\s+", "", text.translate(cls._QUOTE_TRANSLATION).lower())
+
+    @classmethod
+    def _quotable_text(cls, page: Dict[str, Any]) -> str:
+        """Normalized text evidence can quote: main content plus 'Key: value' infobox lines."""
+        infobox = page.get("infobox_data") or {}
+        infobox_lines = "\n".join(f"{k}: {v}" for k, v in infobox.items())
+        return cls._normalize_quote(
+            f"{page.get('main_content') or ''}\n{infobox_lines}"
+        )
+
+    def _check_evidence(self, evidence_url: str, evidence_text: str) -> Optional[str]:
+        """Return an error message if the evidence is not a quote from a crawled page."""
+        if not evidence_text or not evidence_text.strip():
+            return "evidence_text is required: an exact quote from the page."
+
+        page_text = self.page_texts.get(evidence_url)
+        if page_text is None:
+            return (
+                f"evidence_url '{evidence_url}' is not a crawled page. Cite the page "
+                f"the quote comes from (current page: {self.current_page_url})."
+            )
+
+        if self._normalize_quote(evidence_text) not in page_text:
+            return (
+                f"evidence_text was not found on {evidence_url}. Copy one exact, "
+                "contiguous passage word-for-word from the page content or infobox "
+                "(e.g. 'Enemies: Ozai'). Do not paraphrase or join fragments with "
+                "'...'. If no passage states this, do not add the claim."
+            )
+
+        return None
+
     def _tool_add_relationship_claim(
         self,
         character_a: str,
@@ -902,6 +965,13 @@ Be thorough - extract all characters mentioned, not just the page subject.
                 "error": f"Relationship between '{character_a}' and '{character_b}' not found in canon '{canon}'. Create it first.",
                 "success": False,
             }
+
+        # Evidence must be a real quote from a crawled page - this keeps claims
+        # grounded in ingested text rather than the model's prior knowledge
+        evidence_error = self._check_evidence(evidence_url, evidence_text)
+        if evidence_error:
+            self.evidence_rejections += 1
+            return {"error": evidence_error, "success": False}
 
         rel_data = canon_rels[key]
 

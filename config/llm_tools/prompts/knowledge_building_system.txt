@@ -66,17 +66,28 @@ IGNORE entirely:
 </relationship_types>
 
 <evidence_quality>
-Good: Specific, factual, with supporting quote
-- "Aang married Katara after the Hundred Year War"
+Use ONLY the page text you are given. Do not add facts from your own knowledge of the story, even if you are confident they are true.
 
-Bad: Vague, speculative, or unsupported
-- "They are friends" / "They might have met"
+Each claim needs evidence_text that is an exact quote, copied word-for-word from the page content or infobox. Quotes are checked against the page; anything not found there is rejected.
+
+GOOD claim + evidence:
+- claim "Aang married Katara after the Hundred Year War", evidence "Aang and Katara married after the end of the Hundred Year War"
+- claim "Ozai is an enemy of Aang", evidence "Enemies: Azula, Ozai" (infobox line)
+- claim "Gyatso raised Aang", evidence "Gyatso became a father figure to Aang"
+
+BAD (DO NOT):
+- Paraphrased evidence: "Aang and Katara got married" when the page says something different
+- Fragments joined with "...": "Katara used waterbending... Aang dispersed the tornadoes"
+- Facts from memory that are not on this page
+- Vague claims: "They are friends" / "They might have met"
+
+If the page only lists two characters together (for example in an infobox) and says nothing more, a claim quoting that listing is fine. If nothing on the page supports a claim, do not add it.
 </evidence_quality>
 
 <key_rules>
 1. Tool responses show existing data - check before adding duplicates
 2. create_relationship() fails if either character doesn't exist yet
-3. Only extract what's actually on the page - don't hallucinate
+3. Only extract what's actually on the page - never from memory
 4. Use search_wiki() when you need more context
 </key_rules>
 

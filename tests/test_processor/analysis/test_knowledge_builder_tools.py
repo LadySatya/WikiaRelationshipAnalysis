@@ -47,6 +47,16 @@ def mock_builder():
         # Ensure the default canon exists in knowledge base
         builder.knowledge_base["characters"][TEST_CANON] = {}
         builder.knowledge_base["relationships"][TEST_CANON] = {}
+        # Page text that evidence quotes are checked against
+        page = "Katara found Aang in an iceberg. Test evidence. First evidence."
+        builder.page_texts = {
+            url: builder._quotable_text({"main_content": text})
+            for url, text in {
+                "https://example.com": page + " " + "x" * 300,
+                "https://example.com/1": page,
+                "https://example.com/2": "Second evidence.",
+            }.items()
+        }
         return builder
 
 
@@ -848,3 +858,91 @@ class TestAddAffiliationTool:
 
         char = mock_builder.knowledge_base["characters"][TEST_CANON]["Aang"]
         assert len(char["affiliations"][0]["evidence_text"]) == 200
+
+
+@pytest.mark.unit
+class TestEvidenceVerification:
+    """add_relationship_claim only accepts quotes that are actually on the page."""
+
+    URL = "https://avatar.fandom.com/wiki/Aang"
+
+    @pytest.fixture
+    def builder(self, mock_builder):
+        mock_builder.knowledge_base["relationships"][TEST_CANON][("Aang", "Katara")] = {
+            "characters": ["Aang", "Katara"],
+            "type": "romantic_partner",
+            "claims": [],
+        }
+        mock_builder.page_texts = {
+            self.URL: mock_builder._quotable_text(
+                {
+                    "main_content": "Aang married Katara after the war . "
+                    "They had three children.",
+                    "infobox_data": {"Love interest": "Katara(wife)"},
+                }
+            )
+        }
+        return mock_builder
+
+    def _claim(self, builder, evidence_text, evidence_url=None):
+        return builder._tool_add_relationship_claim(
+            character_a="Aang",
+            character_b="Katara",
+            canon=TEST_CANON,
+            claim="Aang married Katara",
+            evidence_url=evidence_url or self.URL,
+            evidence_text=evidence_text,
+        )
+
+    def _claims(self, builder):
+        return builder.knowledge_base["relationships"][TEST_CANON][("Aang", "Katara")][
+            "claims"
+        ]
+
+    def test_accepts_exact_quote(self, builder):
+        result = self._claim(builder, "Aang married Katara after the war")
+
+        assert result["success"] is True
+        assert len(self._claims(builder)) == 1
+
+    def test_ignores_case_and_whitespace(self, builder):
+        """Extractor artifacts like 'war .' must not cause false rejections."""
+        result = self._claim(builder, "aang married katara after the war.")
+
+        assert result["success"] is True
+
+    def test_accepts_infobox_line(self, builder):
+        result = self._claim(builder, "Love interest: Katara (wife)")
+
+        assert result["success"] is True
+
+    def test_rejects_paraphrase_and_stores_nothing(self, builder):
+        result = self._claim(builder, "Aang and Katara got married")
+
+        assert result["success"] is False
+        assert "exact" in result["error"]
+        assert self._claims(builder) == []
+
+    def test_rejects_fragments_joined_with_ellipsis(self, builder):
+        result = self._claim(builder, "Aang married Katara... three children")
+
+        assert result["success"] is False
+
+    def test_rejects_unknown_page(self, builder):
+        result = self._claim(
+            builder, "Aang married Katara", evidence_url="https://example.com/nope"
+        )
+
+        assert result["success"] is False
+        assert "not a crawled page" in result["error"]
+
+    def test_rejects_empty_evidence(self, builder):
+        result = self._claim(builder, "   ")
+
+        assert result["success"] is False
+
+    def test_counts_rejections(self, builder):
+        self._claim(builder, "made up quote")
+        self._claim(builder, "Aang married Katara")
+
+        assert builder.evidence_rejections == 1
