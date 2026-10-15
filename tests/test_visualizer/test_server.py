@@ -351,6 +351,63 @@ class TestFlaskApp:
         data = json.loads(response.data)
         assert data["name"] == "Aang"
 
+    def test_api_get_character_by_name_and_canon(self, client, setup_test_project):
+        """Regression: graph nodes request plain names with a canon query param."""
+        with patch("src.visualizer.server.PROJECT_DIR", setup_test_project):
+            response = client.get("/api/test_project/characters/Aang?canon=main")
+
+        assert response.status_code == 200
+        assert json.loads(response.data)["name"] == "Aang"
+
+    def test_api_get_character_by_name_defaults_to_main_canon(
+        self, client, setup_test_project
+    ):
+        """Plain name without canon param falls back to the main canon file."""
+        with patch("src.visualizer.server.PROJECT_DIR", setup_test_project):
+            response = client.get("/api/test_project/characters/Aang")
+
+        assert response.status_code == 200
+        assert json.loads(response.data)["name"] == "Aang"
+
+    def test_api_get_character_name_with_spaces(self, client, setup_test_project):
+        """Names with spaces map to underscored filenames (as KB save writes them)."""
+        chars_dir = setup_test_project / "test_project" / "characters"
+        (chars_dir / "Toph_Beifong_main.json").write_text(
+            json.dumps({"name": "Toph Beifong", "canon": "main"})
+        )
+
+        with patch("src.visualizer.server.PROJECT_DIR", setup_test_project):
+            response = client.get(
+                "/api/test_project/characters/Toph%20Beifong?canon=main"
+            )
+
+        assert response.status_code == 200
+        assert json.loads(response.data)["name"] == "Toph Beifong"
+
+    def test_api_get_character_uses_requested_canon(self, client, setup_test_project):
+        """The canon param selects between same-named characters in different canons."""
+        chars_dir = setup_test_project / "test_project" / "characters"
+        (chars_dir / "Aang_film.json").write_text(
+            json.dumps({"name": "Aang", "canon": "film"})
+        )
+
+        with patch("src.visualizer.server.PROJECT_DIR", setup_test_project):
+            response = client.get("/api/test_project/characters/Aang?canon=film")
+
+        assert response.status_code == 200
+        assert json.loads(response.data)["canon"] == "film"
+
+    def test_api_get_character_rejects_path_traversal(
+        self, client, setup_test_project
+    ):
+        """Character lookup must not read files outside the characters directory."""
+        with patch("src.visualizer.server.PROJECT_DIR", setup_test_project):
+            response = client.get(
+                "/api/test_project/characters/x?canon=../../../etc/passwd"
+            )
+
+        assert response.status_code == 404
+
     def test_api_get_character_not_found(self, client, setup_test_project):
         """Test 404 for nonexistent character."""
         with patch("src.visualizer.server.PROJECT_DIR", setup_test_project):

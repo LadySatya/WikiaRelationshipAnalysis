@@ -3,7 +3,7 @@ Phase 2 CLI commands: Processing and character analysis.
 """
 
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from .utils import setup_project_logging, validate_project_exists
 
@@ -119,6 +119,62 @@ def index_command(project_name: str):
     logger.info(f"[INFO] Next step: python main.py discover {project_name}")
 
 
+def summarize_knowledge_base(kb: Dict[str, Any], top_n: int = 10) -> Dict[str, Any]:
+    """
+    Compute summary statistics for a knowledge base.
+
+    The KB is nested by canon:
+        kb["characters"][canon][name] -> character data
+        kb["relationships"][canon][(char_a, char_b)] -> relationship data
+
+    Args:
+        kb: Knowledge base returned by CharacterKnowledgeBuilder
+        top_n: Number of top characters (by source count) to include
+
+    Returns:
+        Dict with num_characters, num_relationships, total_claims, avg_claims,
+        top_characters (list of dicts) and sample_relationship (dict or None)
+    """
+    characters = [
+        (canon, name, data)
+        for canon, by_name in kb["characters"].items()
+        for name, data in by_name.items()
+    ]
+    relationships = [
+        (canon, pair, data)
+        for canon, by_pair in kb["relationships"].items()
+        for pair, data in by_pair.items()
+    ]
+
+    total_claims = sum(len(data.get("claims", [])) for _, _, data in relationships)
+    num_relationships = len(relationships)
+
+    top_characters = [
+        {
+            "name": name,
+            "canon": canon,
+            "sources": len(data.get("source_urls", [])),
+            "aliases": len(data.get("aliases", [])),
+        }
+        for canon, name, data in characters
+    ]
+    top_characters.sort(key=lambda c: c["sources"], reverse=True)
+
+    sample_relationship = None
+    if relationships:
+        canon, pair, data = relationships[0]
+        sample_relationship = {"canon": canon, "characters": pair, "data": data}
+
+    return {
+        "num_characters": len(characters),
+        "num_relationships": num_relationships,
+        "total_claims": total_claims,
+        "avg_claims": total_claims / num_relationships if num_relationships else 0,
+        "top_characters": top_characters[:top_n],
+        "sample_relationship": sample_relationship,
+    }
+
+
 def discover_command(
     project_name: str, max_pages: Optional[int] = None, save_frequency: int = 10
 ):
@@ -159,48 +215,37 @@ def discover_command(
     duration = time.time() - start_time
 
     # Calculate statistics
-    num_characters = len(kb["characters"])
-    num_relationships = len(kb["relationships"])
-
-    total_claims = sum(
-        len(rel.get("claims", [])) for rel in kb["relationships"].values()
-    )
-
-    avg_claims = total_claims / num_relationships if num_relationships else 0
+    summary = summarize_knowledge_base(kb)
 
     logger.info("")
     logger.info("=" * 80)
     logger.info("KNOWLEDGE BUILDING COMPLETE - SUMMARY")
     logger.info("=" * 80)
-    logger.info(f"Characters discovered: {num_characters}")
-    logger.info(f"Relationships found: {num_relationships}")
-    logger.info(f"Total relationship claims: {total_claims}")
-    logger.info(f"Avg claims per relationship: {avg_claims:.1f}")
+    logger.info(f"Characters discovered: {summary['num_characters']}")
+    logger.info(f"Relationships found: {summary['num_relationships']}")
+    logger.info(f"Total relationship claims: {summary['total_claims']}")
+    logger.info(f"Avg claims per relationship: {summary['avg_claims']:.1f}")
     logger.info(f"Time: {duration:.1f}s")
 
     # Show top characters by source count
     logger.info("")
     logger.info("Top characters by sources:")
-    top_chars = sorted(
-        kb["characters"].items(),
-        key=lambda x: len(x[1].get("source_urls", [])),
-        reverse=True,
-    )[:10]
-
-    for i, (name, char_data) in enumerate(top_chars, 1):
-        sources = len(char_data.get("source_urls", []))
-        aliases = len(char_data.get("aliases", []))
-        logger.info(f"   {i:2d}. {name:30s} : {sources:3d} sources, {aliases} aliases")
+    for i, char in enumerate(summary["top_characters"], 1):
+        label = f"{char['name']} [{char['canon']}]"
+        logger.info(
+            f"   {i:2d}. {label:30s} : {char['sources']:3d} sources, "
+            f"{char['aliases']} aliases"
+        )
 
     # Show sample relationship
-    if kb["relationships"]:
+    sample = summary["sample_relationship"]
+    if sample:
         logger.info("")
         logger.info("Sample relationship:")
-        sample_key = list(kb["relationships"].keys())[0]
-        sample_rel = kb["relationships"][sample_key]
-        char_a, char_b = sample_key
+        sample_rel = sample["data"]
+        char_a, char_b = sample["characters"]
 
-        logger.info(f"  {char_a} <-> {char_b}")
+        logger.info(f"  {char_a} <-> {char_b} [{sample['canon']}]")
         logger.info(f"  Type: {sample_rel.get('type', 'Unknown')}")
         logger.info(f"  Summary: {sample_rel.get('summary', 'No summary')}")
         logger.info(f"  Claims: {len(sample_rel.get('claims', []))}")

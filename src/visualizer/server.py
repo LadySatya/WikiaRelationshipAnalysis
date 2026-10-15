@@ -1072,13 +1072,15 @@ def _get_viewer_html(project: str) -> str:
             );
 
             // Try to fetch character data
-            let charData = characterCache[node.id];
+            const nodeCanon = node.canon || 'main';
+            const cacheKey = `${{node.id}}|${{nodeCanon}}`;
+            let charData = characterCache[cacheKey];
             if (!charData) {{
                 try {{
-                    const response = await fetch(`/api/${{projectName}}/characters/${{encodeURIComponent(node.id)}}`);
+                    const response = await fetch(`/api/${{projectName}}/characters/${{encodeURIComponent(node.id)}}?canon=${{encodeURIComponent(nodeCanon)}}`);
                     if (response.ok) {{
                         charData = await response.json();
-                        characterCache[node.id] = charData;
+                        characterCache[cacheKey] = charData;
                     }}
                 }} catch (e) {{
                     console.log(`Could not load character data for ${{node.id}}`);
@@ -1304,26 +1306,32 @@ def api_list_characters(project: str):
     return jsonify({"files": files, "count": len(files), "canon_filter": canon_filter})
 
 
+def _safe_filename_part(value: str) -> str:
+    """Sanitize a name/canon the same way CharacterKnowledgeBuilder.save() does."""
+    return re.sub(r'[\\/:*?"<>|]', "_", value).replace(" ", "_")
+
+
 @app.route("/api/<project>/characters/<name>")
 def api_get_character(project: str, name: str):
-    """Return single character data."""
-    characters_dir = PROJECT_DIR / project / "characters"
+    """
+    Return single character data.
 
-    # Try exact filename first
-    char_file = characters_dir / f"{name}.json"
+    Accepts a plain character name with an optional ?canon= query param
+    (default: main), as sent by the graph page, or a filename stem such as
+    'Aang_main'.
+    """
+    characters_dir = (PROJECT_DIR / project / "characters").resolve()
+    safe_name = _safe_filename_part(name)
+    canon = _safe_filename_part(request.args.get("canon", "main"))
 
-    if not char_file.exists():
-        # Try URL-decoded name
-        import urllib.parse
+    # Filenames are <name>_<canon>.json; also accept an exact stem (e.g. Aang_main)
+    for stem in (f"{safe_name}_{canon}", safe_name):
+        char_file = (characters_dir / f"{stem}.json").resolve()
+        if char_file.parent == characters_dir and char_file.exists():
+            with open(char_file, "r", encoding="utf-8") as f:
+                return jsonify(json.load(f))
 
-        decoded_name = urllib.parse.unquote(name)
-        char_file = characters_dir / f"{decoded_name}.json"
-
-    if not char_file.exists():
-        return jsonify({"error": f"Character not found: {name}"}), 404
-
-    with open(char_file, "r", encoding="utf-8") as f:
-        return jsonify(json.load(f))
+    return jsonify({"error": f"Character not found: {name}"}), 404
 
 
 @app.route("/api/<project>/relationships/<filename>")
