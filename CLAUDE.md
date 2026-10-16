@@ -132,6 +132,8 @@ processed pages -> ContentChunker -> EmbeddingGenerator (local sentence-transfor
 Flask dashboard plus an interactive vis-network graph (HTML generated inline in `server.py`). Slow and crowded above ~200 characters.
 
 ### Known code issues
+- **Tool loop `max_tokens` (8192) is too low**: in the 2026-10-16 run the Aang page failed in its first window (full infobox + batched tool calls exceeded 8192 output tokens), and one failed window discards the whole page. Fix: raise to ~16000 (non-streaming safe) and let a failed window be recorded without dropping the rest of the page
+- Duplicate characters from short vs full names (Asami / Asami Sato, Toph / Toph Beifong); `validate` flags some. Proper fix: identify characters by wiki page link
 - Discover page order is filesystem order, so results are not fully reproducible
 - Affiliation evidence is not verified against the page (only relationship evidence is)
 
