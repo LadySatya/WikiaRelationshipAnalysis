@@ -28,9 +28,9 @@ python main.py visualize <project> [--no-open]            # http://localhost:800
 python main.py pipeline <project> [url] [--max-pages N] [--skip-crawl]
 
 python main.py list                                       # projects
-python main.py status <project>                           # misreports indexing (known issue)
+python main.py status <project>                           # progress of each stage
 python main.py view <project>                             # sample crawled content
-python main.py validate <project>                         # out of date: looks for graph.json
+python main.py validate <project>                         # re-verify quotes; report gaps and duplicates
 ```
 
 `discover` is resumable: re-running it skips pages recorded in `cache/discovery_state.json`. To start over, delete `characters/`, `relationships/` and `cache/discovery_state.json` in the project directory.
@@ -89,7 +89,7 @@ src/
     core/           # ContentChunker
     rag/            # EmbeddingGenerator, VectorStore, RAGRetriever, QueryEngine
     llm/            # LLMClient (Claude API, tool loop, caching, cost tracking)
-    analysis/       # CharacterKnowledgeBuilder
+    analysis/       # CharacterKnowledgeBuilder, kb_validation (validate/status reports)
   visualizer/
     server.py       # Flask app; graph page HTML is generated inline (vis-network)
   utils/          # logging_config, tool_schema_loader
@@ -97,7 +97,7 @@ src/
 config/
   crawler_config.yaml, rate_limits.yaml, processor_config.yaml
   llm_tools/prompts/      # discovery system prompt
-  llm_tools/schemas/      # tool definitions (only knowledge_building/ is used)
+  llm_tools/schemas/      # tool definitions (knowledge_building/)
 
 tests/            # mirrors src/; fixtures/ and mocks/ for LLM mocking
 data/projects/    # runtime data (gitignored)

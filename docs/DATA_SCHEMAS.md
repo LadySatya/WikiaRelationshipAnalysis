@@ -265,14 +265,14 @@ Errors: a missing character returns `{error, success: false, suggestions: {name:
 ## LLM Logs
 
 ### `logs/llm/prompts.jsonl`
-One line per logged LLM call (`LLMLogger.log_prompt()`, `src/utils/logging_config.py`):
+One line per LLM call (`LLMLogger.log_prompt()`, `src/utils/logging_config.py`). During `discover` each window is one entry with `purpose` `knowledge_building:<title> [part i/n]`:
 
 ```json
 {"timestamp": "...", "model": "claude-haiku-5-5", "purpose": "knowledge_building:Aang | Avatar Wiki | Fandom [part 3/18]",
  "prompt_length": 7400, "prompt_preview": "...", "response_length": 120, "response_preview": "...",
  "usage": {"input_tokens": 12, "output_tokens": 5400, "cache_read_input_tokens": 41000, "cache_creation_input_tokens": 9000},
  "cost_usd": 0.0049, "error": null,
- "metadata": {"page_title": "...", "page_url": "...", "window_index": 3, "window_count": 18, "tool_calls_made": 21, "iterations": 5, "estimated_cost": 0.0049}}
+ "metadata": {"page_title": "...", "page_url": "...", "window_index": 3, "window_count": 18, "iterations": 5, "tool_calls_count": 21}}
 ```
 
 ### `logs/llm/tool_calls.jsonl`
@@ -282,8 +282,6 @@ One line per tool call: `{timestamp, tool_name, input, result_summary, error, ex
 
 ## Known Issues
 
-- **Every discovery LLM call is logged twice** in `prompts.jsonl` (once as `tool_based_generation`, once as `knowledge_building:...`). Summing `cost_usd` over the file double-counts; filter on `purpose` starting with `knowledge_building:`.
-- **`search_wiki` results always have an empty `page_title`**: `knowledge_builder.py` reads `evidence["page_title"]` but citation evidence uses `title`.
-- **`knowledge_base_metadata.json` `pages_processed`** is the loop index, which includes skipped (already processed) pages.
 - **`is_disambiguation`** can be a false positive (the Aang page is flagged because of a "see Aang (disambiguation)" note).
-- **No `graph.json` is produced.** The visualizer builds the graph in the browser from the relationship files. `validate` and the `status` command still look for `graph.json`.
+- **No `graph.json` is produced.** The visualizer builds the graph in the browser from the relationship files.
+- **Affiliation evidence is not verified** against the page (only relationship evidence is).

@@ -37,13 +37,3 @@ processor:
     # Safety cap on cost per page. Pages with more windows are only partly read;
     # this is logged, recorded in cache/discovery_state.json, and reported.
     max_windows_per_page: 25
-
-  # Character discovery settings
-  character_discovery:
-    min_mentions: 3              # minimum chunks mentioning character to be discovered
-    confidence_threshold: 0.7    # minimum confidence for character extraction
-
-  # Cost tracking
-  cost_tracking:
-    enabled: true
-    warn_threshold_usd: 5.0      # warn if costs exceed this amount

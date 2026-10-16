@@ -122,13 +122,3 @@ class TestToolSchemaIntegration:
         # Prompt should reference some tool names
         tool_names = [s["name"] for s in schemas]
         assert any(name in prompt for name in tool_names)
-
-    def test_character_classification_schemas_exist(self):
-        """Test that character_classification schemas exist if used."""
-        # This category should exist based on CLAUDE.md
-        try:
-            schemas = load_tool_schemas("character_classification")
-            assert len(schemas) > 0
-        except FileNotFoundError:
-            # Category may not exist, that's OK
-            pass

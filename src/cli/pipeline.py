@@ -12,144 +12,47 @@ from .utils import setup_project_logging, validate_project_exists
 
 def validate_command(project_name: str):
     """
-    Validate and show statistics for a completed pipeline.
+    Check a project's knowledge base for grounding and consistency problems.
+
+    Re-verifies every evidence quote against the crawled pages and reports
+    relationships without claims, self-relationships, unknown characters,
+    likely duplicate characters, and partly read or unprocessed pages.
 
     Args:
         project_name: Name of the project to validate
     """
-    import json
+    from src.processor.analysis.kb_validation import validate_knowledge_base
 
-    # Validate project exists
     project_path = validate_project_exists(project_name, require_crawled=False)
+    logger = setup_project_logging(project_name, "VALIDATION")
 
-    # Setup logging
-    logger = setup_project_logging(project_name, "PHASE 5: VALIDATION")
+    report = validate_knowledge_base(project_path)
 
-    # Load relationship graph
-    graph_path = project_path / "relationships" / "graph.json"
-    if not graph_path.exists():
-        logger.error("No relationship graph found")
-        logger.error(f"Run 'python main.py build {project_name}' first")
+    logger.info("")
+    logger.info(f"Characters:      {report['characters']}")
+    logger.info(f"Relationships:   {report['relationships']}")
+    logger.info(f"Claims:          {report['claims']}")
+    logger.info(f"Evidence quotes: {report['evidence']}")
+    logger.info(
+        f"Characters without relationships: {report['characters_without_relationships']}"
+    )
+    types = ", ".join(
+        f"{t}={n}"
+        for t, n in sorted(report["relationship_types"].items(), key=lambda x: -x[1])
+    )
+    logger.info(f"Relationship types: {types or '(none)'}")
+    logger.info("")
+
+    if not report["issues"]:
+        logger.info("[OK] No issues found")
         return
 
-    with open(graph_path, "r", encoding="utf-8") as f:
-        graph = json.load(f)
-
-    nodes = graph.get("nodes", [])
-    edges = graph.get("edges", [])
-    metadata = graph.get("metadata", {})
-
-    logger.info("")
-    logger.info("Graph Statistics:")
-    logger.info(f"  Nodes (characters): {len(nodes)}")
-    logger.info(f"  Edges (relationships): {len(edges)}")
-    if nodes:
-        avg_connections = len(edges) / len(nodes)
-        logger.info(f"  Avg connections: {avg_connections:.1f}")
-
-    # Confidence distribution
-    if edges:
-        logger.info("")
-        logger.info("Confidence Distribution:")
-
-        high_conf = sum(1 for e in edges if e.get("confidence", 0) >= 0.8)
-        med_conf = sum(1 for e in edges if 0.5 <= e.get("confidence", 0) < 0.8)
-        low_conf = sum(1 for e in edges if e.get("confidence", 0) < 0.5)
-
-        logger.info(
-            f"  High (>=0.8):    {high_conf:3d} ({high_conf/len(edges)*100:5.1f}%)"
-        )
-        logger.info(
-            f"  Medium (0.5-0.8):   {med_conf:3d} ({med_conf/len(edges)*100:5.1f}%)"
-        )
-        logger.info(
-            f"  Low (<0.5):        {low_conf:3d} ({low_conf/len(edges)*100:5.1f}%)"
-        )
-
-    # Evidence statistics
-    if edges:
-        evidence_counts = [e.get("evidence_count", 0) for e in edges]
-        avg_evidence = sum(evidence_counts) / len(evidence_counts)
-        min_evidence = min(evidence_counts)
-        max_evidence = max(evidence_counts)
-
-        logger.info("")
-        logger.info("Evidence Statistics:")
-        logger.info(f"  Avg citations/relationship: {avg_evidence:.1f}")
-        logger.info(f"  Min: {min_evidence}")
-        logger.info(f"  Max: {max_evidence}")
-
-    # Show top relationships
-    high_conf_edges = sorted(
-        [e for e in edges if e.get("confidence", 0) >= 0.8],
-        key=lambda e: e.get("confidence", 0),
-        reverse=True,
-    )[:3]
-
-    if high_conf_edges:
-        logger.info("")
-        logger.info("Top High-Confidence Relationships:")
-        logger.info("")
-
-        for i, edge in enumerate(high_conf_edges, 1):
-            logger.info(f"{i}. {edge['from']} -> {edge['to']}")
-            logger.info(f"   Type: {edge['type']}")
-            logger.info(f"   Summary: {edge['summary'][:100]}...")
-            logger.info(f"   Confidence: {edge.get('confidence', 0.0):.2f}")
-            logger.info(f"   Evidence: {edge.get('evidence_count', 0)} citations")
-            logger.info("")
-
-    # Show detailed profile sample
-    characters_dir = project_path / "characters"
-    if characters_dir.exists() and nodes:
-        # Load first character's full profile
-        first_node = nodes[0]
-        char_file = characters_dir / f"{first_node['id'].replace(' ', '_')}.json"
-
-        if char_file.exists():
-            with open(char_file, "r", encoding="utf-8") as f:
-                profile = json.load(f)
-
-            logger.info("=" * 80)
-            logger.info(f"Detailed Profile Sample: {first_node['id']}")
-            logger.info("=" * 80)
-
-            if profile.get("profile", {}).get("relationships"):
-                # Show first relationship in detail
-                rel = profile["profile"]["relationships"][0]
-                logger.info("")
-                logger.info(f"Relationship: {first_node['id']} -> {rel['target']}")
-                logger.info(f"Type: {rel['type']}")
-
-                claims = rel.get("narrative", {}).get("claims_with_evidence", [])
-                if claims:
-                    logger.info("")
-                    logger.info(f"Claims ({len(claims)} total):")
-                    logger.info("")
-
-                    # Show first 3 claims
-                    for i, claim in enumerate(claims[:3], 1):
-                        logger.info(f"  {i}. \"{claim['claim']}\"")
-                        logger.info(
-                            f"     Confidence: {claim.get('confidence', 0.0):.2f}, Evidence: {len(claim.get('evidence', []))} citations"
-                        )
-                        if claim.get("evidence"):
-                            evidence = claim["evidence"][0]
-                            cited_preview = (
-                                evidence["cited_text"][:80] + "..."
-                                if len(evidence["cited_text"]) > 80
-                                else evidence["cited_text"]
-                            )
-                            logger.info(
-                                f"     Source: {evidence.get('title', 'Unknown')}"
-                            )
-                            logger.info(f"     Cited: {cited_preview}")
-                        logger.info("")
-
-    logger.info("=" * 80)
-    logger.info("VALIDATION COMPLETE")
-    logger.info("=" * 80)
-    logger.info("")
+    for name, found in report["issues"].items():
+        logger.warning(f"[ISSUE] {name.replace('_', ' ')}: {len(found)}")
+        for item in found[:5]:
+            logger.warning(f"    {item}")
+        if len(found) > 5:
+            logger.warning(f"    ... and {len(found) - 5} more")
 
 
 async def pipeline_command(

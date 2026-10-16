@@ -24,7 +24,7 @@ logs/
     tool_calls.jsonl           # structured record of each tool call (see below)
 ```
 
-All `.log` files rotate at 10 MB with 5 backups. Two more files, `processor/character_discovery.log` and `processor/profile_building.log`, are created but always empty; their loggers belong to code that was removed.
+All `.log` files rotate at 10 MB with 5 backups.
 
 ## Using loggers
 
@@ -51,7 +51,7 @@ logger.info("Processing page")
 | `processor.rag` | chunker, embeddings, vector store, retriever, query engine | `processor/rag.log` |
 | `llm` | `LLMClient` | `llm/llm_calls.log` |
 
-`processor`, `processor.discovery`, `processor.profiles`, `llm.prompts` and `llm.tools` are also defined but unused.
+`processor` is the parent of the processor loggers; nothing logs to it directly.
 
 ## LLM call tracking
 
@@ -69,7 +69,7 @@ llm_logger.log_tool_call(tool_name="search_characters", tool_input={"query": "Aa
 
 Each call appends a line to `llm/prompts.jsonl` or `llm/tool_calls.jsonl` and writes a summary line to `llm/llm_calls.log`. Field-by-field formats are in [DATA_SCHEMAS.md](DATA_SCHEMAS.md#llm-logs).
 
-**Caveat:** during `discover`, every LLM call is logged twice in `prompts.jsonl`: once by `LLMClient` (`purpose: "tool_based_generation"`) and once by the knowledge builder (`purpose: "knowledge_building:<title> [part i/n]"`, with page metadata). Filter on one purpose when adding up costs.
+During `discover`, `LLMClient.generate_with_tools()` writes one entry per window, with the purpose and page metadata passed in by the knowledge builder (`purpose: "knowledge_building:<title> [part i/n]"`).
 
 ## Useful commands
 
@@ -82,7 +82,7 @@ tail -f $LOGS/processor/knowledge_building.log
 # Errors only
 cat $LOGS/errors.log
 
-# Total discover cost (count each call once)
+# Total discover cost
 jq -s 'map(select(.purpose | startswith("knowledge_building:"))) | map(.cost_usd // 0) | add' $LOGS/llm/prompts.jsonl
 
 # Tool usage counts

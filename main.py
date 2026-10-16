@@ -56,72 +56,44 @@ def status_command(args):
         print(f"[INFO] Use 'python main.py list' to see available projects")
         return
 
-    # Count files by directory
-    processed_dir = project_path / "processed"
-    characters_dir = project_path / "characters"
-    relationships_dir = project_path / "relationships"
+    from src.processor.analysis.kb_validation import project_status
 
-    processed_files = list(processed_dir.glob("*.json")) if processed_dir.exists() else []
-    character_files = list(characters_dir.glob("*.json")) if characters_dir.exists() else []
-    graph_file = relationships_dir / "graph.json" if relationships_dir.exists() else None
+    status = project_status(project_path)
+    name = args.project_name
 
     print(f"\n{'=' * 80}")
-    print(f"Project: {args.project_name}")
+    print(f"Project: {name}")
     print('=' * 80)
     print(f"Location: {project_path}")
     print("")
 
-    # Phase 1 status
-    print("[Phase 1 - Crawling]")
-    if processed_files:
-        print(f"  Status: Complete")
-        print(f"  Pages crawled: {len(processed_files)}")
-    else:
-        print(f"  Status: Not started")
-        print(f"  Next: python main.py crawl {args.project_name} <url>")
+    print("[1. Crawl]")
+    print(f"  Pages crawled: {status['pages_crawled']}")
+    if not status["pages_crawled"]:
+        print(f"  Next: python main.py crawl {name} <url>")
     print("")
 
-    # Phase 2a status (indexing)
-    print("[Phase 2a - Indexing]")
-    chroma_dir = project_path / "vector_store"
-    if chroma_dir.exists():
-        print(f"  Status: Complete")
-        print(f"  Vector store: {chroma_dir}")
-    else:
-        print(f"  Status: Not started")
-        if processed_files:
-            print(f"  Next: python main.py index {args.project_name}")
+    print("[2. Index]")
+    print(f"  Status: {'Complete' if status['indexed'] else 'Not started'}")
+    if not status["indexed"] and status["pages_crawled"]:
+        print(f"  Next: python main.py index {name}")
     print("")
 
-    # Phase 2b status (discovery + profiles)
-    print("[Phase 2b - Character Discovery & Profiles]")
-    if character_files:
-        print(f"  Status: Discovery complete")
-        print(f"  Characters discovered: {len(character_files)}")
-
-        if graph_file and graph_file.exists():
-            import json
-            with open(graph_file, 'r') as f:
-                graph = json.load(f)
-            print(f"  Relationships extracted: {graph['metadata']['total_relationships']}")
-            print(f"  Status: Profiles complete")
-        else:
-            print(f"  Status: Profiles not started")
-            print(f"  Next: python main.py build {args.project_name}")
-    else:
-        print(f"  Status: Not started")
-        if chroma_dir.exists():
-            print(f"  Next: python main.py discover {args.project_name}")
+    print("[3. Discover]")
+    print(f"  Pages processed: {status['pages_discovered']} of {status['pages_crawled']}")
+    if status["partly_read_pages"]:
+        print(f"  Pages only partly read: {status['partly_read_pages']}")
+    print(f"  Characters: {status['characters']}")
+    print(f"  Relationships: {status['relationships']}")
+    if status["indexed"] and status["pages_discovered"] < status["pages_crawled"]:
+        print(f"  Next: python main.py discover {name}")
     print("")
 
-    # Phase 3 status
-    print("[Phase 3 - Validation]")
-    if graph_file and graph_file.exists():
-        print(f"  Status: Ready for validation")
-        print(f"  Next: python main.py validate {args.project_name}")
-    else:
-        print(f"  Status: Not ready")
-    print("")
+    if status["characters"]:
+        print("[4. Check and view]")
+        print(f"  python main.py validate {name}")
+        print(f"  python main.py visualize {name}")
+        print("")
 
     print('=' * 80)
 

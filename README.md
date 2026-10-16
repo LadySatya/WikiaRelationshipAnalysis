@@ -28,8 +28,6 @@ Ingests a Fandom/Wikia wiki, uses Claude to extract characters and the relations
 ## Status and known issues (October 2026)
 
 - **Crawling Fandom is currently blocked.** Fandom serves a Cloudflare bot challenge to non-browser requests, so `crawl` saves 0 pages. Fetching via the wiki's official MediaWiki API (`api.php`) still works and is the planned fix. This project will not attempt to get around the challenge.
-- **`validate` is out of date** - it looks for a `graph.json` file from an older architecture and reports nothing useful.
-- **`status` misreports indexing** as "Not started" and shows an obsolete "Profiles" phase.
 
 ## Quick Start
 
@@ -44,10 +42,11 @@ echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
 python main.py crawl my_project https://avatar.fandom.com/wiki/Aang --max-pages 100
 python main.py index my_project                    # chunk + embed pages into ChromaDB (local, free)
 python main.py discover my_project --max-cost 1.00 # build the knowledge base with Claude
+python main.py validate my_project                 # re-check every quote, find gaps and duplicates
 python main.py visualize my_project                # graph at http://localhost:8000/
 ```
 
-`python main.py pipeline my_project <url>` runs crawl, index, discover and validate in sequence (`--skip-crawl` to reuse existing pages). `python main.py list` and `python main.py view <project>` show projects and sample content.
+`python main.py pipeline my_project <url>` runs crawl, index, discover and validate in sequence (`--skip-crawl` to reuse existing pages). `python main.py status <project>` shows progress; `list` and `view <project>` show projects and sample content.
 
 ## How It Works
 

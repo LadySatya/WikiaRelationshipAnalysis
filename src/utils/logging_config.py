@@ -6,21 +6,20 @@ and structured logging for easier debugging.
 
 Log Structure:
     data/projects/<project>/logs/
-    ├── main.log                    # Overall application log
-    ├── crawler/
-    │   ├── crawler.log             # Crawling operations
-    │   ├── rate_limiting.log       # Rate limit, robots.txt, backoff
-    │   └── extraction.log          # Page extraction, link discovery
-    ├── processor/
-    │   ├── processor.log           # General processing
-    │   ├── character_discovery.log # Character extraction
-    │   ├── profile_building.log    # Profile building
-    │   └── rag.log                 # RAG pipeline (chunking, embedding, retrieval)
-    ├── llm/
-    │   ├── llm_calls.log           # High-level LLM call summaries
-    │   ├── prompts.jsonl           # Full prompts for debugging (structured)
-    │   └── tool_calls.jsonl        # Tool usage tracking (structured)
-    └── errors.log                  # All errors across modules
+    |-- main.log                    # Overall application log
+    |-- crawler/
+    |   |-- crawler.log             # Crawling operations
+    |   |-- rate_limiting.log       # Rate limit, robots.txt, backoff
+    |   `-- extraction.log          # Page extraction, link discovery
+    |-- processor/
+    |   |-- processor.log           # Parent of all processor loggers
+    |   |-- knowledge_building.log  # discover: pages, windows, saves, summary
+    |   `-- rag.log                 # RAG pipeline (chunking, embedding, retrieval)
+    |-- llm/
+    |   |-- llm_calls.log           # High-level LLM call summaries
+    |   |-- prompts.jsonl           # Full prompts for debugging (structured)
+    |   `-- tool_calls.jsonl        # Tool usage tracking (structured)
+    `-- errors.log                  # All errors across modules
 
 Usage:
     from src.utils.logging_config import setup_logging, get_logger
@@ -34,7 +33,7 @@ Usage:
 
     # Get LLM logger for tracking API calls
     llm_logger = get_llm_logger()
-    llm_logger.log_prompt(prompt="...", model="claude-sonnet-4")
+    llm_logger.log_prompt(prompt="...", model="claude-haiku-5-5", purpose="...")
 """
 
 import json
@@ -51,13 +50,9 @@ LOGGERS = {
     "crawler.rate_limiting": "wikia.crawler.rate_limiting",
     "crawler.extraction": "wikia.crawler.extraction",
     "processor": "wikia.processor",
-    "processor.discovery": "wikia.processor.discovery",
-    "processor.profiles": "wikia.processor.profiles",
     "processor.knowledge_builder": "wikia.processor.knowledge_builder",
     "processor.rag": "wikia.processor.rag",
     "llm": "wikia.llm",
-    "llm.prompts": "wikia.llm.prompts",
-    "llm.tools": "wikia.llm.tools",
 }
 
 
@@ -92,8 +87,8 @@ class LLMLogger:
 
         Args:
             prompt: The prompt sent to LLM
-            model: Model name (e.g., "claude-sonnet-4")
-            purpose: What this prompt is for (e.g., "character_classification")
+            model: Model name (e.g., "claude-haiku-5-5")
+            purpose: What this prompt is for (e.g., "knowledge_building:Aang [part 1/18]")
             response: LLM response (optional)
             usage: Token usage dict {"input_tokens": X, "output_tokens": Y}
             cost: Estimated cost in USD
@@ -325,24 +320,6 @@ def _setup_module_handlers(
     )
 
     _add_file_handler(
-        LOGGERS["processor.discovery"],
-        log_dir / "processor" / "character_discovery.log",
-        level,
-        formatter,
-        max_bytes,
-        backup_count,
-    )
-
-    _add_file_handler(
-        LOGGERS["processor.profiles"],
-        log_dir / "processor" / "profile_building.log",
-        level,
-        formatter,
-        max_bytes,
-        backup_count,
-    )
-
-    _add_file_handler(
         LOGGERS["processor.knowledge_builder"],
         log_dir / "processor" / "knowledge_building.log",
         level,
@@ -427,8 +404,8 @@ def get_llm_logger(log_dir: Optional[Path] = None) -> LLMLogger:
         llm_logger = get_llm_logger()
         llm_logger.log_prompt(
             prompt="Is Aang a character?",
-            model="claude-sonnet-4",
-            purpose="character_classification",
+            model="claude-haiku-5-5",
+            purpose="knowledge_building:Aang [part 1/18]",
             response="Yes",
             usage={"input_tokens": 100, "output_tokens": 20},
             cost=0.0015

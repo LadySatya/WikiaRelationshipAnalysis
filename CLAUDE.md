@@ -67,9 +67,9 @@ python main.py pipeline <project> [url] [--skip-crawl]
 
 # Management
 python main.py list
-python main.py status <project>     # known issue: misreports indexing
+python main.py status <project>     # progress of each stage
 python main.py view <project>
-python main.py validate <project>   # known issue: looks for obsolete graph.json
+python main.py validate <project>   # re-verify quotes; report gaps, duplicates, dangling refs
 
 # Testing (ALWAYS use -m unit during development!)
 python -m pytest -m unit -v                       # Fast unit tests (~15s)
@@ -124,16 +124,16 @@ processed pages -> ContentChunker -> EmbeddingGenerator (local sentence-transfor
 
 **LLM client:** `llm/llm_client.py` - default model `claude-haiku-5-5`, `effort: medium`; anthropic SDK 1.x (no `temperature`); handles `refusal` and `max_tokens` stops; responses can start with thinking blocks, so read content by block type.
 
-**Config:** `config/processor_config.yaml`; prompt and tool definitions in `config/llm_tools/` (only `schemas/knowledge_building/` is loaded)
+**Validation:** `analysis/kb_validation.py` - `validate_knowledge_base()` (used by `validate`) re-verifies every quote and reports relationships without claims, self-relationships, unknown characters, likely duplicates, partly read/unprocessed pages; `project_status()` (used by `status`)
+
+**Config:** `config/processor_config.yaml`; prompt and tool definitions in `config/llm_tools/`
 
 ### Phase 3: Visualization (`src/visualizer/server.py`)
-Flask dashboard plus an interactive vis-network graph (HTML generated inline in `server.py`; `viewer.html` is unused). Slow and crowded above ~200 characters.
+Flask dashboard plus an interactive vis-network graph (HTML generated inline in `server.py`). Slow and crowded above ~200 characters.
 
 ### Known code issues
-- Every discover LLM call is logged twice in `logs/llm/prompts.jsonl` (sum costs over `knowledge_building:` entries only)
-- `search_wiki` results have empty `page_title` (`knowledge_builder.py` reads `page_title`; citation evidence has `title`)
-- `validate` and `status` read an obsolete `graph.json`; `status` misreports indexing
 - Discover page order is filesystem order, so results are not fully reproducible
+- Affiliation evidence is not verified against the page (only relationship evidence is)
 
 ## TDD Requirements
 
@@ -214,7 +214,7 @@ setup_logging(project_name="avatar_wiki", log_level="INFO")   # once at startup 
 logger = get_logger("processor.knowledge_builder")
 ```
 
-**Module names in use:** `main`, `crawler`, `crawler.rate_limiting`, `crawler.extraction`, `processor.knowledge_builder`, `processor.rag`, `llm`. (`processor`, `processor.discovery`, `processor.profiles`, `llm.prompts`, `llm.tools` are defined but unused.)
+**Module names:** `main`, `crawler`, `crawler.rate_limiting`, `crawler.extraction`, `processor` (parent only), `processor.knowledge_builder`, `processor.rag`, `llm`.
 
 **See:** `docs/LOGGING_STRATEGY.md` for details and useful `jq` commands.
 

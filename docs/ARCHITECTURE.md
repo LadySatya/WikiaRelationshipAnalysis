@@ -106,14 +106,18 @@ A Flask app (`python main.py visualize <project>`, port 8000):
 - `/<project>` - interactive graph rendered in the browser with **vis-network** (HTML is generated inline in `server.py`). Nodes are characters; edge width reflects the number of evidence quotes (capped at 5). Click a character for their bio and relationships, or a relationship for its claims and quotes. A canon filter selects one continuity.
 - JSON API under `/api/<project>/...` for relationships, characters (`characters/<name>?canon=<canon>`), and canons
 
-The graph loads every relationship file with a separate request and lays out nodes with a physics simulation in the browser, so large projects (200+ characters) load slowly and are crowded. `src/visualizer/viewer.html` is an old D3.js viewer that is no longer served.
+The graph loads every relationship file with a separate request and lays out nodes with a physics simulation in the browser, so large projects (200+ characters) load slowly and are crowded.
+
+## Validation (`src/processor/analysis/kb_validation.py`)
+
+`python main.py validate <project>` reads the saved knowledge base (no API calls) and re-verifies every evidence quote against the crawled pages. It reports counts and relationship types, and lists issues: relationships without claims, quotes not on their cited page or citing pages that were not crawled, self-relationships, relationships naming unknown characters, likely duplicate characters (same name or alias in a canon), and partly read or unprocessed pages. `python main.py status <project>` shows progress through crawl, index and discover.
 
 ## Configuration
 
 - `config/crawler_config.yaml` - user agent, delays, target namespaces
 - `config/rate_limits.yaml` - per-domain rate limits
 - `config/processor_config.yaml` - chunking, embeddings, LLM model, effort, prompt caching, and `knowledge_building.window_chars` / `max_windows_per_page`
-- `config/llm_tools/` - discovery system prompt and tool definitions (`schemas/relationship_extraction/` and `schemas/character_classification/` are leftovers that nothing loads)
+- `config/llm_tools/` - discovery system prompt and tool definitions
 
 There is one config file per area; there are no per-project overrides. Secrets (`ANTHROPIC_API_KEY`) come from `.env`, loaded by `main.py`.
 

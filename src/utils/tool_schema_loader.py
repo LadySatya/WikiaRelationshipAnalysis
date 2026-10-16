@@ -8,11 +8,11 @@ Usage:
     >>> from src.utils.tool_schema_loader import load_tool_schemas, load_system_prompt
     >>>
     >>> # Load tool schemas
-    >>> tools = load_tool_schemas("character_classification")
+    >>> tools = load_tool_schemas("knowledge_building")
     >>> # Returns: [{"name": "get_infobox_fields", "description": "...", "input_schema": {...}}, ...]
     >>>
     >>> # Load system prompt
-    >>> prompt = load_system_prompt("character_classification_system")
+    >>> prompt = load_system_prompt("knowledge_building_system")
     >>> # Returns: "You are a character classifier..."
 """
 
@@ -26,7 +26,7 @@ def load_tool_schemas(category: str) -> List[Dict[str, Any]]:
     Load all tool schemas for a given category.
 
     Args:
-        category: Tool category (e.g., "character_classification", "relationship_extraction")
+        category: Tool category (e.g., "knowledge_building")
 
     Returns:
         List of tool definition dicts in Anthropic format:
@@ -44,8 +44,8 @@ def load_tool_schemas(category: str) -> List[Dict[str, Any]]:
         ValueError: If no tool schemas found in category
 
     Example:
-        >>> tools = load_tool_schemas("character_classification")
-        >>> # Returns tools from config/llm_tools/schemas/character_classification/*.json
+        >>> tools = load_tool_schemas("knowledge_building")
+        >>> # Returns tools from config/llm_tools/schemas/knowledge_building/*.json
     """
     # Get schema directory
     schema_dir = Path("config/llm_tools/schemas") / category
@@ -86,8 +86,8 @@ def load_system_prompt(prompt_name: str) -> str:
         FileNotFoundError: If prompt file doesn't exist
 
     Example:
-        >>> prompt = load_system_prompt("character_classification_system")
-        >>> # Returns content from config/llm_tools/prompts/character_classification_system.txt
+        >>> prompt = load_system_prompt("knowledge_building_system")
+        >>> # Returns content from config/llm_tools/prompts/knowledge_building_system.txt
     """
     prompt_file = Path("config/llm_tools/prompts") / f"{prompt_name}.txt"
 

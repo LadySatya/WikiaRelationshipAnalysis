@@ -93,7 +93,7 @@ class BackoffHandler:
         # Cap at max_delay
         delay = min(delay, self.max_delay)
 
-        # Add jitter (±25% randomization)
+        # Add jitter (+/-25% randomization)
         jitter = delay * 0.25 * (2 * random.random() - 1)
         delay = max(0, delay + jitter)
 
