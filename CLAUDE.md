@@ -234,4 +234,3 @@ pip install -e ".[dev,rag,viz]"    # Everything the pipeline needs
 - The crawler is async; indexing and discovery are synchronous
 - One config file per area in `config/`; no per-project overrides
 - Test fixtures use Avatar/Naruto characters
-- `docs/archive/` holds historical reports that do not describe the current code
