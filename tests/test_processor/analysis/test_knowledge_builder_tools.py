@@ -358,9 +358,10 @@ class TestSearchWikiTool:
             return_value={
                 "evidence": [
                     {
+                        # Real citation evidence carries chunk metadata: url, title
                         "cited_text": "Test result",
                         "url": "https://example.com",
-                        "page_title": "Test Page",
+                        "title": "Test Page",
                     }
                 ],
                 "text": "Summary text",
@@ -374,6 +375,9 @@ class TestSearchWikiTool:
         )
         assert result["count"] == 1
         assert len(result["results"]) == 1
+        # Regression: page_title was always empty (read the wrong field)
+        assert result["results"][0]["page_title"] == "Test Page"
+        assert result["results"][0]["url"] == "https://example.com"
 
     def test_search_wiki_returns_empty_for_no_query(self, mock_builder):
         """Should return empty results for empty query."""

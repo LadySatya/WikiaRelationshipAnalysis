@@ -536,6 +536,8 @@ class LLMClient:
         max_tokens: int = 8192,
         prune_history: bool = True,
         keep_last_n: int = 3,
+        log_purpose: str = "tool_based_generation",
+        log_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Generate response with tool calling capability.
@@ -553,6 +555,8 @@ class LLMClient:
             max_tokens: Max tokens per response, including thinking (default: 8192)
             prune_history: If True, keep only recent conversation to reduce tokens (default: True)
             keep_last_n: Number of recent tool exchanges to keep when pruning (default: 3)
+            log_purpose: Purpose recorded in llm/prompts.jsonl for this call
+            log_metadata: Extra metadata merged into the prompts.jsonl entry
 
         Returns:
             {
@@ -748,7 +752,7 @@ class LLMClient:
                     self.llm_logger.log_prompt(
                         prompt=prompt,
                         model=self.model,
-                        purpose="tool_based_generation",
+                        purpose=log_purpose,
                         response=final_text,
                         usage={
                             "input_tokens": iteration_input_tokens,
@@ -758,6 +762,7 @@ class LLMClient:
                         },
                         cost=estimated_cost,
                         metadata={
+                            **(log_metadata or {}),
                             "iterations": iteration + 1,
                             "tool_calls_count": len(all_tool_calls),
                         },

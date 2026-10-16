@@ -192,3 +192,21 @@ class TestWindowedProcessing:
         config = get_config()
         assert builder.window_chars == config.knowledge_window_chars
         assert builder.max_windows_per_page == config.knowledge_max_windows_per_page
+
+
+class TestSinglePromptLog:
+    def test_window_is_logged_once_via_llm_client(self, builder):
+        """Regression: each window was logged twice (client + builder)."""
+        builder.window_chars = 1000
+
+        builder._process_page(_page(_sentences(100)))
+
+        builder.llm_logger.log_prompt.assert_not_called()
+        calls = builder.query_engine.llm_client.generate_with_tools.call_args_list
+        first = calls[0].kwargs
+        assert first["log_purpose"].startswith("knowledge_building:Aang")
+        assert f"[part 1/{len(calls)}]" in first["log_purpose"]
+        assert (
+            first["log_metadata"]["page_url"] == "https://avatar.fandom.com/wiki/Aang"
+        )
+        assert first["log_metadata"]["window_index"] == 1

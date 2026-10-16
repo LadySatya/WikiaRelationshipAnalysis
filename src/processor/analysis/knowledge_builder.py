@@ -291,7 +291,9 @@ class CharacterKnowledgeBuilder:
                         datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
                     )
 
-                self.knowledge_base["metadata"]["pages_processed"] = i
+                self.knowledge_base["metadata"]["pages_processed"] = len(
+                    self.processed_pages
+                )
                 success_count += 1
                 consecutive_failures = 0  # Reset on success
                 if page_cost:
@@ -437,6 +439,7 @@ class CharacterKnowledgeBuilder:
                 window_count=window_count,
             )
 
+            purpose = f"knowledge_building:{title} [part {index}/{window_count}]"
             result = self.query_engine.llm_client.generate_with_tools(
                 prompt=task_prompt,
                 tools=self.kb_tools,
@@ -445,33 +448,18 @@ class CharacterKnowledgeBuilder:
                 system_prompt=self.system_prompt,
                 prune_history=True,  # Prune to avoid context overflow
                 keep_last_n=10,
-            )
-
-            # Cost is calculated by LLMClient from its pricing table
-            usage = result["usage"]
-            window_cost = usage.get("estimated_cost_usd", 0.0)
-            page_cost += window_cost
-
-            self.llm_logger.log_prompt(
-                prompt=task_prompt,
-                model=self.query_engine.llm_client.model,
-                purpose=f"knowledge_building:{title} [part {index}/{window_count}]",
-                response=result["final_response"],
-                usage={
-                    "input_tokens": usage.get("total_input_tokens", 0),
-                    "output_tokens": usage.get("total_output_tokens", 0),
-                },
-                cost=window_cost,
-                metadata={
+                # LLMClient writes the single prompts.jsonl entry for this window
+                log_purpose=purpose,
+                log_metadata={
                     "page_title": title,
                     "page_url": url,
                     "window_index": index,
                     "window_count": window_count,
-                    "tool_calls_made": len(result.get("tool_calls", [])),
-                    "iterations": usage.get("iterations", 0),
-                    "estimated_cost": window_cost,
                 },
             )
+
+            # Cost is calculated by LLMClient from its pricing table
+            page_cost += result["usage"].get("estimated_cost_usd", 0.0)
 
         # Update metadata
         self.knowledge_base["metadata"]["last_updated"] = (
@@ -1023,7 +1011,7 @@ Be thorough - extract all characters mentioned, not just the page subject.
                     {
                         "text": evidence.get("cited_text", "")[:300],
                         "url": evidence.get("url", ""),
-                        "page_title": evidence.get("page_title", ""),
+                        "page_title": evidence.get("title", ""),
                     }
                 )
 

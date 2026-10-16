@@ -205,8 +205,8 @@ class TestGenerateWithToolsExecution:
             mock_anthropic_class.return_value = mock_client
 
             # Always return tool_use (never ends)
-            mock_client.messages.create.return_value = self._create_mock_tool_use_response(
-                "infinite_tool", {}
+            mock_client.messages.create.return_value = (
+                self._create_mock_tool_use_response("infinite_tool", {})
             )
 
             client = LLMClient()
@@ -506,9 +506,7 @@ class TestPruneConversation:
         pruned = client._prune_conversation(messages, keep_last_n=1)
 
         assistant_blocks = pruned[1]["content"]
-        types = [
-            b["type"] if isinstance(b, dict) else b.type for b in assistant_blocks
-        ]
+        types = [b["type"] if isinstance(b, dict) else b.type for b in assistant_blocks]
         assert types == ["tool_use"]
         assert assistant_blocks[0].id == "t2"
         # Original conversation must not be mutated
@@ -534,7 +532,9 @@ class TestPruneConversation:
 class TestPromptCaching:
     """Test prompt caching in the tool loop and cache-aware cost tracking."""
 
-    def _end_turn(self, input_tokens=100, output_tokens=50, cache_read=0, cache_write=0):
+    def _end_turn(
+        self, input_tokens=100, output_tokens=50, cache_read=0, cache_write=0
+    ):
         response = MagicMock()
         response.stop_reason = "end_turn"
         response.content = [MagicMock(type="text", text="Done")]
@@ -622,3 +622,58 @@ class TestPromptCaching:
         assert stats["total_cache_read_tokens"] == 1000
         assert stats["total_cache_write_tokens"] == 200
         assert stats["estimated_cost_usd"] == pytest.approx(expected)
+
+
+class TestToolLoopPromptLogging:
+    """generate_with_tools logs exactly one prompt entry per call."""
+
+    def test_uses_caller_purpose_and_metadata(self):
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+            response = MagicMock()
+            response.stop_reason = "end_turn"
+            response.content = [MagicMock(type="text", text="Done")]
+            response.usage = MagicMock(input_tokens=10, output_tokens=5)
+            mock_client.messages.create.return_value = response
+
+            client = LLMClient()
+            client.llm_logger = MagicMock()
+            client.generate_with_tools(
+                "Test",
+                [{"name": "t", "input_schema": {"type": "object"}}],
+                lambda n, **k: {},
+                log_purpose="knowledge_building:Aang [part 1/2]",
+                log_metadata={"page_url": "https://wiki/Aang"},
+            )
+
+            client.llm_logger.log_prompt.assert_called_once()
+            kwargs = client.llm_logger.log_prompt.call_args.kwargs
+            assert kwargs["purpose"] == "knowledge_building:Aang [part 1/2]"
+            assert kwargs["metadata"]["page_url"] == "https://wiki/Aang"
+            assert kwargs["metadata"]["iterations"] == 1
+
+    def test_default_purpose(self):
+        from src.processor.llm.llm_client import LLMClient
+
+        with patch("anthropic.Anthropic") as mock_anthropic_class:
+            mock_client = MagicMock()
+            mock_anthropic_class.return_value = mock_client
+            response = MagicMock()
+            response.stop_reason = "end_turn"
+            response.content = [MagicMock(type="text", text="Done")]
+            response.usage = MagicMock(input_tokens=10, output_tokens=5)
+            mock_client.messages.create.return_value = response
+
+            client = LLMClient()
+            client.llm_logger = MagicMock()
+            client.generate_with_tools(
+                "Test",
+                [{"name": "t", "input_schema": {"type": "object"}}],
+                lambda n, **k: {},
+            )
+
+            kwargs = client.llm_logger.log_prompt.call_args.kwargs
+            assert kwargs["purpose"] == "tool_based_generation"

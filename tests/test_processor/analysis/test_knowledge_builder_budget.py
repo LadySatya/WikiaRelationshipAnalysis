@@ -65,3 +65,16 @@ class TestMaxCost:
         builder.build_knowledge_base(max_cost=100.0)
 
         assert builder.budget_exhausted is False
+
+
+class TestPagesProcessedMetadata:
+    def test_counts_processed_pages_not_loop_index(self, builder):
+        """Regression: pages_processed was the loop index, counting skipped pages."""
+        # The last page was processed in an earlier run, so the loop ends on a skip
+        builder.processed_pages = {"https://wiki/p4": "t"}
+
+        builder.build_knowledge_base()
+
+        # p0-p3 processed now + p4 earlier = 5 (the loop index would say 4)
+        assert builder._process_page.call_count == 4
+        assert builder.knowledge_base["metadata"]["pages_processed"] == 5
